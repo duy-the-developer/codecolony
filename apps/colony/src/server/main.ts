@@ -2,6 +2,7 @@ import { createServer } from 'node:http'
 import { fileURLToPath } from 'node:url'
 import { createApi } from './api.ts'
 import { loadConfig } from './config.ts'
+import { isLoopbackHost } from './host.ts'
 import { type Handler, staticFiles } from './static.ts'
 
 const HOST = '127.0.0.1'
@@ -29,6 +30,10 @@ if (dev) {
 }
 
 const server = createServer((req, res) => {
+  if (!isLoopbackHost(req.headers.host)) {
+    res.writeHead(403, { 'content-type': 'text/plain' }).end('Forbidden host')
+    return
+  }
   if (!api(req, res)) web(req, res)
 })
 

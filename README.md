@@ -38,7 +38,7 @@ See `codecolony.config.example.json`.
 ## Layout
 
 - `apps/colony`: the app. A Vite-built canvas page (`src/web`) and a Node server and indexer run with tsx (`src/server`).
-- `packages/*`: shared packages, such as the terminal dock.
+- `packages/*`: reserved for upcoming shared packages, such as the terminal dock.
 
 ## Develop
 
