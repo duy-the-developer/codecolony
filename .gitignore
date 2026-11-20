@@ -1,0 +1,11 @@
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+.DS_Store
+
+# Local configuration: project roots stay on your machine (see README, "Configuration")
+codecolony.config.json
+
+# Index cache, when pointed inside the checkout (the default lives in ~/.cache/codecolony)
+.codecolony-cache/

@@ -1,0 +1,7 @@
+{
+  "projects": [
+    { "name": "codecolony", "root": ".", "kind": "repo" },
+    { "name": "my-monorepo", "root": "~/code/my-monorepo", "kind": "monorepo" },
+    { "name": "my-org", "root": "~/code/my-org", "kind": "repos" }
+  ]
+}

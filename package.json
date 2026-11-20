@@ -1,0 +1,20 @@
+{
+  "name": "codecolony-workspace",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.21.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @codecolony/colony dev",
+    "start": "pnpm --filter @codecolony/colony start",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "check-types": "pnpm -r check-types",
+    "test": "pnpm -r test"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.8"
+  }
+}
