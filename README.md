@@ -14,7 +14,7 @@ pnpm dev      # http://127.0.0.1:4320, with hot reload
 pnpm start    # builds the page, then serves it
 ```
 
-The server listens on loopback only.
+The server listens on loopback only and answers 403 to any request whose host is not `127.0.0.1`, `localhost` or `[::1]`. Set `PORT` to use another port.
 
 ## Configuration
 
