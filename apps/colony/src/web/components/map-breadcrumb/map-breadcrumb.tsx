@@ -35,10 +35,10 @@ export function MapBreadcrumb({ scene, selected, onPick }: MapBreadcrumbProps) {
           <button
             type="button"
             onClick={() => onPick(node.id)}
-            className={`min-w-0 truncate rounded px-1 py-0.5 hover:bg-accent ${
-              // Ancestors give up their width first; the selected name only
-              // truncates once they are down to nothing.
-              node === selected ? 'shrink font-medium text-foreground' : 'shrink-[1000] text-muted-foreground'
+            className={`truncate rounded px-1 py-0.5 hover:bg-accent ${
+              // Only the ancestors shrink; the selected name keeps its width and
+              // truncates only when it alone is wider than the bar.
+              node === selected ? 'max-w-full shrink-0 font-medium text-foreground' : 'min-w-0 text-muted-foreground'
             }`}
           >
             {node.name}

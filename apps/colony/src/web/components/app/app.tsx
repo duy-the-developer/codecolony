@@ -1,5 +1,5 @@
 import type { DockWorker } from '@codecolony/dock/web'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   Layout,
   LayoutChangedMeta,
@@ -178,14 +178,16 @@ export function App() {
           groupResizeBehavior="preserve-pixel-size"
           onResize={handleResize('left')}
         >
-          <LeftPanel
-            tab={preferences.left.tab}
-            scene={scene}
-            selected={selected}
-            onTabChange={(tab) => updatePanel('left', { tab })}
-            onCollapse={() => panelRefs.left.current?.collapse()}
-            onPick={pick}
-          />
+          <PanelContent isCollapsed={collapsed.left}>
+            <LeftPanel
+              tab={preferences.left.tab}
+              scene={scene}
+              selected={selected}
+              onTabChange={(tab) => updatePanel('left', { tab })}
+              onCollapse={() => panelRefs.left.current?.collapse()}
+              onPick={pick}
+            />
+          </PanelContent>
         </ResizablePanel>
         <ResizableHandle aria-label="Resize left panel" />
         <ResizablePanel id="map" minSize="25%">
@@ -214,17 +216,19 @@ export function App() {
           groupResizeBehavior="preserve-pixel-size"
           onResize={handleResize('right')}
         >
-          <RightPanel
-            tab={preferences.right.tab}
-            scene={scene}
-            selected={selected}
-            workerCount={workers.length}
-            dockRef={setDockElement}
-            onTabChange={(tab) => updatePanel('right', { tab })}
-            onCollapse={() => panelRefs.right.current?.collapse()}
-            onPick={pick}
-            onTraceCalls={traceCalls}
-          />
+          <PanelContent isCollapsed={collapsed.right}>
+            <RightPanel
+              tab={preferences.right.tab}
+              scene={scene}
+              selected={selected}
+              workerCount={workers.length}
+              dockRef={setDockElement}
+              onTabChange={(tab) => updatePanel('right', { tab })}
+              onCollapse={() => panelRefs.right.current?.collapse()}
+              onPick={pick}
+              onTraceCalls={traceCalls}
+            />
+          </PanelContent>
         </ResizablePanel>
       </ResizablePanelGroup>
       <SearchPalette
@@ -233,6 +237,16 @@ export function App() {
         onOpenChange={setIsSearchOpen}
         onPick={pick}
       />
+    </div>
+  )
+}
+
+// A collapsed panel stays mounted but out of reach: nothing inside it, such as
+// the terminal's input, can take focus and swallow the page's keys.
+function PanelContent({ isCollapsed, children }: { isCollapsed: boolean; children: ReactNode }) {
+  return (
+    <div className={isCollapsed ? 'invisible h-full' : 'h-full'} inert={isCollapsed}>
+      {children}
     </div>
   )
 }
