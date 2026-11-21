@@ -6,25 +6,28 @@ import {
   PanelRightOpenIcon,
   Rotate3dIcon,
 } from 'lucide-react'
+import { cn } from '../../class-names.ts'
+import { OVERLAYS, type OverlayId, PLANNED_OVERLAYS } from '../../overlays.ts'
 import { Button } from '../ui/button.tsx'
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu.tsx'
+import { Kbd } from '../ui/kbd.tsx'
 
 export interface MapControlsProps {
   isLeftCollapsed: boolean
   isRightCollapsed: boolean
   onToggleLeft(): void
   onToggleRight(): void
+  // The overlays switched on.
+  overlays: ReadonlySet<OverlayId>
+  onToggleOverlay(id: OverlayId): void
 }
-
-// Overlays arrive with the dependency overlay; until then the menu names
-// them without letting them be switched.
-const OVERLAYS = ['Dependencies', 'Calls', 'HTTP requests'] as const
 
 // The header's right side: overlay filters, tilt and the panel toggles.
 export function MapControls({
@@ -32,25 +35,50 @@ export function MapControls({
   isRightCollapsed,
   onToggleLeft,
   onToggleRight,
+  overlays,
+  onToggleOverlay,
 }: MapControlsProps) {
   return (
     <div className="flex items-center gap-1">
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-muted-foreground">
+          <Button
+            variant="ghost"
+            size="sm"
+            className={cn('h-8 gap-1.5', overlays.size === 0 && 'text-muted-foreground')}
+          >
             <LayersIcon />
             Overlays
+            {overlays.size > 0 && (
+              <span className="rounded-sm bg-primary/15 px-1 text-primary text-xs">
+                {overlays.size}
+              </span>
+            )}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-60">
           <DropdownMenuLabel>Overlays</DropdownMenuLabel>
           {OVERLAYS.map((overlay) => (
-            <DropdownMenuCheckboxItem key={overlay} checked={false} disabled>
-              {overlay}
+            <DropdownMenuCheckboxItem
+              key={overlay.id}
+              checked={overlays.has(overlay.id)}
+              onCheckedChange={() => onToggleOverlay(overlay.id)}
+              onSelect={(event) => event.preventDefault()}
+            >
+              <span className="h-0.5 w-4 rounded-full" style={{ background: overlay.color }} />
+              {overlay.name}
+              <Kbd className="ml-auto">D</Kbd>
             </DropdownMenuCheckboxItem>
           ))}
+          {PLANNED_OVERLAYS.map((name) => (
+            <DropdownMenuCheckboxItem key={name} checked={false} disabled>
+              {name}
+              <span className="ml-auto text-xs">later</span>
+            </DropdownMenuCheckboxItem>
+          ))}
+          <DropdownMenuSeparator />
           <p className="px-2 py-1.5 text-muted-foreground text-xs">
-            Overlay filters are not available yet. The map shows every dependency for now.
+            With no overlay on, hover a module or file to see its connections.
           </p>
         </DropdownMenuContent>
       </DropdownMenu>

@@ -1,12 +1,14 @@
 import { type ReactNode, type RefObject, useEffect, useRef } from 'react'
 import type { Camera } from '../../camera.ts'
 import { createMapController, type MapHandle } from '../../map-controller.ts'
+import type { OverlayId } from '../../overlays.ts'
 import type { Scene } from '../../scene.ts'
 
 export interface MapViewProps {
   scene: Scene | undefined
   // Filled with the map's handle while the view is mounted.
   handleRef: RefObject<MapHandle | null>
+  overlays: ReadonlySet<OverlayId>
   onSelect(id: string | undefined): void
   // A file or symbol was double-clicked.
   onOpen(id: string): void
@@ -16,11 +18,13 @@ export interface MapViewProps {
 
 // The canvas map. The renderer stays imperative; this component only owns its
 // lifetime and the zoom readout, which it writes directly every frame.
-export function MapView({ scene, handleRef, onSelect, onOpen, children }: MapViewProps) {
+export function MapView({ scene, handleRef, overlays, onSelect, onOpen, children }: MapViewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const hudRef = useRef<HTMLDivElement>(null)
   const sceneRef = useRef(scene)
   sceneRef.current = scene
+  const overlaysRef = useRef(overlays)
+  overlaysRef.current = overlays
   const onSelectRef = useRef(onSelect)
   onSelectRef.current = onSelect
   const onOpenRef = useRef(onOpen)
@@ -38,6 +42,7 @@ export function MapView({ scene, handleRef, onSelect, onOpen, children }: MapVie
       },
     })
     handleRef.current = handle
+    handle.setOverlays(overlaysRef.current)
     if (sceneRef.current) handle.setScene(sceneRef.current)
     return () => {
       handle.dispose()
@@ -48,6 +53,10 @@ export function MapView({ scene, handleRef, onSelect, onOpen, children }: MapVie
   useEffect(() => {
     if (scene) handleRef.current?.setScene(scene)
   }, [scene, handleRef])
+
+  useEffect(() => {
+    handleRef.current?.setOverlays(overlays)
+  }, [overlays, handleRef])
 
   return (
     <div className="relative h-full min-w-0 overflow-hidden bg-[#0d1b2a]">

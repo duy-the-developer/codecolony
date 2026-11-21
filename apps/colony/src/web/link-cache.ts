@@ -2,24 +2,24 @@ import type { Edge, EdgeKind, Provenance, WorldNode } from '../shared/world-type
 import { MIN_VISIBLE_PX, openness } from './lod.ts'
 import type { Scene } from './scene.ts'
 
-// Roads join the deepest drawn nodes that hold each edge's ends, so they merge
+// Links join the deepest drawn nodes that hold each edge's ends, so they merge
 // as you zoom out and split as you zoom in. Working that out walks every edge,
 // which is far too slow to do on every frame of a large world, so it happens in
 // two steps:
 //
-// 1. Once per zoom level, every edge is merged into a road between the deepest
+// 1. Once per zoom level, every edge is merged into a link between the deepest
 //    nodes visible at that level, as if the whole world were on screen. A level
 //    spans a quarter of an octave of scale and uses the nodes visible at its
 //    highest scale, which include every node visible anywhere in the level.
 // 2. Every frame, each end moves up to its deepest ancestor that is drawn, so
-//    the roads end on the same nodes as an edge-by-edge walk would. A road
+//    the links end on the same nodes as an edge-by-edge walk would. A link
 //    survives only if the two children of its ends' common ancestor are both
 //    drawn; otherwise one end would land on an ancestor of the other. That check
-//    is two array reads, so off-screen roads cost almost nothing.
+//    is two array reads, so off-screen links cost almost nothing.
 
-export const ROAD_LEVELS_PER_OCTAVE = 4
-// Nodes this faint are drawn, but roads pass them to their parent.
-export const MIN_ROAD_ALPHA = 0.25
+export const LINK_LEVELS_PER_OCTAVE = 4
+// Nodes this faint are drawn, but links pass them to their parent.
+export const MIN_LINK_ALPHA = 0.25
 // Levels kept in memory; zooming back and forth reuses them.
 const MAX_CACHED_LEVELS = 16
 // How far a node's children must fade in before they are visited at all.
@@ -27,32 +27,40 @@ const MIN_OPEN = 0.01
 
 export const PROVEN_PROVENANCES: ReadonlySet<Provenance> = new Set(['lsp', 'tree-sitter'])
 
-// The roads of one zoom level, between node indices into RoadCache.nodes.
-interface LevelRoads {
+// The links of one zoom level, between node indices into LinkCache.nodes.
+interface LevelLinks {
   readonly count: number
   readonly from: Int32Array
   readonly to: Int32Array
   // Edge kind index * 2, plus 1 when proven.
   readonly code: Int32Array
-  // How many edges merged into each road.
+  // How many edges merged into each link.
   readonly edges: Int32Array
   // The children of the common ancestor of from and to, on each side.
   readonly fromTop: Int32Array
   readonly toTop: Int32Array
-  // The road each edge was merged into, or -1.
-  readonly roadOfEdge: Int32Array
+  // The link each edge was merged into, or -1.
+  readonly linkOfEdge: Int32Array
+  // The containers that show their children at this level, and a key that is
+  // the same for every level with the same ones.
+  readonly open: OpenContainers
 }
 
-// The roads to draw this frame. Backed by scratch space: valid until the next
-// call to RoadCache.listRoads.
-export interface FrameRoads {
+export interface OpenContainers {
+  readonly key: string
+  readonly ids: readonly string[]
+}
+
+// The links to draw this frame. Backed by scratch space: valid until the next
+// call to LinkCache.listLinks.
+export interface FrameLinks {
   readonly count: number
-  // Positions in the holders passed to RoadCache.listRoads.
+  // Positions in the holders passed to LinkCache.listLinks.
   readonly from: Int32Array
   readonly to: Int32Array
   readonly kind: readonly EdgeKind[]
   readonly proven: Uint8Array
-  // How many edges merged into each road.
+  // How many edges merged into each link.
   readonly edges: Int32Array
   // Carries an edge that touches the selection.
   readonly hot: Uint8Array
@@ -60,7 +68,7 @@ export interface FrameRoads {
   readonly sameFile: Uint8Array
 }
 
-export class RoadCache {
+export class LinkCache {
   // Nodes reachable from the world root, parents before children.
   private readonly nodes: WorldNode[] = []
   private readonly parent: Int32Array
@@ -75,26 +83,26 @@ export class RoadCache {
   private edgeTo = new Int32Array(0)
   private edgeCode = new Int32Array(0)
   private kinds: EdgeKind[] = []
-  private readonly levels = new Map<number, LevelRoads>()
+  private readonly levels = new Map<number, LevelLinks>()
   private hotSubtree: ReadonlySet<string> | undefined
   private edgeHot = new Uint8Array(0)
-  private hotRoads = new WeakMap<LevelRoads, Uint8Array>()
+  private hotLinks = new WeakMap<LevelLinks, Uint8Array>()
   // Scratch space sized to the nodes, reused by every level build.
   private visible = new Uint8Array(0)
   private visited = new Uint8Array(0)
   private alpha = new Float64Array(0)
   private open = new Float64Array(0)
   // Scratch space sized to the edges, shared by level builds and frames: a
-  // level has at most one road per edge, a frame at most one per level road.
-  private roadFrom = new Int32Array(0)
-  private roadTo = new Int32Array(0)
-  private roadCode = new Int32Array(0)
-  private roadEdges = new Int32Array(0)
-  private roadHot = new Uint8Array(0)
-  private roadProven = new Uint8Array(0)
-  private roadSameFile = new Uint8Array(0)
-  private readonly roadKind: EdgeKind[] = []
-  // Open-addressing table over the road arrays; a slot holds road index + 1.
+  // level has at most one link per edge, a frame at most one per level link.
+  private linkFrom = new Int32Array(0)
+  private linkTo = new Int32Array(0)
+  private linkCode = new Int32Array(0)
+  private linkEdges = new Int32Array(0)
+  private linkHot = new Uint8Array(0)
+  private linkProven = new Uint8Array(0)
+  private linkSameFile = new Uint8Array(0)
+  private readonly linkKind: EdgeKind[] = []
+  // Open-addressing table over the link arrays; a slot holds link index + 1.
   private slots = new Int32Array(0)
   // Holds the frame number on the nodes drawn in that frame, and their
   // position in that frame's holders.
@@ -136,17 +144,17 @@ export class RoadCache {
     }
   }
 
-  // The roads between the nodes drawn at this scale. holders are the drawn
-  // nodes with at least MIN_ROAD_ALPHA.
-  listRoads(
+  // The links between the nodes drawn at this scale. holders are the drawn
+  // nodes with at least MIN_LINK_ALPHA.
+  listLinks(
     scale: number,
     holders: readonly { readonly node: WorldNode }[],
     subtree: ReadonlySet<string>,
-  ): FrameRoads {
+  ): FrameLinks {
     const level = this.resolveLevel(scale)
-    const levelHot = this.listHotRoads(level, subtree)
-    const { onScreen, parent, roadFrom: from, roadTo: to, roadCode: code } = this
-    const { roadEdges: edges, roadHot: hot, roadProven: proven, roadSameFile: sameFile } = this
+    const levelHot = this.listHotLinks(level, subtree)
+    const { onScreen, parent, linkFrom: from, linkTo: to, linkCode: code } = this
+    const { linkEdges: edges, linkHot: hot, linkProven: proven, linkSameFile: sameFile } = this
     const { holderAt } = this
     const frame = ++this.frame
     holders.forEach(({ node }, position) => {
@@ -167,17 +175,17 @@ export class RoadCache {
       if (onScreen[level.toTop[r] as number] !== frame) continue
       const a = deepestOnScreen(level.from[r] as number)
       const b = deepestOnScreen(level.to[r] as number)
-      const road = this.findRoad(a, b, level.code[r] as number, count)
-      if (road === count) {
+      const link = this.findLink(a, b, level.code[r] as number, count)
+      if (link === count) {
         count++
-        edges[road] = 0
-        hot[road] = 0
+        edges[link] = 0
+        hot[link] = 0
       }
-      edges[road] = (edges[road] as number) + (level.edges[r] as number)
-      if (levelHot[r]) hot[road] = 1
+      edges[link] = (edges[link] as number) + (level.edges[r] as number)
+      if (levelHot[r]) hot[link] = 1
     }
 
-    const kind = this.roadKind
+    const kind = this.linkKind
     kind.length = count
     for (let r = 0; r < count; r++) {
       const c = code[r] as number
@@ -191,30 +199,35 @@ export class RoadCache {
     return { count, from, to, kind, proven, edges, hot, sameFile }
   }
 
-  // The roads of the level a scale falls in, aggregated on first use.
-  private resolveLevel(scale: number): LevelRoads {
+  // The containers open at the level a scale falls in.
+  listOpenContainers(scale: number): OpenContainers {
+    return this.resolveLevel(scale).open
+  }
+
+  // The links of the level a scale falls in, aggregated on first use.
+  private resolveLevel(scale: number): LevelLinks {
     if (this.scene.edges !== this.edges) this.indexEdges()
-    const level = Math.floor(Math.log2(scale) * ROAD_LEVELS_PER_OCTAVE)
-    let roads = this.levels.get(level)
-    if (roads) {
+    const level = Math.floor(Math.log2(scale) * LINK_LEVELS_PER_OCTAVE)
+    let links = this.levels.get(level)
+    if (links) {
       this.levels.delete(level)
     } else {
       // Rounding slack, so the level never misses a node visible at `scale`.
-      roads = this.buildLevel(2 ** ((level + 1) / ROAD_LEVELS_PER_OCTAVE) * (1 + 1e-9))
+      links = this.buildLevel(2 ** ((level + 1) / LINK_LEVELS_PER_OCTAVE) * (1 + 1e-9))
       if (this.levels.size >= MAX_CACHED_LEVELS) {
         const oldest = this.levels.keys().next().value
         if (oldest !== undefined) this.levels.delete(oldest)
       }
     }
-    this.levels.set(level, roads)
-    return roads
+    this.levels.set(level, links)
+    return links
   }
 
-  // Which level roads carry an edge touching the selection.
-  private listHotRoads(roads: LevelRoads, subtree: ReadonlySet<string>): Uint8Array {
+  // Which level links carry an edge touching the selection.
+  private listHotLinks(links: LevelLinks, subtree: ReadonlySet<string>): Uint8Array {
     if (subtree !== this.hotSubtree) {
       this.hotSubtree = subtree
-      this.hotRoads = new WeakMap()
+      this.hotLinks = new WeakMap()
       this.edgeHot = new Uint8Array(this.edges.length)
       if (subtree.size > 0) {
         this.edges.forEach((edge, e) => {
@@ -222,14 +235,14 @@ export class RoadCache {
         })
       }
     }
-    let hot = this.hotRoads.get(roads)
+    let hot = this.hotLinks.get(links)
     if (!hot) {
-      hot = new Uint8Array(roads.count)
+      hot = new Uint8Array(links.count)
       for (let e = 0; e < this.edges.length; e++) {
-        const road = roads.roadOfEdge[e] as number
-        if (road >= 0 && this.edgeHot[e]) hot[road] = 1
+        const link = links.linkOfEdge[e] as number
+        if (link >= 0 && this.edgeHot[e]) hot[link] = 1
       }
-      this.hotRoads.set(roads, hot)
+      this.hotLinks.set(links, hot)
     }
     return hot
   }
@@ -251,20 +264,20 @@ export class RoadCache {
       if (kind < 0) kind = this.kinds.push(edge.kind) - 1
       this.edgeCode[e] = kind * 2 + (PROVEN_PROVENANCES.has(edge.provenance) ? 1 : 0)
     }
-    this.roadFrom = new Int32Array(count)
-    this.roadTo = new Int32Array(count)
-    this.roadCode = new Int32Array(count)
-    this.roadEdges = new Int32Array(count)
-    this.roadHot = new Uint8Array(count)
-    this.roadProven = new Uint8Array(count)
-    this.roadSameFile = new Uint8Array(count)
+    this.linkFrom = new Int32Array(count)
+    this.linkTo = new Int32Array(count)
+    this.linkCode = new Int32Array(count)
+    this.linkEdges = new Int32Array(count)
+    this.linkHot = new Uint8Array(count)
+    this.linkProven = new Uint8Array(count)
+    this.linkSameFile = new Uint8Array(count)
     let size = 1
     while (size < count * 2) size *= 2
     this.slots = new Int32Array(size)
   }
 
   // Which nodes the renderer draws at this scale with enough alpha to hold a
-  // road, if the whole world were on screen.
+  // link, if the whole world were on screen.
   private listVisible(scale: number): Uint8Array {
     const n = this.nodes.length
     if (this.visible.length !== n) {
@@ -290,21 +303,33 @@ export class RoadCache {
       if (node.kind !== 'world' && px < MIN_VISIBLE_PX) continue
       visited[i] = 1
       open[i] = this.hasKids[i] ? openness(node.kind, px) : 0
-      if (node.kind !== 'world' && (alpha[i] as number) >= MIN_ROAD_ALPHA) visible[i] = 1
+      if (node.kind !== 'world' && (alpha[i] as number) >= MIN_LINK_ALPHA) visible[i] = 1
     }
     return visible
   }
 
-  private buildLevel(scale: number): LevelRoads {
+  private buildLevel(scale: number): LevelLinks {
     const visible = this.listVisible(scale)
-    const { parent, depth, edgeFrom, edgeTo, edgeCode, roadEdges } = this
+    const { parent, depth, edgeFrom, edgeTo, edgeCode, linkEdges } = this
     const holder = (start: number): number => {
       let i = start
       while (i >= 0 && !visible[i]) i = parent[i] as number
       return i
     }
+    const isOpen = new Uint8Array(visible.length)
+    for (let i = 0; i < visible.length; i++) {
+      if (visible[i] && parent[i] !== undefined && (parent[i] as number) >= 0) {
+        isOpen[parent[i] as number] = 1
+      }
+    }
+    const openIndices: number[] = []
+    for (let i = 0; i < isOpen.length; i++) if (isOpen[i]) openIndices.push(i)
+    const open = {
+      key: openIndices.join(','),
+      ids: openIndices.map((i) => (this.nodes[i] as WorldNode).id),
+    }
     const edgeCount = this.edges.length
-    const roadOfEdge = new Int32Array(edgeCount).fill(-1)
+    const linkOfEdge = new Int32Array(edgeCount).fill(-1)
     const fromTop = new Int32Array(edgeCount)
     const toTop = new Int32Array(edgeCount)
     this.slots.fill(0)
@@ -314,7 +339,7 @@ export class RoadCache {
       const b = holder(edgeTo[e] as number)
       if (a < 0 || b < 0 || a === b) continue
       // Climb to the children of the common ancestor; meeting early means one
-      // end holds the other, and such edges are not roads.
+      // end holds the other, and such edges are not links.
       let ta = a
       let tb = b
       while ((depth[ta] as number) > (depth[tb] as number)) ta = parent[ta] as number
@@ -324,45 +349,46 @@ export class RoadCache {
         ta = parent[ta] as number
         tb = parent[tb] as number
       }
-      const road = this.findRoad(a, b, edgeCode[e] as number, count)
-      if (road === count) {
+      const link = this.findLink(a, b, edgeCode[e] as number, count)
+      if (link === count) {
         count++
-        roadEdges[road] = 0
-        fromTop[road] = ta
-        toTop[road] = tb
+        linkEdges[link] = 0
+        fromTop[link] = ta
+        toTop[link] = tb
       }
-      roadEdges[road] = (roadEdges[road] as number) + 1
-      roadOfEdge[e] = road
+      linkEdges[link] = (linkEdges[link] as number) + 1
+      linkOfEdge[e] = link
     }
     return {
       count,
-      from: this.roadFrom.slice(0, count),
-      to: this.roadTo.slice(0, count),
-      code: this.roadCode.slice(0, count),
-      edges: roadEdges.slice(0, count),
+      from: this.linkFrom.slice(0, count),
+      to: this.linkTo.slice(0, count),
+      code: this.linkCode.slice(0, count),
+      edges: linkEdges.slice(0, count),
       fromTop: fromTop.slice(0, count),
       toTop: toTop.slice(0, count),
-      roadOfEdge,
+      linkOfEdge,
+      open,
     }
   }
 
-  // The road index of (a, b, code) in the scratch road arrays; when missing,
+  // The link index of (a, b, code) in the scratch link arrays; when missing,
   // claims index `next` for it.
-  private findRoad(a: number, b: number, code: number, next: number): number {
-    const { slots, roadFrom, roadTo, roadCode } = this
+  private findLink(a: number, b: number, code: number, next: number): number {
+    const { slots, linkFrom, linkTo, linkCode } = this
     const mask = slots.length - 1
     let slot =
       (Math.imul(a, 0x9e3779b1) ^ Math.imul(b, 0x85ebca77) ^ Math.imul(code, 0xc2b2ae3d)) & mask
     for (;;) {
       const held = (slots[slot] as number) - 1
       if (held < 0) break
-      if (roadFrom[held] === a && roadTo[held] === b && roadCode[held] === code) return held
+      if (linkFrom[held] === a && linkTo[held] === b && linkCode[held] === code) return held
       slot = (slot + 1) & mask
     }
     slots[slot] = next + 1
-    roadFrom[next] = a
-    roadTo[next] = b
-    roadCode[next] = code
+    linkFrom[next] = a
+    linkTo[next] = b
+    linkCode[next] = code
     return next
   }
 }

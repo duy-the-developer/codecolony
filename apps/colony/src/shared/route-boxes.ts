@@ -6,6 +6,9 @@ import { HEADER_UNITS, type Rect, type WorldNode } from './world-types.ts'
 // files directly in a container that also holds folders, taken together.
 // Lanes never enter a block; they end on its sides.
 
+// The fields of a world node that routing reads.
+export type RouteNode = Pick<WorldNode, 'id' | 'parent' | 'kind' | 'rect'>
+
 export interface RouteBoxes {
   root: RouteBox | undefined
   // The block that holds a node (container, file or symbol), if any.
@@ -21,11 +24,11 @@ export function looseId(container: string): string {
 // isOpen: whether a container shows its children; closed containers are
 // blocks.
 export function buildRouteBoxes(
-  nodes: readonly WorldNode[],
+  nodes: readonly RouteNode[],
   isOpen: (id: string) => boolean = () => true,
 ): RouteBoxes {
-  const children = new Map<string, WorldNode[]>()
-  let world: WorldNode | undefined
+  const children = new Map<string, RouteNode[]>()
+  let world: RouteNode | undefined
   for (const node of nodes) {
     if (node.kind === 'world') world = node
     if (!node.parent || node.kind === 'symbol') continue
@@ -36,7 +39,7 @@ export function buildRouteBoxes(
   // Container id -> the block its files belong to.
   const fileBlock = new Map<string, string>()
 
-  const build = (node: WorldNode, closedBy: string | undefined): RouteBox | undefined => {
+  const build = (node: RouteNode, closedBy: string | undefined): RouteBox | undefined => {
     const kids = children.get(node.id) ?? []
     const folders = kids.filter((kid) => kid.kind !== 'file')
     const files = kids.filter((kid) => kid.kind === 'file')
@@ -76,7 +79,7 @@ export function buildRouteBoxes(
   }
 }
 
-function boundsOf(nodes: readonly WorldNode[]): Rect {
+function boundsOf(nodes: readonly RouteNode[]): Rect {
   let x0 = Number.POSITIVE_INFINITY
   let y0 = Number.POSITIVE_INFINITY
   let x1 = Number.NEGATIVE_INFINITY
