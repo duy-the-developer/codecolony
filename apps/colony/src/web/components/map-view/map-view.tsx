@@ -8,7 +8,7 @@ export interface MapViewProps {
   // Filled with the map's handle while the view is mounted.
   handleRef: RefObject<MapHandle | null>
   onSelect(id: string | undefined): void
-  // Overlays drawn over the canvas: breadcrumb, pawns, zoom buttons.
+  // Overlays drawn over the canvas: breadcrumb, zoom buttons.
   children?: ReactNode
 }
 

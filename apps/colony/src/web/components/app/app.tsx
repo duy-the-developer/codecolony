@@ -1,4 +1,3 @@
-import type { DockWorker } from '@codecolony/dock/web'
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   Layout,
@@ -6,7 +5,6 @@ import type {
   PanelImperativeHandle,
   PanelSize,
 } from 'react-resizable-panels'
-import { logError } from '../../../shared/log.ts'
 import type { DeepResponse, WorldNode } from '../../../shared/world-types.ts'
 import { useDock } from '../../hooks/use-dock.ts'
 import { useProjects } from '../../hooks/use-projects.ts'
@@ -22,7 +20,6 @@ import { MapView } from '../map-view/map-view.tsx'
 import { RightPanel } from '../right-panel/right-panel.tsx'
 import { SearchPalette } from '../search-palette/search-palette.tsx'
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '../ui/resizable.tsx'
-import { WorkerPawns } from '../worker-pawns/worker-pawns.tsx'
 import { ZoomControls } from '../zoom-controls/zoom-controls.tsx'
 
 type PanelSide = 'left' | 'right'
@@ -36,7 +33,7 @@ export function App() {
   const [, setEdgeVersion] = useState(0)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [dockElement, setDockElement] = useState<HTMLDivElement | null>(null)
-  const { dock, workers } = useDock(dockElement)
+  const { workers } = useDock(dockElement)
   const mapRef = useRef<MapHandle | null>(null)
   const leftPanelRef = useRef<PanelImperativeHandle | null>(null)
   const rightPanelRef = useRef<PanelImperativeHandle | null>(null)
@@ -92,17 +89,6 @@ export function App() {
       else panel.collapse()
     },
     [panelRefs],
-  )
-
-  const focusWorker = useCallback(
-    (worker: DockWorker) => {
-      updatePanel('right', { tab: 'terminal' })
-      if (panelRefs.right.current?.isCollapsed()) togglePanel('right')
-      dock
-        ?.focusPane(worker.paneId)
-        .catch((error: unknown) => logError('Could not focus pane', { error }))
-    },
-    [dock, updatePanel, panelRefs, togglePanel],
   )
 
   // Collapsing and expanding, by key, button or drag, is remembered at once.
@@ -193,10 +179,8 @@ export function App() {
         <ResizableHandle aria-label="Resize left panel" />
         <ResizablePanel id="map" minSize="25%">
           <MapView scene={scene} handleRef={mapRef} onSelect={setSelectedId}>
-            {/* One top row so the breadcrumb shrinks before it reaches the pawns. */}
             <div className="pointer-events-none absolute inset-x-3 top-3 flex items-start gap-2">
               <MapBreadcrumb scene={scene} selected={selected} onPick={pick} />
-              <WorkerPawns workers={workers} onFocus={focusWorker} />
             </div>
             <ZoomControls
               onZoomIn={() => mapRef.current?.zoomBy(ZOOM_STEP)}

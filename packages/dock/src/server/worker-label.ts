@@ -1,5 +1,5 @@
 // Works out the human label for a worker from what Herdr reports, so chips
-// and pawns read `firstmate` or `alphagal-mockup` instead of `claude` for
+// read `firstmate` or `alphagal-mockup` instead of `claude` for
 // every pane.
 //
 // - Workspace label: `firstmate`, or `└ alphagal-mockup · p:<parent id>` for a
