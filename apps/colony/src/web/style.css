@@ -67,3 +67,133 @@ body {
 .muted {
   color: var(--muted);
 }
+
+#canvas {
+  touch-action: none;
+}
+
+#inspector {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  width: 340px;
+  max-height: calc(100% - 64px);
+  overflow: auto;
+  padding: 12px 14px;
+  background: rgb(16 34 53 / 94%);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+#inspector h3 {
+  margin: 0;
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+
+#inspector h4 {
+  margin: 12px 0 4px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+#inspector p {
+  margin: 2px 0 8px;
+  overflow-wrap: anywhere;
+}
+
+#inspector dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 12px;
+  margin: 0;
+}
+
+#inspector dt {
+  color: var(--muted);
+}
+
+#inspector dd {
+  margin: 0;
+}
+
+#inspector ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+#inspector li {
+  padding: 2px 0;
+  overflow-wrap: anywhere;
+}
+
+#inspector li.link {
+  cursor: pointer;
+}
+
+#inspector li.link:hover {
+  background: rgb(255 255 255 / 6%);
+}
+
+#inspector button {
+  margin-top: 12px;
+  padding: 6px 10px;
+  color: var(--text);
+  background: #1d3b5a;
+  border: 1px solid #3b6a98;
+  border-radius: 4px;
+  font: inherit;
+  cursor: pointer;
+}
+
+#inspector button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.swatch {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 2px;
+}
+
+.tag {
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 3px;
+  font-size: 11px;
+}
+
+.tag.proven {
+  color: #0d1b2a;
+  background: #7fd49b;
+}
+
+.tag.weak {
+  color: #0d1b2a;
+  background: #f0c060;
+}
+
+#hud,
+#hint {
+  position: absolute;
+  left: 12px;
+  font-size: 12px;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+#hud {
+  bottom: 28px;
+}
+
+#hint {
+  bottom: 10px;
+  opacity: 0.8;
+}
