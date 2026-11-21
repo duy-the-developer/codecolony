@@ -25,10 +25,10 @@
   --radius: 0.375rem;
 
   /* Worker status colours, shared with the dock package's CSS variables. */
-  --status-working: #3ccf7e;
+  --status-working: #50c878;
   --status-blocked: #e05050;
   --status-done: #50a0e0;
-  --status-idle: #8a9bb0;
+  --status-idle: #e0a040;
 }
 
 @theme inline {

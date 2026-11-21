@@ -24,8 +24,10 @@ export function MapBreadcrumb({ scene, selected, onPick }: MapBreadcrumbProps) {
           <button
             type="button"
             onClick={() => onPick(node.id)}
-            className={`shrink truncate rounded px-1 py-0.5 hover:bg-accent ${
-              node === selected ? 'font-medium text-foreground' : 'text-muted-foreground'
+            className={`truncate rounded px-1 py-0.5 hover:bg-accent ${
+              // Ancestors give up their width; the selected name only truncates
+              // when it alone is wider than the whole path.
+              node === selected ? 'max-w-full shrink-0 font-medium text-foreground' : 'shrink text-muted-foreground'
             }`}
           >
             {node.name}
