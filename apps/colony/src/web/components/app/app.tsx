@@ -69,6 +69,21 @@ export function App() {
     else mapRef.current?.fitAll()
   }, [])
 
+  // Shows the selection's file in the File tab, opening the right panel.
+  const showFile = useCallback(() => {
+    updatePanel('right', { tab: 'file' })
+    const panel = panelRefs.right.current
+    if (panel?.isCollapsed()) panel.resize(widthsPx.current.right)
+  }, [updatePanel, panelRefs])
+
+  const openFile = useCallback(
+    (id: string) => {
+      pick(id)
+      showFile()
+    },
+    [pick, showFile],
+  )
+
   const traceCalls = useCallback(
     async (file: WorldNode) => {
       const response = await fetch(`/api/deep?file=${encodeURIComponent(file.id)}`)
@@ -173,12 +188,13 @@ export function App() {
               onTabChange={(tab) => updatePanel('left', { tab })}
               onCollapse={() => panelRefs.left.current?.collapse()}
               onPick={pick}
+              onOpen={openFile}
             />
           </PanelContent>
         </ResizablePanel>
         <ResizableHandle aria-label="Resize left panel" />
         <ResizablePanel id="map" minSize="25%">
-          <MapView scene={scene} handleRef={mapRef} onSelect={setSelectedId}>
+          <MapView scene={scene} handleRef={mapRef} onSelect={setSelectedId} onOpen={showFile}>
             <div className="pointer-events-none absolute inset-x-3 top-3 flex items-start gap-2">
               <MapBreadcrumb scene={scene} selected={selected} onPick={pick} />
             </div>
@@ -212,6 +228,7 @@ export function App() {
               onTabChange={(tab) => updatePanel('right', { tab })}
               onCollapse={() => panelRefs.right.current?.collapse()}
               onPick={pick}
+              onOpen={openFile}
               onTraceCalls={traceCalls}
             />
           </PanelContent>
@@ -222,6 +239,7 @@ export function App() {
         index={searchIndex}
         onOpenChange={setIsSearchOpen}
         onPick={pick}
+        onOpen={openFile}
       />
     </div>
   )

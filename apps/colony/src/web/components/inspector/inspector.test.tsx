@@ -50,6 +50,7 @@ describe('Inspector', () => {
         scene={SCENE}
         selected={SCENE.byId.get('api.ts')}
         onPick={() => {}}
+        onOpen={() => {}}
         onTraceCalls={() => Promise.resolve()}
       />,
     )
@@ -65,11 +66,27 @@ describe('Inspector', () => {
         scene={SCENE}
         selected={SCENE.byId.get('api.ts')}
         onPick={onPick}
+        onOpen={() => {}}
         onTraceCalls={() => Promise.resolve()}
       />,
     )
     fireEvent.click(screen.getByRole('button', { name: /model\.ts/ }))
     expect(onPick).toHaveBeenCalledWith('model.ts')
+  })
+
+  it('opens a file in the File tab', () => {
+    const onOpen = vi.fn()
+    render(
+      <Inspector
+        scene={SCENE}
+        selected={SCENE.byId.get('api.ts')}
+        onPick={() => {}}
+        onOpen={onOpen}
+        onTraceCalls={() => Promise.resolve()}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Open file' }))
+    expect(onOpen).toHaveBeenCalledWith('api.ts')
   })
 
   it('asks for a selection when there is none', () => {
@@ -78,6 +95,7 @@ describe('Inspector', () => {
         scene={SCENE}
         selected={undefined}
         onPick={() => {}}
+        onOpen={() => {}}
         onTraceCalls={() => Promise.resolve()}
       />,
     )

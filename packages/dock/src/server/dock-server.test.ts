@@ -71,7 +71,9 @@ describe('dock server', () => {
     const headers = securityHeaders()
     server = createServer((req, res) => {
       for (const [name, value] of Object.entries(headers)) res.setHeader(name, value)
-      if (!dock.handle(req, res)) res.writeHead(418).end()
+      if (dock.handle(req, res)) return
+      if (req.url === '/guarded') res.writeHead(dock.deny(req) ?? 200).end()
+      else res.writeHead(418).end()
     })
     server.on('upgrade', (req, socket, head) => {
       if (!dock.upgrade(req, socket, head)) socket.destroy()
@@ -170,6 +172,15 @@ describe('dock server', () => {
     it('answers unknown dock routes with 404 and leaves the rest to the app', async () => {
       expect((await send(port, '/api/dock/nope', { headers: auth })).status).toBe(404)
       expect((await send(port, '/', {})).status).toBe(418)
+    })
+
+    it('guards an app route with the same host, origin and token checks', async () => {
+      expect((await send(port, '/guarded', { headers: auth })).status).toBe(200)
+      expect((await send(port, '/guarded', {})).status).toBe(401)
+      const foreignHost = { ...auth, host: `evil.example:${port}` }
+      expect((await send(port, '/guarded', { headers: foreignHost })).status).toBe(403)
+      const foreignOrigin = { ...auth, origin: 'http://evil.example' }
+      expect((await send(port, '/guarded', { headers: foreignOrigin })).status).toBe(403)
     })
   })
 

@@ -16,6 +16,7 @@ export interface LeftPanelProps {
   onTabChange(tab: LeftTab): void
   onCollapse(): void
   onPick(id: string): void
+  onOpen(id: string): void
 }
 
 export function LeftPanel({
@@ -25,6 +26,7 @@ export function LeftPanel({
   onTabChange,
   onCollapse,
   onPick,
+  onOpen,
 }: LeftPanelProps) {
   return (
     <Tabs
@@ -58,7 +60,7 @@ export function LeftPanel({
         <Legend scene={scene} />
       </TabsContent>
       <TabsContent value="files" className="overflow-y-auto">
-        <FileTree scene={scene} selected={selected} onPick={onPick} />
+        <FileTree scene={scene} selected={selected} onPick={onPick} onOpen={onOpen} />
       </TabsContent>
     </Tabs>
   )

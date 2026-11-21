@@ -1,3 +1,4 @@
+import { FileCodeIcon } from 'lucide-react'
 import { useState } from 'react'
 import type { Provenance, WorldNode } from '../../../shared/world-types.ts'
 import { cn } from '../../class-names.ts'
@@ -11,6 +12,8 @@ export interface InspectorProps {
   scene: Scene | undefined
   selected: WorldNode | undefined
   onPick(id: string): void
+  // Shows the node's file in the File tab.
+  onOpen(id: string): void
   // Proves a file's calls with the language server; rejects with the reason.
   onTraceCalls(file: WorldNode): Promise<void>
 }
@@ -19,7 +22,7 @@ const MAX_ROWS = 14
 
 // The selected node: its facts, and every dependency in or out of it with
 // how it was proven.
-export function Inspector({ scene, selected, onPick, onTraceCalls }: InspectorProps) {
+export function Inspector({ scene, selected, onPick, onOpen, onTraceCalls }: InspectorProps) {
   if (!scene || !selected) {
     return (
       <p className="m-3 rounded-md border border-dashed p-4 text-center text-muted-foreground">
@@ -54,6 +57,12 @@ export function Inspector({ scene, selected, onPick, onTraceCalls }: InspectorPr
         <h3 className="break-all font-semibold text-base">{node.name}</h3>
         {node.path && (
           <p className="break-all font-mono text-muted-foreground text-xs">{node.path}</p>
+        )}
+        {(node.kind === 'file' || node.kind === 'symbol') && (
+          <Button variant="outline" size="sm" className="mt-2" onClick={() => onOpen(node.id)}>
+            <FileCodeIcon />
+            Open file
+          </Button>
         )}
       </div>
       <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-0.5">

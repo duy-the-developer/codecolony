@@ -8,25 +8,30 @@ export interface MapViewProps {
   // Filled with the map's handle while the view is mounted.
   handleRef: RefObject<MapHandle | null>
   onSelect(id: string | undefined): void
+  // A file or symbol was double-clicked.
+  onOpen(id: string): void
   // Overlays drawn over the canvas: breadcrumb, zoom buttons.
   children?: ReactNode
 }
 
 // The canvas map. The renderer stays imperative; this component only owns its
 // lifetime and the zoom readout, which it writes directly every frame.
-export function MapView({ scene, handleRef, onSelect, children }: MapViewProps) {
+export function MapView({ scene, handleRef, onSelect, onOpen, children }: MapViewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const hudRef = useRef<HTMLDivElement>(null)
   const sceneRef = useRef(scene)
   sceneRef.current = scene
   const onSelectRef = useRef(onSelect)
   onSelectRef.current = onSelect
+  const onOpenRef = useRef(onOpen)
+  onOpenRef.current = onOpen
 
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
     const handle = createMapController(canvas, {
       onSelect: (id) => onSelectRef.current(id),
+      onOpen: (id) => onOpenRef.current(id),
       onDraw: (camera) => {
         if (hudRef.current && sceneRef.current)
           hudRef.current.textContent = hudText(sceneRef.current, camera)

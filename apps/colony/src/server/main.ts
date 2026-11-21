@@ -25,9 +25,9 @@ const config = loadConfig({ repoRoot })
 const colony = new Colony(config)
 await colony.refresh()
 await colony.watch()
-const api = createApi(config, colony)
 const dockOptions = resolveDockOptions(args)
 const dock = createDock(dockOptions)
+const api = createApi(config, colony, dock.deny)
 const headers = securityHeaders({ dev })
 
 let web: Handler

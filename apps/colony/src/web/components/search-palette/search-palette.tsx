@@ -1,8 +1,8 @@
 import { FileIcon } from 'lucide-react'
-import { useMemo, useState } from 'react'
-import type { SymbolKind } from '../../../shared/world-types.ts'
+import { type KeyboardEvent, useMemo, useState } from 'react'
 import { SYMBOL_COLORS } from '../../render.ts'
 import { listSearchMatches, type SearchEntry, type SearchIndex } from '../../search-index.ts'
+import { SYMBOL_GLYPHS } from '../../symbol-glyphs.ts'
 import {
   Command,
   CommandEmpty,
@@ -20,24 +20,17 @@ export interface SearchPaletteProps {
   onOpenChange(isOpen: boolean): void
   // Enter on a result: fly to it and select it.
   onPick(id: string): void
+  // ⇧Enter on a result: select it and show its file in the File tab.
+  onOpen(id: string): void
 }
 
 const MAX_PER_GROUP = 8
 
-const SYMBOL_GLYPHS: Record<SymbolKind, string> = {
-  function: 'ƒ',
-  method: 'ƒ',
-  class: 'C',
-  interface: 'T',
-  type: 'T',
-  enum: 'E',
-  variable: 'v',
-  namespace: 'N',
-}
-
 // ⌘K: find a file or symbol by name.
-export function SearchPalette({ isOpen, index, onOpenChange, onPick }: SearchPaletteProps) {
+export function SearchPalette({ isOpen, index, onOpenChange, onPick, onOpen }: SearchPaletteProps) {
   const [query, setQuery] = useState('')
+  // The highlighted result's id, which cmdk keeps as the item value.
+  const [active, setActive] = useState('')
   const matches = useMemo(
     () => (index ? listSearchMatches(index, query, MAX_PER_GROUP) : { symbols: [], files: [] }),
     [index, query],
@@ -51,15 +44,27 @@ export function SearchPalette({ isOpen, index, onOpenChange, onPick }: SearchPal
     handleOpenChange(false)
     onPick(id)
   }
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'Enter' || !event.shiftKey || !active) return
+    event.preventDefault()
+    handleOpenChange(false)
+    onOpen(active)
+  }
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogContent className="top-2 max-w-[560px] overflow-hidden p-0">
         <DialogTitle className="sr-only">Search files and symbols</DialogTitle>
         <DialogDescription className="sr-only">
-          Type a name, then press Enter to fly to it on the map.
+          Type a name, then press Enter to fly to it on the map, or Shift+Enter to open its file.
         </DialogDescription>
-        <Command shouldFilter={false} loop>
+        <Command
+          shouldFilter={false}
+          loop
+          value={active}
+          onValueChange={setActive}
+          onKeyDown={handleKeyDown}
+        >
           <CommandInput
             value={query}
             onValueChange={setQuery}
@@ -94,6 +99,9 @@ export function SearchPalette({ isOpen, index, onOpenChange, onPick }: SearchPal
             </span>
             <span className="flex items-center gap-1">
               <Kbd>↵</Kbd> fly to and select
+            </span>
+            <span className="flex items-center gap-1">
+              <Kbd>⇧↵</Kbd> open file
             </span>
             <span className="flex items-center gap-1">
               <Kbd>esc</Kbd> close

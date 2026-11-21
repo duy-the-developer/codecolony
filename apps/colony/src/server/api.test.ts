@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import type { FileResponse } from '../shared/api-types.ts'
 import type { Edge, World } from '../shared/world-types.ts'
 import { createApi, type WorldSource } from './api.ts'
 
@@ -19,7 +20,21 @@ class StubSource extends EventEmitter<{ update: [World] }> implements WorldSourc
       { from: `${fileId}#a`, to: `${fileId}#b`, kind: 'call', provenance: 'lsp' },
     ])
   }
+  readFile(fileId: string): Promise<FileResponse | undefined> {
+    if (fileId === 'broken') return Promise.reject(new Error('git failed'))
+    if (fileId !== 'p/r/a.ts') return Promise.resolve(undefined)
+    return Promise.resolve({
+      id: fileId,
+      path: 'a.ts',
+      commit: 'abc123',
+      isBinary: false,
+      text: 'export const a = 1\n',
+    })
+  }
 }
+
+const TOKEN = 'secret'
+const AUTH = { authorization: `Bearer ${TOKEN}` }
 
 describe('api', () => {
   let server: Server
@@ -35,6 +50,7 @@ describe('api', () => {
         port: 0,
       },
       source,
+      (req) => (req.headers.authorization === `Bearer ${TOKEN}` ? null : 401),
     )
     server = createServer((req, res) => {
       if (!api(req, res)) res.writeHead(418).end()
@@ -65,6 +81,22 @@ describe('api', () => {
     })
     expect((await fetch(`${base}/api/deep?file=broken`)).status).toBe(502)
     expect((await fetch(`${base}/api/deep`)).status).toBe(400)
+  })
+
+  it('serves a file on the map with the token, and nothing else', async () => {
+    const fileUrl = (id: string) => `${base}/api/file?id=${encodeURIComponent(id)}`
+    const ok = await fetch(fileUrl('p/r/a.ts'), { headers: AUTH })
+    expect(await ok.json()).toEqual({
+      id: 'p/r/a.ts',
+      path: 'a.ts',
+      commit: 'abc123',
+      isBinary: false,
+      text: 'export const a = 1\n',
+    })
+    expect((await fetch(fileUrl('p/r/a.ts'))).status).toBe(401)
+    expect((await fetch(fileUrl('p/r/../../etc/passwd'), { headers: AUTH })).status).toBe(404)
+    expect((await fetch(fileUrl('broken'), { headers: AUTH })).status).toBe(502)
+    expect((await fetch(`${base}/api/file`, { headers: AUTH })).status).toBe(400)
   })
 
   it('streams a world event now and on every update', async () => {

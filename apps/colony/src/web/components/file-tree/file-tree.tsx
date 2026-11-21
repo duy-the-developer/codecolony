@@ -11,10 +11,12 @@ export interface FileTreeProps {
   selected: WorldNode | undefined
   // A file was clicked: fly the map to it and select it.
   onPick(id: string): void
+  // A file was double-clicked: show it in the File tab.
+  onOpen(id: string): void
 }
 
 // The Files tab: folders and files with their line totals.
-export function FileTree({ scene, selected, onPick }: FileTreeProps) {
+export function FileTree({ scene, selected, onPick, onOpen }: FileTreeProps) {
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set())
   const roots = useMemo(() => (scene ? listTreeRoots(scene) : []), [scene])
 
@@ -43,7 +45,7 @@ export function FileTree({ scene, selected, onPick }: FileTreeProps) {
     <div className="py-2">
       <p className="px-3 pb-2 text-muted-foreground text-xs">
         {files.length.toLocaleString()} files · {lines.toLocaleString()} lines · click a file to fly
-        to it
+        to it, double-click to open it
       </p>
       <ul aria-label="Files">
         {roots.map((node) => (
@@ -56,6 +58,7 @@ export function FileTree({ scene, selected, onPick }: FileTreeProps) {
             selectedId={selectedFile?.id}
             onToggle={toggle}
             onPick={onPick}
+            onOpen={onOpen}
           />
         ))}
       </ul>
@@ -71,9 +74,19 @@ interface TreeEntryProps {
   selectedId: string | undefined
   onToggle(id: string): void
   onPick(id: string): void
+  onOpen(id: string): void
 }
 
-function TreeEntry({ node, depth, scene, expanded, selectedId, onToggle, onPick }: TreeEntryProps) {
+function TreeEntry({
+  node,
+  depth,
+  scene,
+  expanded,
+  selectedId,
+  onToggle,
+  onPick,
+  onOpen,
+}: TreeEntryProps) {
   const ref = useRef<HTMLButtonElement>(null)
   const isFile = node.kind === 'file'
   const isOpen = !isFile && expanded.has(node.id)
@@ -90,7 +103,7 @@ function TreeEntry({ node, depth, scene, expanded, selectedId, onToggle, onPick 
         aria-expanded={isFile ? undefined : isOpen}
         aria-current={isSelected ? 'true' : undefined}
         onClick={() => (isFile ? onPick(node.id) : onToggle(node.id))}
-        onDoubleClick={() => !isFile && onPick(node.id)}
+        onDoubleClick={() => (isFile ? onOpen(node.id) : onPick(node.id))}
         className={cn(
           'flex h-6 w-full cursor-pointer items-center gap-1.5 pr-3 text-left text-[13px] hover:bg-accent/60',
           isSelected && 'bg-accent text-accent-foreground',
@@ -129,6 +142,7 @@ function TreeEntry({ node, depth, scene, expanded, selectedId, onToggle, onPick 
               selectedId={selectedId}
               onToggle={onToggle}
               onPick={onPick}
+              onOpen={onOpen}
             />
           ))}
         </ul>
