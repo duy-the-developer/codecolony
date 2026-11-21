@@ -21,7 +21,33 @@
   },
   "linter": {
     "rules": {
-      "preset": "recommended"
+      "preset": "recommended",
+      "performance": {
+        "noBarrelFile": "error"
+      },
+      "style": {
+        "useFilenamingConvention": {
+          "level": "error",
+          "options": {
+            "filenameCases": ["kebab-case"],
+            "requireAscii": true
+          }
+        },
+        "useNamingConvention": {
+          "level": "error",
+          "options": {
+            "strictCase": false,
+            "conventions": [
+              {
+                "selector": {
+                  "kind": "objectLiteralProperty"
+                },
+                "formats": ["camelCase", "CONSTANT_CASE", "snake_case"]
+              }
+            ]
+          }
+        }
+      }
     }
   },
   "assist": {
@@ -30,5 +56,363 @@
         "organizeImports": "on"
       }
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": ["packages/dock/src/server/index.ts"],
+      "linter": {
+        "rules": {
+          "performance": {
+            "noBarrelFile": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["apps/colony/src/core/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "**/shared/**",
+                      "**/config/**",
+                      "**/adapters/**",
+                      "**/layout/**",
+                      "**/indexer/**",
+                      "**/server/**",
+                      "**/web/**",
+                      "**/testing/**"
+                    ],
+                    "message": "Imports follow the folder dependency direction in CONVENTIONS.md."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["apps/colony/src/shared/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "**/config/**",
+                      "**/adapters/**",
+                      "**/layout/**",
+                      "**/indexer/**",
+                      "**/server/**",
+                      "**/web/**",
+                      "**/testing/**"
+                    ],
+                    "message": "Imports follow the folder dependency direction in CONVENTIONS.md."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["apps/colony/src/config/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "**/adapters/**",
+                      "**/layout/**",
+                      "**/indexer/**",
+                      "**/server/**",
+                      "**/web/**",
+                      "**/testing/**"
+                    ],
+                    "message": "Imports follow the folder dependency direction in CONVENTIONS.md."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["apps/colony/src/adapters/**", "!**/*.test.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "**/config/**",
+                      "**/layout/**",
+                      "**/indexer/**",
+                      "**/server/**",
+                      "**/web/**",
+                      "**/testing/**"
+                    ],
+                    "message": "Imports follow the folder dependency direction in CONVENTIONS.md."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["apps/colony/src/adapters/**/*.test.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["**/server/**", "**/web/**"],
+                    "message": "Imports follow the folder dependency direction in CONVENTIONS.md."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["apps/colony/src/layout/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "**/config/**",
+                      "**/adapters/**",
+                      "**/indexer/**",
+                      "**/server/**",
+                      "**/web/**",
+                      "**/testing/**"
+                    ],
+                    "message": "Imports follow the folder dependency direction in CONVENTIONS.md."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["apps/colony/src/indexer/**", "!**/*.test.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["**/server/**", "**/web/**", "**/testing/**"],
+                    "message": "Imports follow the folder dependency direction in CONVENTIONS.md."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["apps/colony/src/indexer/**/*.test.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["**/server/**", "**/web/**"],
+                    "message": "Imports follow the folder dependency direction in CONVENTIONS.md."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["apps/colony/src/server/**", "!**/*.test.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["**/web/**", "**/testing/**"],
+                    "message": "Imports follow the folder dependency direction in CONVENTIONS.md."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["apps/colony/src/server/**/*.test.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["**/web/**"],
+                    "message": "Imports follow the folder dependency direction in CONVENTIONS.md."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["apps/colony/src/web/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "**/core/**",
+                      "**/config/**",
+                      "**/adapters/**",
+                      "**/layout/**",
+                      "**/indexer/**",
+                      "**/server/**",
+                      "**/testing/**"
+                    ],
+                    "message": "Imports follow the folder dependency direction in CONVENTIONS.md."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/dock/src/shared/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["**/server/**", "**/web/**", "**/testing/**"],
+                    "message": "Imports follow the folder dependency direction in CONVENTIONS.md."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/dock/src/server/**", "!**/*.test.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["**/web/**", "**/testing/**"],
+                    "message": "Imports follow the folder dependency direction in CONVENTIONS.md."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/dock/src/server/**/*.test.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["**/web/**"],
+                    "message": "Imports follow the folder dependency direction in CONVENTIONS.md."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/dock/src/web/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["**/server/**", "**/testing/**"],
+                    "message": "Imports follow the folder dependency direction in CONVENTIONS.md."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
 }
