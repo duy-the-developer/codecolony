@@ -87,7 +87,7 @@ Glossary of type suffixes:
 
 ## Environment variables and flags
 
-- Env vars start with `CODECOLONY_`; `PORT` is the one standard exception. Each matches a flag: `--herdr-socket` and `CODECOLONY_HERDR_SOCKET`.
+- Env vars start with `CODECOLONY_`; `PORT` and `CI` are the standard exceptions. Each matches a flag: `--herdr-socket` and `CODECOLONY_HERDR_SOCKET`.
 - The app reads them in `config/load-config.ts` and the dock in `packages/dock/src/server/options.ts`; the README lists them all.
 
 ## Folder dependency direction

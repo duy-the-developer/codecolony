@@ -93,3 +93,10 @@
   min-height: 0;
   padding: 4px 0 0 6px;
 }
+
+.cc-dock-off {
+  margin: 0;
+  padding: 12px;
+  color: var(--muted, #7d93a8);
+  font-size: 12px;
+}

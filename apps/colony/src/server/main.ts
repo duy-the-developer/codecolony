@@ -27,7 +27,8 @@ const colony = new Colony(config)
 await colony.refresh()
 colony.watch(WATCH_MS)
 const api = createApi(config, colony)
-const dock = createDock(resolveDockOptions(args))
+const dockOptions = resolveDockOptions(args)
+const dock = createDock(dockOptions)
 const headers = securityHeaders({ dev })
 
 let web: Handler
@@ -63,6 +64,7 @@ server.listen(config.port, HOST, () => {
   log('Code Colony is running', {
     url: `http://${HOST}:${config.port}/#token=${dock.token}`,
     mode: dev ? 'dev' : 'built',
+    herdr: dockOptions.enabled ? 'on' : 'off',
     config: config.source,
   })
 })
