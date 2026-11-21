@@ -138,7 +138,9 @@ export function mountDock(el: HTMLElement, { token, pollMs = 3000 }: DockMountOp
     socket.onopen = () => {
       state.textContent = ''
       sendSize()
-      term.focus()
+      // A collapsed panel or an inactive tab leaves the dock zero-width; focusing
+      // the hidden terminal there would send the page's keys to the agent.
+      if (screen.clientWidth > 0) term.focus()
     }
     socket.onmessage = (event: MessageEvent<ArrayBuffer | string>) => {
       term.write(typeof event.data === 'string' ? event.data : new Uint8Array(event.data))
