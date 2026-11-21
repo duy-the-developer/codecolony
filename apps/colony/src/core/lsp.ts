@@ -97,12 +97,21 @@ export class LspSession {
   private loaded = false
   private closing = false
 
+  private readonly spec: LanguageServerSpec
+  private readonly process: ChildProcess
+  private readonly connection: ProtocolConnection
+  private readonly options: LspSessionOptions
+
   private constructor(
-    private readonly spec: LanguageServerSpec,
-    private readonly process: ChildProcess,
-    private readonly connection: ProtocolConnection,
-    private readonly options: LspSessionOptions,
+    spec: LanguageServerSpec,
+    process: ChildProcess,
+    connection: ProtocolConnection,
+    options: LspSessionOptions,
   ) {
+    this.spec = spec
+    this.process = process
+    this.connection = connection
+    this.options = options
     this.exited = new Promise<never>((_, reject) => {
       let done = false
       const finish = (code: number | null, signal: NodeJS.Signals | null, cause?: Error) => {

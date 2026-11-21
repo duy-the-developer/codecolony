@@ -7,16 +7,25 @@ import { parseFile, textFacts } from '../core/parse.ts'
 // facts. Never throws: a file no grammar can read still gets its size.
 
 export async function parseFacts(path: string, bytes: Uint8Array): Promise<FileFacts> {
-  if (isBinary(bytes)) return { ...textFacts(''), language: 'binary' }
-  const source = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString('utf8')
   const adapter = findAdapter(path)
-  if (!adapter) return textFacts(source)
+  if (!adapter || isBinary(bytes)) return buildTextFacts(bytes)
+  const source = decode(bytes)
   try {
     return await parseFile(adapter, TRANSPORT_DETECTORS, path, source)
   } catch {
     // A grammar that cannot read the file still leaves its size on the map.
     return textFacts(source)
   }
+}
+
+// Size-only facts, for files no adapter claims or no grammar could read.
+export function buildTextFacts(bytes: Uint8Array): FileFacts {
+  if (isBinary(bytes)) return { ...textFacts(''), language: 'binary' }
+  return textFacts(decode(bytes))
+}
+
+function decode(bytes: Uint8Array): string {
+  return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString('utf8')
 }
 
 function isBinary(bytes: Uint8Array): boolean {

@@ -8,9 +8,9 @@ import type { ParseRequest, ParseResponse } from './parse-pool.ts'
 const port = parentPort
 if (!port) throw new Error('parse-worker.ts runs only as a worker thread')
 
-port.on('message', ({ id, path, bytes }: ParseRequest) => {
+port.on('message', ({ path, bytes }: ParseRequest) => {
   parseFacts(path, bytes).then(
-    (facts) => port.postMessage({ id, facts } satisfies ParseResponse),
-    (error: unknown) => port.postMessage({ id, error: String(error) } satisfies ParseResponse),
+    (facts) => port.postMessage({ facts } satisfies ParseResponse),
+    (error: unknown) => port.postMessage({ error: String(error) } satisfies ParseResponse),
   )
 })

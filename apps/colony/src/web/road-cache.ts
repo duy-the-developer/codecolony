@@ -102,7 +102,10 @@ export class RoadCache {
   private readonly holderAt: Int32Array
   private frame = 0
 
-  constructor(private readonly scene: Scene) {
+  private readonly scene: Scene
+
+  constructor(scene: Scene) {
+    this.scene = scene
     if (scene.root) this.nodes.push(scene.root)
     for (let i = 0; i < this.nodes.length; i++) {
       const node = this.nodes[i] as WorldNode

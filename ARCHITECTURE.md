@@ -78,6 +78,7 @@ To add one, write a detector next to its language (see `adapters/typescript/http
 - Each repository is read at its `HEAD` commit with `git ls-tree` and `git cat-file --batch`, never from the working tree, and nothing is written into it.
 - Vendored and generated files (`node_modules`, `dist`, lockfiles, minified files, files over 1 MB) are skipped.
 - Facts are cached on disk by blob hash and language under `cacheDir` (default `~/.cache/codecolony`), namespaced by the adapters' ids and versions. A repository whose `HEAD` has not moved is skipped; otherwise only new blobs are parsed.
+- New blobs are parsed on a pool of worker threads, one per core (`indexer/parse-pool.ts`), which stops when idle. Adapters and detectors are loaded in each worker by Node's built-in TypeScript type stripping, so the app uses erasable TypeScript only (`erasableSyntaxOnly`): no parameter properties, enums or namespaces.
 - The server polls every repository's `HEAD` every two seconds and pushes a `world` event over `/api/events` when the map changes.
 - Tracing a file with its language server (`/api/deep`) reads the working tree, so it matches the map only while that file is unmodified.
 
