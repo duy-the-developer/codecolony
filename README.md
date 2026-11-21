@@ -25,7 +25,7 @@ The server listens on loopback only and answers 403 to any request whose host is
 
 ## Terminal dock
 
-The right panel's Terminal tab runs the real [Herdr](https://herdr.dev) client in the page (xterm.js over node-pty and a WebSocket), with a chip for each agent Herdr knows about. A chip is labelled by its Herdr workspace (the task name, such as `firstmate` or `alphagal-mockup`), falling back to its tab label without an `fm-` prefix, then to the agent's name; hovering shows the agent program, pane and status. Clicking a worker in the dock focuses its pane. The dock needs `herdr` on your `PATH`; without it the terminal shows the client's exit (for example `[herdr exited with code 1]`), the worker list says it cannot reach the Herdr socket, and the rest of the app keeps working.
+The right panel's Terminal tab runs the real [Herdr](https://herdr.dev) client in the page (xterm.js over node-pty and a WebSocket), filling the whole tab: Herdr's own sidebar lists the agents and switches between them, and the tab title counts them. The dock needs `herdr` on your `PATH`; without it the terminal shows the client's exit (for example `[herdr exited with code 1]`), a bar above the terminal says the worker list cannot reach the Herdr socket, and the rest of the app keeps working.
 
 | Flag                     | Environment                | Default                                            |
 | ------------------------ | -------------------------- | -------------------------------------------------- |

@@ -86,28 +86,10 @@
 }
 
 .cc-dock-bar {
-  align-items: flex-start;
   padding: 8px;
   background: var(--card);
 }
 
-.cc-dock-workers {
-  flex-wrap: wrap;
-  overflow: visible;
-}
-
-.cc-dock-note,
 .cc-dock-state {
   white-space: normal;
-}
-
-.cc-dock-worker {
-  padding: 3px 10px;
-  border-radius: 999px;
-  font-weight: 500;
-}
-
-.cc-dock-worker[aria-pressed="true"] {
-  border-color: var(--primary);
-  background: var(--accent);
 }
