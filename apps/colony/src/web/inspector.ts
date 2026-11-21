@@ -1,5 +1,6 @@
 import type { Edge, WorldNode } from '../shared/world-types.ts'
-import { EDGE_COLORS, PROVEN_PROVENANCES } from './render.ts'
+import { EDGE_COLORS } from './render.ts'
+import { PROVEN_PROVENANCES } from './road-cache.ts'
 import type { Scene } from './scene.ts'
 
 // The card for the selected node: its facts, and every road in or out with

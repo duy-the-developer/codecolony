@@ -1,6 +1,6 @@
 # Code Colony
 
-A live, game-like top-down map of your codebases. Repositories become districts, modules become blocks and files become buildings; zoom in continuously, like a web map, down to individual functions. Overlay lenses show the network, change heat, external systems and data access, and the coding agents working on the code appear on the map next to the build queue.
+A live, game-like top-down map of your codebases. Packages become bands, modules become blocks and files become squares on one grid; zoom in continuously, like a web map, down to individual functions. Overlay lenses show the network, change heat, external systems and data access, and the coding agents working on the code appear on the map next to the build queue.
 
 Inspired by Oxygen Not Included and Factorio. Early work in progress.
 
@@ -10,11 +10,14 @@ Requires Node 24+ and pnpm.
 
 ```bash
 pnpm install
-pnpm dev      # http://127.0.0.1:4320, with hot reload
-pnpm start    # builds the page, then serves it
+pnpm dev               # http://127.0.0.1:4320, with hot reload
+pnpm dev:no-herdr      # the same, with the terminal dock's Herdr switched off
+pnpm start             # builds the page, then serves it
 ```
 
-Out of the box it maps its own checkout. `pnpm index` indexes the configured projects once and prints a summary.
+Automated runs (tests, validation pipelines, screenshot tools) must start the app with Herdr off: `pnpm dev:no-herdr`, `--no-herdr` or `CODECOLONY_HERDR=off`. Otherwise the dock attaches to your live Herdr session and resizes its panes. Herdr is off by default when `CI` is set.
+
+Out of the box it maps its own checkout. `pnpm index` indexes the configured projects once and prints a summary; `pnpm index --relayout` also lays the map out afresh instead of keeping the saved order of modules and files.
 
 The server prints the page's URL with a fresh token for this run, `http://127.0.0.1:4320/#token=...`; open that exact URL. The token sits in the URL fragment, so it is never sent to the server or logged, and the page keeps it for the tab and strips it from the address bar.
 
@@ -30,8 +33,11 @@ The bottom panel runs the real [Herdr](https://herdr.dev) client in the page (xt
 | `--herdr-socket <path>`  | `CODECOLONY_HERDR_SOCKET`  | the session's `herdr.sock` under `~/.config/herdr` |
 | `--herdr-bin <path>`     | `CODECOLONY_HERDR_BIN`     | `herdr`                                            |
 | `--herdr-lab`            | `CODECOLONY_HERDR_LAB=1`   | off                                                |
+| `--no-herdr`             | `CODECOLONY_HERDR=off`     | on, or off when `CI` is set                        |
 
 Pass flags after the script name, for example `pnpm dev --herdr-session work`. Lab mode, for experiments, attaches only to sessions named `fm-lab-*` and refuses any other session.
+
+With Herdr off, the dock never starts the Herdr client or opens its socket: the panel says "Herdr disabled", the terminal and Herdr routes answer 503, and the rest of the app works as usual. `--no-herdr` wins over the environment, and `CODECOLONY_HERDR=on` turns Herdr back on under CI. Any automated run must use it, so it never touches your live session.
 
 Herdr shares its panes between all attached clients and sizes them to the client that most recently attached or sent input, so the last one wins. When the dock and another Herdr client (another tab, or a terminal) are both attached, the panes take the other client's size until the dock is used again. This is accepted for v1: there is no single-client limit or deferred sizing.
 
@@ -63,7 +69,7 @@ See `codecolony.config.example.json`.
 | Scroll, pinch, `+` / `-` | Zoom smoothly at the cursor; detail fades in and out as you zoom |
 | Drag, arrow keys         | Pan                                                              |
 | Click                    | Inspect: facts, and every road in or out with how it was proven  |
-| Double-click             | Fly into a building                                              |
+| Double-click             | Fly into a block or file                                         |
 | `Home`                   | See everything                                                   |
 | `Esc`                    | Clear the selection                                              |
 

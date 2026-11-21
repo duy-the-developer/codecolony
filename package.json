@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "pnpm --filter @codecolony/colony dev",
+    "dev:no-herdr": "pnpm --filter @codecolony/colony dev --no-herdr",
     "start": "pnpm --filter @codecolony/colony start",
     "index": "pnpm --filter @codecolony/colony index",
     "lint": "biome check .",

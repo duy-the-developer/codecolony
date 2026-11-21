@@ -5,6 +5,9 @@ import { isAbsolute, join } from 'node:path'
 // from command-line flags (see DOCK_CLI_OPTIONS) or the environment.
 
 export interface DockOptions {
+  // False with --no-herdr, CODECOLONY_HERDR=off or, by default, under CI: the
+  // dock then never starts the client or opens the socket.
+  enabled: boolean
   // The Herdr session; null is Herdr's default session.
   session: string | null
   // The session's API socket.
@@ -17,6 +20,7 @@ export interface DockOptions {
 }
 
 export type DockOptionsErrorCode =
+  | 'InvalidHerdrSwitch'
   | 'InvalidSession'
   | 'LabSessionRefused'
   | 'LabSocketConflict'
@@ -37,6 +41,7 @@ export const DOCK_CLI_OPTIONS = {
   'herdr-socket': { type: 'string' },
   'herdr-bin': { type: 'string' },
   'herdr-lab': { type: 'boolean' },
+  'no-herdr': { type: 'boolean' },
 } as const
 
 export interface DockCliValues {
@@ -44,6 +49,7 @@ export interface DockCliValues {
   'herdr-socket'?: string | undefined
   'herdr-bin'?: string | undefined
   'herdr-lab'?: boolean | undefined
+  'no-herdr'?: boolean | undefined
 }
 
 const SESSION_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/
@@ -53,6 +59,7 @@ export function resolveDockOptions(
   values: DockCliValues,
   env: NodeJS.ProcessEnv = process.env,
 ): DockOptions {
+  const enabled = isHerdrEnabled(values['no-herdr'], env)
   const lab = values['herdr-lab'] ?? env.CODECOLONY_HERDR_LAB === '1'
   const rawSession = values['herdr-session'] ?? env.CODECOLONY_HERDR_SESSION
   const socket = values['herdr-socket'] ?? env.CODECOLONY_HERDR_SOCKET
@@ -86,12 +93,35 @@ export function resolveDockOptions(
   }
 
   return {
+    enabled,
     session,
     socketPath: socket ?? herdrSocketPath(session, env),
     client: { file: bin, args: session === null ? [] : ['--session', session] },
     cwd: env.HOME ?? homedir(),
     lab,
   }
+}
+
+// --no-herdr wins, then CODECOLONY_HERDR=on|off, then off under CI so that
+// automated runs never attach to the live session and resize its panes.
+function isHerdrEnabled(noHerdr: boolean | undefined, env: NodeJS.ProcessEnv): boolean {
+  if (noHerdr) return false
+  const value = env.CODECOLONY_HERDR
+  if (value === 'on') return true
+  if (value === 'off') return false
+  if (value !== undefined && value !== '') {
+    throw new DockOptionsError(
+      'InvalidHerdrSwitch',
+      `CODECOLONY_HERDR must be on or off: ${JSON.stringify(value)}`,
+    )
+  }
+  return !isCi(env)
+}
+
+// CI services set CI to true or 1; an empty, false or 0 value means not CI.
+function isCi(env: NodeJS.ProcessEnv): boolean {
+  const value = env.CI
+  return value !== undefined && value !== '' && value !== 'false' && value !== '0'
 }
 
 // Herdr keeps the default session's socket at <config>/herdr.sock and a named

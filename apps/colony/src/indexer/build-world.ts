@@ -5,9 +5,12 @@ import { type Edge, qualifiedName, type TransportFact } from '../core/model.ts'
 import { WORLD_ID, type WorldNode } from '../shared/world-types.ts'
 import type { RepoIndex } from './repo.ts'
 
-// Turns repository indexes into the world tree (world > project > repo > dir
-// > file > symbol) and the edges between its nodes. Rectangles are filled in
-// by the layout.
+// Turns repository indexes into the world tree (world > project > repo >
+// package > module > file > symbol) and the edges between its nodes. A module
+// is one folder's own files; its subfolders are modules of their own, in the
+// same package unless they hold a manifest. Files directly in a repository's
+// or a package's own folder belong to that repository or package, with no
+// module around them. Rectangles are filled in by the layout.
 
 export interface ProjectIndex {
   name: string
@@ -36,6 +39,16 @@ export function projectId(project: string): string {
 
 export function repoId(project: string, repo: string): string {
   return `${projectId(project)}/${repo}`
+}
+
+// Package ids cannot clash with module or file ids: no path starts with
+// "package:" in practice.
+export function packageId(repo: string, pkg: string): string {
+  return `${repo}/package:${pkg}`
+}
+
+export function moduleId(repo: string, dir: string): string {
+  return `${repo}/${dir}`
 }
 
 export function buildWorld(projects: ProjectIndex[]): { nodes: WorldNode[]; edges: Edge[] } {
@@ -70,7 +83,7 @@ export function buildWorld(projects: ProjectIndex[]): { nodes: WorldNode[]; edge
       }
       if (repo.commit) repoNode.commit = repo.commit
       nodes.push(repoNode)
-      addRepo(repo, rid, nodes, edges)
+      addRepo(repo, repoNode, nodes, edges)
       for (const file of repo.files) {
         for (const fact of file.facts.transports) {
           if (fact.kind === 'http-client') clients.push({ file: `${rid}/${file.path}`, fact })
@@ -101,34 +114,54 @@ export function buildWorld(projects: ProjectIndex[]): { nodes: WorldNode[]; edge
   return { nodes, edges }
 }
 
-function addRepo(repo: RepoIndex, id: string, nodes: WorldNode[], edges: Edge[]): void {
+function addRepo(repo: RepoIndex, repoNode: WorldNode, nodes: WorldNode[], edges: Edge[]): void {
+  const { id } = repoNode
   const paths = new Set(repo.files.map((file) => file.path))
-  const dirs = new Set<string>()
   const manifestDirs = new Set<string>()
+  const dirs = new Set<string>()
   for (const { path } of repo.files) {
     if (MANIFESTS.has(posix.basename(path))) manifestDirs.add(posix.dirname(path))
-    for (let dir = posix.dirname(path); dir !== '.'; dir = posix.dirname(dir)) {
-      if (dirs.has(dir)) break
-      dirs.add(dir)
-    }
+    dirs.add(posix.dirname(path))
   }
-  const parentOf = (path: string): string => {
-    const dir = posix.dirname(path)
-    return dir === '.' ? id : `${id}/${dir}`
+  if (manifestDirs.has('.')) repoNode.package = true
+  // The nearest folder below the root with a manifest, at or above dir.
+  const packageOf = (dir: string): string | undefined => {
+    for (let at = dir; at !== '.'; at = posix.dirname(at)) if (manifestDirs.has(at)) return at
+    return undefined
+  }
+  // The node that holds a folder's own files: the repository or package it
+  // is the root of, or the module it is.
+  const holderOf = (dir: string): string => {
+    if (dir === '.') return id
+    const pkg = packageOf(dir)
+    return pkg === dir ? packageId(id, pkg) : moduleId(id, dir)
+  }
+  for (const pkg of [...manifestDirs].filter((dir) => dir !== '.').sort()) {
+    nodes.push({
+      id: packageId(id, pkg),
+      parent: id,
+      kind: 'package',
+      name: pkg,
+      path: pkg,
+      lines: 0,
+      complexity: 0,
+      rect: ZERO,
+      package: true,
+    })
   }
   for (const dir of [...dirs].sort()) {
-    const node: WorldNode = {
-      id: `${id}/${dir}`,
-      parent: parentOf(dir),
-      kind: 'dir',
-      name: posix.basename(dir),
+    if (holderOf(dir) !== moduleId(id, dir)) continue
+    const pkg = packageOf(dir)
+    nodes.push({
+      id: moduleId(id, dir),
+      parent: pkg ? packageId(id, pkg) : id,
+      kind: 'module',
+      name: pkg ? posix.relative(pkg, dir) : dir,
       path: dir,
       lines: 0,
       complexity: 0,
       rect: ZERO,
-    }
-    if (manifestDirs.has(dir)) node.package = true
-    nodes.push(node)
+    })
   }
 
   for (const file of repo.files) {
@@ -136,7 +169,7 @@ function addRepo(repo: RepoIndex, id: string, nodes: WorldNode[], edges: Edge[])
     const { facts } = file
     const node: WorldNode = {
       id: fileId,
-      parent: parentOf(file.path),
+      parent: holderOf(posix.dirname(file.path)),
       kind: 'file',
       name: posix.basename(file.path),
       path: file.path,
