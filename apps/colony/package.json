@@ -9,15 +9,20 @@
     "build": "vite build",
     "check-types": "tsc",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "index": "tsx src/indexer/cli.ts"
   },
   "dependencies": {
-    "@codecolony/dock": "workspace:*"
+    "@codecolony/dock": "workspace:*",
+    "tree-sitter-typescript": "^0.23.2",
+    "typescript": "^5.9.3",
+    "typescript-language-server": "^6.1.0",
+    "vscode-languageserver-protocol": "^3.18.5",
+    "web-tree-sitter": "^0.27.2"
   },
   "devDependencies": {
     "@types/node": "^24.19.2",
     "tsx": "^4.23.15",
-    "typescript": "^5.9.3",
     "vite": "^8.3.8",
     "vitest": "^5.1.1"
   }
