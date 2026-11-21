@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import type { Edge, NodeKind, Rect, World, WorldNode } from '../shared/world-types.ts'
-import { MIN_VISIBLE_PX, openness } from './lod.ts'
 import {
-  MIN_ROAD_ALPHA,
+  LINK_LEVELS_PER_OCTAVE,
+  LinkCache,
+  MIN_LINK_ALPHA,
   PROVEN_PROVENANCES,
-  ROAD_LEVELS_PER_OCTAVE,
-  RoadCache,
-} from './road-cache.ts'
+} from './link-cache.ts'
+import { MIN_VISIBLE_PX, openness } from './lod.ts'
 import { Scene } from './scene.ts'
 
 function node(id: string, kind: NodeKind, parent: string | undefined, rect: Rect): WorldNode {
@@ -51,7 +51,7 @@ function makeWorld(edges: Edge[]): World {
 // The world-space window the camera shows.
 const WHOLE_WORLD: Rect = { x: -1e9, y: -1e9, w: 2e9, h: 2e9 }
 
-// The nodes the renderer draws with enough alpha to hold a road.
+// The nodes the renderer draws with enough alpha to hold a link.
 function listHolders(scene: Scene, scale: number, window: Rect): WorldNode[] {
   const holders: WorldNode[] = []
   const visit = (n: WorldNode, alpha: number) => {
@@ -62,7 +62,7 @@ function listHolders(scene: Scene, scale: number, window: Rect): WorldNode[] {
     if (n.kind !== 'world' && side < MIN_VISIBLE_PX) return
     const kids = scene.children.get(n.id)
     const open = kids ? openness(n.kind, side) : 0
-    if (n.kind !== 'world' && alpha >= MIN_ROAD_ALPHA) holders.push(n)
+    if (n.kind !== 'world' && alpha >= MIN_LINK_ALPHA) holders.push(n)
     if (open > 0.01 && kids) for (const kid of kids) visit(kid, alpha * open)
   }
   if (scene.root) visit(scene.root, 1)
@@ -71,39 +71,39 @@ function listHolders(scene: Scene, scale: number, window: Rect): WorldNode[] {
 
 // The per-frame aggregation the renderer did before the cache: each edge goes
 // to the deepest holder of each end.
-function listRoadsPerFrame(scene: Scene, holders: WorldNode[]): string[] {
+function listLinksPerFrame(scene: Scene, holders: WorldNode[]): string[] {
   const held = new Set(holders.map((n) => n.id))
   const holder = (id: string) => {
     for (let n = scene.byId.get(id); n; n = scene.parentOf(n)) if (held.has(n.id)) return n.id
     return undefined
   }
-  const roads = new Map<string, number>()
+  const links = new Map<string, number>()
   for (const e of scene.edges) {
     const from = holder(e.from)
     const to = holder(e.to)
     if (!from || !to || from === to) continue
     if (scene.isAncestor(from, to) || scene.isAncestor(to, from)) continue
     const key = `${e.kind}|${from}|${to}|${PROVEN_PROVENANCES.has(e.provenance)}`
-    roads.set(key, (roads.get(key) ?? 0) + 1)
+    links.set(key, (links.get(key) ?? 0) + 1)
   }
-  return [...roads].map(([key, count]) => `${key}|${count}`)
+  return [...links].map(([key, count]) => `${key}|${count}`)
 }
 
-function listRoads(
-  cache: RoadCache,
+function listLinks(
+  cache: LinkCache,
   scene: Scene,
   scale: number,
   window = WHOLE_WORLD,
   subtree: ReadonlySet<string> = new Set(),
 ): string[] {
   const holders = listHolders(scene, scale, window).map((node) => ({ node }))
-  const roads = cache.listRoads(scale, holders, subtree)
+  const links = cache.listLinks(scale, holders, subtree)
   const out: string[] = []
-  for (let r = 0; r < roads.count; r++) {
-    const from = holders[roads.from[r] as number]?.node.id
-    const to = holders[roads.to[r] as number]?.node.id
-    const hot = roads.hot[r] ? '|hot' : ''
-    out.push(`${roads.kind[r]}|${from}|${to}|${roads.proven[r] === 1}|${roads.edges[r]}${hot}`)
+  for (let r = 0; r < links.count; r++) {
+    const from = holders[links.from[r] as number]?.node.id
+    const to = holders[links.to[r] as number]?.node.id
+    const hot = links.hot[r] ? '|hot' : ''
+    out.push(`${links.kind[r]}|${from}|${to}|${links.proven[r] === 1}|${links.edges[r]}${hot}`)
   }
   return out
 }
@@ -119,23 +119,23 @@ const EDGES = [
   edge('r/b/2.ts#x', 'missing'),
 ] satisfies Edge[]
 
-describe('RoadCache', () => {
-  it('merges roads into the holders visible when zoomed out', () => {
+describe('LinkCache', () => {
+  it('merges links into the holders visible when zoomed out', () => {
     const scene = new Scene(makeWorld(EDGES))
     // Modules are 50 units: at scale 0.3 they are 15 px, so the repo is open
     // but the modules are still closed.
-    expect(listRoads(new RoadCache(scene), scene, 0.3)).toEqual([
+    expect(listLinks(new LinkCache(scene), scene, 0.3)).toEqual([
       'import|r/a|r/b|true|2',
       'call|r/a|r/b|true|1',
       'call|r/a|r/b|false|1',
     ])
   })
 
-  it('splits roads down to symbols when zoomed in', () => {
+  it('splits links down to symbols when zoomed in', () => {
     const scene = new Scene(makeWorld(EDGES))
-    const roads = listRoads(new RoadCache(scene), scene, 40)
-    expect(roads).toContain('call|r/a/1.ts#x|r/a/1.ts#y|true|1')
-    expect(roads).toContain('import|r/a/1.ts#x|r/b/1.ts#x|true|1')
+    const links = listLinks(new LinkCache(scene), scene, 40)
+    expect(links).toContain('call|r/a/1.ts#x|r/a/1.ts#y|true|1')
+    expect(links).toContain('import|r/a/1.ts#x|r/b/1.ts#x|true|1')
   })
 
   it('moves ends that are off screen up to their ancestor on screen', () => {
@@ -143,14 +143,14 @@ describe('RoadCache', () => {
     // Only r/a/1.ts is on screen, so edges to r/a/2.ts and r/b end on an
     // ancestor of the other end and are dropped.
     const window = { x: 1, y: 1, w: 20, h: 20 }
-    expect(listRoads(new RoadCache(scene), scene, 40, window)).toEqual([
+    expect(listLinks(new LinkCache(scene), scene, 40, window)).toEqual([
       'call|r/a/1.ts#x|r/a/1.ts#y|true|1',
     ])
   })
 
   it('matches the per-frame aggregation at every scale and window', () => {
     const scene = new Scene(makeWorld(EDGES))
-    const cache = new RoadCache(scene)
+    const cache = new LinkCache(scene)
     const windows = [
       WHOLE_WORLD,
       { x: 1, y: 1, w: 20, h: 10 },
@@ -160,10 +160,10 @@ describe('RoadCache', () => {
     ]
     // Level boundaries, and points between them.
     for (let step = -32; step <= 160; step++) {
-      const scale = 2 ** (step / (3 * ROAD_LEVELS_PER_OCTAVE))
+      const scale = 2 ** (step / (3 * LINK_LEVELS_PER_OCTAVE))
       for (const window of windows) {
-        expect(listRoads(cache, scene, scale, window).sort(), `scale ${scale}`).toEqual(
-          listRoadsPerFrame(scene, listHolders(scene, scale, window)).sort(),
+        expect(listLinks(cache, scene, scale, window).sort(), `scale ${scale}`).toEqual(
+          listLinksPerFrame(scene, listHolders(scene, scale, window)).sort(),
         )
       }
     }
@@ -171,30 +171,30 @@ describe('RoadCache', () => {
 
   it('rebuilds after edges are merged in', () => {
     const scene = new Scene(makeWorld(EDGES))
-    const cache = new RoadCache(scene)
-    expect(listRoads(cache, scene, 0.3)).not.toContain('call|r/b|r/a|true|1')
+    const cache = new LinkCache(scene)
+    expect(listLinks(cache, scene, 0.3)).not.toContain('call|r/b|r/a|true|1')
     scene.mergeEdges([{ ...edge('r/b/1.ts#x', 'r/a/1.ts#x', 'call'), provenance: 'lsp' }])
-    expect(listRoads(cache, scene, 0.3)).toContain('call|r/b|r/a|true|1')
+    expect(listLinks(cache, scene, 0.3)).toContain('call|r/b|r/a|true|1')
   })
 
-  it('marks the roads that carry an edge touching the selection', () => {
+  it('marks the links that carry an edge touching the selection', () => {
     const scene = new Scene(makeWorld(EDGES))
-    const cache = new RoadCache(scene)
-    expect(listRoads(cache, scene, 0.3, WHOLE_WORLD, new Set(['r/b/2.ts', 'r/b/2.ts#y']))).toEqual([
+    const cache = new LinkCache(scene)
+    expect(listLinks(cache, scene, 0.3, WHOLE_WORLD, new Set(['r/b/2.ts', 'r/b/2.ts#y']))).toEqual([
       'import|r/a|r/b|true|2|hot',
       'call|r/a|r/b|true|1',
       'call|r/a|r/b|false|1',
     ])
   })
 
-  it('flags roads between symbols of one file', () => {
+  it('flags links between symbols of one file', () => {
     const scene = new Scene(makeWorld(EDGES))
-    const cache = new RoadCache(scene)
+    const cache = new LinkCache(scene)
     const holders = listHolders(scene, 40, WHOLE_WORLD).map((node) => ({ node }))
-    const roads = cache.listRoads(40, holders, new Set())
+    const links = cache.listLinks(40, holders, new Set())
     const same: string[] = []
-    for (let r = 0; r < roads.count; r++) {
-      if (roads.sameFile[r]) same.push(`${holders[roads.from[r] as number]?.node.id}`)
+    for (let r = 0; r < links.count; r++) {
+      if (links.sameFile[r]) same.push(`${holders[links.from[r] as number]?.node.id}`)
     }
     expect(same).toEqual(['r/a/1.ts#x'])
   })

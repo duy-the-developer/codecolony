@@ -1,6 +1,9 @@
 import type { WorldNode } from '../shared/world-types.ts'
 import { Camera, type Viewport } from './camera.ts'
-import { type Drawn, hitTest, render } from './render.ts'
+import { LaneLayer } from './lane-layer.ts'
+import { createLaneRouter } from './lane-router.ts'
+import type { OverlayId } from './overlays.ts'
+import { type Drawn, hitTest, hoverTarget, render } from './render.ts'
 import type { Scene } from './scene.ts'
 
 // The map: one canvas, drawn imperatively. React owns the page around it and
@@ -19,6 +22,8 @@ export interface MapHandle {
   setScene(scene: Scene): void
   // Selects a node (or clears the selection) and, with fly, frames it.
   select(id: string | undefined, fly?: boolean): void
+  // The overlays drawn over the map; none by default.
+  setOverlays(overlays: ReadonlySet<OverlayId>): void
   zoomBy(factor: number): void
   fitAll(): void
   // Redraws after the scene changed in place (edges merged).
@@ -41,7 +46,15 @@ export function createMapController(
   let scene: Scene | undefined
   let drawn: Drawn[] = []
   let selected: string | undefined
-  let subtree: Set<string> = new Set()
+  let hovered: string | undefined
+  let overlays: ReadonlySet<OverlayId> = new Set()
+  // The hovered node, else the selected one, and its subtree.
+  let focus: { id: string | undefined; subtree: ReadonlySet<string> } = {
+    id: undefined,
+    subtree: new Set(),
+  }
+  const router = createLaneRouter()
+  let lanes: LaneLayer | undefined
   let view: Viewport = { width: 0, height: 0 }
   let frame: number | undefined
   // The first world waits for the canvas to have a size before it is framed.
@@ -53,7 +66,13 @@ export function createMapController(
     frame = requestAnimationFrame(() => {
       frame = undefined
       if (!scene) return
-      drawn = render(ctx, scene, camera, view, { selected, selectedSubtree: subtree })
+      drawn = render(ctx, scene, camera, view, {
+        selected,
+        focus: focus.id,
+        focusSubtree: focus.subtree,
+        overlays,
+        ...(lanes ? { lanes } : {}),
+      })
       options.onDraw(camera)
     })
   }
@@ -78,19 +97,35 @@ export function createMapController(
     if (go && target !== first.root) select(target.id)
   }
 
-  function select(id: string | undefined, fly = false): void {
+  // Points the focus at the hovered node, else the selected one.
+  function updateFocus(): void {
+    const id = hovered ?? selected
     const node = id ? scene?.byId.get(id) : undefined
-    const changed = node?.id !== selected
-    selected = node?.id
-    subtree = new Set()
+    if (node?.id === focus.id) return
+    const subtree = new Set<string>()
     if (node && scene) {
       const stack: WorldNode[] = [node]
       for (let n = stack.pop(); n; n = stack.pop()) {
         subtree.add(n.id)
         stack.push(...(scene.children.get(n.id) ?? []))
       }
-      if (fly) camera.flyTo(node.rect, view, requestDraw)
     }
+    focus = { id: node?.id, subtree }
+    requestDraw()
+  }
+
+  function hover(id: string | undefined): void {
+    if (id === hovered) return
+    hovered = id
+    updateFocus()
+  }
+
+  function select(id: string | undefined, fly = false): void {
+    const node = id ? scene?.byId.get(id) : undefined
+    const changed = node?.id !== selected
+    selected = node?.id
+    if (node && fly) camera.flyTo(node.rect, view, requestDraw)
+    updateFocus()
     if (changed) options.onSelect(selected)
     requestDraw()
   }
@@ -98,6 +133,10 @@ export function createMapController(
   function setScene(next: Scene): void {
     const first = scene === undefined
     scene = next
+    lanes = new LaneLayer(next, router, requestDraw)
+    // Node ids may be gone or reused: work the focus out afresh.
+    focus = { id: undefined, subtree: new Set() }
+    if (hovered && !next.byId.has(hovered)) hovered = undefined
     // Keep the selection across world versions while its node still exists.
     select(selected)
     if (!first) return
@@ -127,7 +166,9 @@ export function createMapController(
   const onPointerMove = (event: PointerEvent) => {
     const last = pointers.get(event.pointerId)
     if (!last) {
-      canvas.style.cursor = hitTest(drawn, event.offsetX, event.offsetY) ? 'pointer' : 'default'
+      const hit = hitTest(drawn, event.offsetX, event.offsetY)
+      canvas.style.cursor = hit ? 'pointer' : 'default'
+      hover(scene && hit ? hoverTarget(scene, hit) : undefined)
       return
     }
     const next = { x: event.offsetX, y: event.offsetY }
@@ -156,6 +197,7 @@ export function createMapController(
   const onPointerCancel = (event: PointerEvent) => {
     pointers.delete(event.pointerId)
   }
+  const onPointerLeave = () => hover(undefined)
   const onDoubleClick = (event: MouseEvent) => {
     const hit = hitTest(drawn, event.offsetX, event.offsetY)
     if (!hit) return
@@ -207,6 +249,7 @@ export function createMapController(
   canvas.addEventListener('pointermove', onPointerMove)
   canvas.addEventListener('pointerup', onPointerUp)
   canvas.addEventListener('pointercancel', onPointerCancel)
+  canvas.addEventListener('pointerleave', onPointerLeave)
   canvas.addEventListener('dblclick', onDoubleClick)
   window.addEventListener('keydown', onKeyDown)
   const resizer = new ResizeObserver(resize)
@@ -216,6 +259,10 @@ export function createMapController(
   return {
     setScene,
     select,
+    setOverlays(next) {
+      overlays = next
+      requestDraw()
+    },
     zoomBy(factor) {
       camera.zoomAt(...centre(), factor)
       requestDraw()
@@ -233,6 +280,8 @@ export function createMapController(
       canvas.removeEventListener('pointermove', onPointerMove)
       canvas.removeEventListener('pointerup', onPointerUp)
       canvas.removeEventListener('pointercancel', onPointerCancel)
+      canvas.removeEventListener('pointerleave', onPointerLeave)
+      router.dispose()
       canvas.removeEventListener('dblclick', onDoubleClick)
     },
   }

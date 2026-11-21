@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
-import type { EdgeKind, SymbolKind, WorldNode } from '../../../shared/world-types.ts'
-import { EDGE_COLORS, hueOf, SYMBOL_COLORS } from '../../render.ts'
+import type { SymbolKind, WorldNode } from '../../../shared/world-types.ts'
+import { OVERLAYS } from '../../overlays.ts'
+import { hueOf, SYMBOL_COLORS } from '../../render.ts'
 import type { Scene } from '../../scene.ts'
 import { listTreeChildren, listTreeRoots } from '../../tree-entries.ts'
 import { Kbd } from '../ui/kbd.tsx'
@@ -9,12 +10,8 @@ export interface LegendProps {
   scene: Scene | undefined
 }
 
-const EDGE_NAMES: Record<EdgeKind, string> = {
-  import: 'Imports',
-  call: 'Calls',
-  http: 'HTTP requests',
-  queue: 'Messages',
-  data: 'Data access',
+const OVERLAY_DETAILS: Record<(typeof OVERLAYS)[number]['id'], string> = {
+  dependency: 'imports between modules; the arrow points at the imported one',
 }
 
 const SYMBOL_NAMES: Record<SymbolKind, string> = {
@@ -79,23 +76,24 @@ export function Legend({ scene }: LegendProps) {
         ))}
       </LegendSection>
 
-      <LegendSection title="Dependencies" note="arrow points at the dependency">
-        {Object.entries(EDGE_NAMES).map(([kind, name]) => (
+      <LegendSection title="Overlays" note="off by default; switch them on from Overlays">
+        {OVERLAYS.map((overlay) => (
           <LegendRow
-            key={kind}
-            mark={<Line color={EDGE_COLORS[kind as EdgeKind]} />}
-            label={name}
+            key={overlay.id}
+            mark={<Arrow color={overlay.color} />}
+            label={overlay.name}
+            detail={OVERLAY_DETAILS[overlay.id]}
           />
         ))}
         <LegendRow
-          mark={<Line color="#9fb3c8" />}
-          label="Solid"
-          detail="proven by a language server or the syntax tree"
+          mark={<Lanes color={OVERLAYS[0].color} />}
+          label="Lanes"
+          detail="run in the gutters one grid unit apart and never overlap; in a full gutter, links to the same module share one"
         />
         <LegendRow
-          mark={<Line color="#9fb3c8" isDashed />}
-          label="Dashed"
-          detail="matched on text"
+          mark={<Swatch color="#e4edf6" />}
+          label="Hover"
+          detail="shows a module's or file's connections; with an overlay on, highlights them. Click keeps them"
         />
       </LegendSection>
 
@@ -165,11 +163,21 @@ function Swatch({ color }: { color: string }) {
   return <span className="size-3 rounded-sm" style={{ background: color }} />
 }
 
-function Line({ color, isDashed = false }: { color: string; isDashed?: boolean }) {
+// A lane ending in an arrowhead.
+function Arrow({ color }: { color: string }) {
   return (
-    <span
-      className="w-7 border-t-2"
-      style={{ borderColor: color, borderTopStyle: isDashed ? 'dashed' : 'solid' }}
-    />
+    <svg viewBox="0 0 28 10" className="h-2.5 w-7" aria-hidden="true">
+      <path d="M1 5H22" stroke={color} strokeWidth="1.5" />
+      <path d="M27 5L21 1.5V8.5Z" fill={color} />
+    </svg>
+  )
+}
+
+// Three lanes one unit apart, turning a corner together.
+function Lanes({ color }: { color: string }) {
+  return (
+    <svg viewBox="0 0 28 16" className="h-4 w-7" aria-hidden="true">
+      <path d="M1 3H25V16M1 7H21V16M1 11H17V16" fill="none" stroke={color} strokeWidth="1.25" />
+    </svg>
   )
 }

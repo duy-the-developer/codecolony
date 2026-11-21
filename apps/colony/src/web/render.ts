@@ -1,13 +1,16 @@
 import { type Edge, HEADER_UNITS, type SymbolKind, type WorldNode } from '../shared/world-types.ts'
 import type { Camera, Viewport } from './camera.ts'
+import type { LaneFrame, LaneLayer } from './lane-layer.ts'
+import type { LaneRoutes } from './lane-world.ts'
+import { MIN_LINK_ALPHA } from './link-cache.ts'
 import { fade, GRID_FADE, LABEL_FONT, MIN_VISIBLE_PX, openness } from './lod.ts'
-import { MIN_ROAD_ALPHA, RoadCache } from './road-cache.ts'
+import { OVERLAYS, type OverlayId } from './overlays.ts'
 import type { Scene } from './scene.ts'
 
-// Draws one frame: the unit grid, flat blocks (fill plus a 1px border), roads
-// between whatever is visible at this zoom, then labels. World coordinates are
-// grid units, and block edges are rounded to pixels the same way as grid
-// lines, so every edge sits on a grid line.
+// Draws one frame: the unit grid, flat blocks (fill plus a 1px border), the
+// overlays' lanes, labels, then outlines. World coordinates are grid units,
+// and block edges are rounded to pixels the same way as grid lines, so every
+// edge sits on a grid line.
 
 export interface Drawn {
   node: WorldNode
@@ -16,12 +19,19 @@ export interface Drawn {
   w: number
   h: number
   alpha: number
+  // How far it is open, 0 to 1: its children are drawn at alpha * open.
+  open: number
 }
 
 export interface RenderState {
   selected: string | undefined
-  // The selected node and everything inside it.
-  selectedSubtree: ReadonlySet<string>
+  // The hovered node, else the selected one: its connections stand out.
+  focus: string | undefined
+  // The focus and everything inside it.
+  focusSubtree: ReadonlySet<string>
+  overlays: ReadonlySet<OverlayId>
+  // Routes the Dependency overlay's lanes; without it none are drawn.
+  lanes?: LaneLayer
 }
 
 const BACKGROUND = '#0d1b2a'
@@ -81,7 +91,7 @@ export function render(
     if (node.kind !== 'world' && side < MIN_VISIBLE_PX) return
     const kids = scene.children.get(node.id)
     const open = kids ? openness(node.kind, side) : 0
-    const item = { node, x, y, w, h, alpha }
+    const item = { node, x, y, w, h, alpha, open }
     if (node.kind !== 'world') {
       drawBody(ctx, item, open, labels, camera.scale)
       drawn.push(item)
@@ -90,18 +100,45 @@ export function render(
   }
   if (scene.root) visit(scene.root, 1)
 
-  drawRoads(ctx, scene, camera.scale, drawn, state)
+  const holders = drawn.filter((item) => item.alpha >= MIN_LINK_ALPHA)
+  const frame = state.lanes?.frame(
+    camera.scale,
+    holders,
+    state.focus,
+    state.focusSubtree,
+    state.overlays.has('dependency'),
+  )
+  if (frame) drawLanes(ctx, frame, camera, view)
   drawLabels(ctx, labels)
+  ctx.globalAlpha = 1
+  ctx.setLineDash([])
+  // The nodes at the other end of the focus's imports, then the focus.
+  if (frame && frame.partners.size > 0) {
+    ctx.strokeStyle = DEPENDENCY_COLOR
+    ctx.lineWidth = 1.5
+    for (const item of drawn) if (frame.partners.has(item.node.id)) outline(ctx, item, 1)
+  }
+  const focus = state.focus !== state.selected && drawn.find((d) => d.node.id === state.focus)
+  if (focus) {
+    ctx.strokeStyle = 'rgba(228, 237, 246, 0.85)'
+    ctx.lineWidth = 1.5
+    outline(ctx, focus, 1)
+  }
   const selected = drawn.find((d) => d.node.id === state.selected)
   if (selected) {
-    ctx.globalAlpha = 1
     ctx.strokeStyle = '#ffd166'
     ctx.lineWidth = 2
-    ctx.setLineDash([])
-    const { x0, y0, x1, y1 } = snap(selected)
-    ctx.strokeRect(x0 - 0.5, y0 - 0.5, x1 - x0 + 2, y1 - y0 + 2)
+    outline(ctx, selected, 0.5)
   }
   return drawn
+}
+
+const DEPENDENCY_COLOR = OVERLAYS[0].color
+
+// A line just outside a drawn node's border.
+function outline(ctx: CanvasRenderingContext2D, item: Drawn, inset: number): void {
+  const { x0, y0, x1, y1 } = snap(item)
+  ctx.strokeRect(x0 - inset, y0 - inset, x1 - x0 + 2 * inset + 1, y1 - y0 + 2 * inset + 1)
 }
 
 // One line per grid unit, the unit every layout size is a whole number of.
@@ -219,7 +256,7 @@ function drawBody(
   } else if (node.kind === 'repo') {
     drawBlock(ctx, item, `rgba(16, 34, 53, ${0.6 + 0.4 * closed})`, '#3e6289')
   } else if (node.kind === 'package') {
-    // A tinted band with no outline, so roads can cross its edge cleanly.
+    // A tinted band with no outline.
     drawBlock(ctx, item, `hsla(${hue}, 30%, 45%, ${0.08 + 0.3 * closed})`, undefined)
   } else if (node.kind === 'module') {
     drawBlock(ctx, item, `hsl(212, 38%, ${14 + 6 * closed}%)`, `hsl(${hue}, 25%, 36%)`)
@@ -308,85 +345,190 @@ function ellipsize(ctx: CanvasRenderingContext2D, text: string, width: number): 
   return lo === 0 ? '' : `${text.slice(0, lo)}…`
 }
 
-const roadCaches = new WeakMap<Scene, RoadCache>()
+// Lanes sit one grid unit apart, so lines scale with the unit up to these
+// widths, in pixels. Arrowheads show once a unit is ARROW_MIN_PX wide.
+const LANE_WIDTH_PX: readonly [number, number] = [0.75, 2]
+const ARROW_PX: readonly [number, number] = [3, 8]
+const ARROW_MIN_PX = 2
+type LaneEmphasis = 'normal' | 'hot' | 'dim'
+const LANE_ALPHA: Record<LaneEmphasis, number> = { normal: 0.75, hot: 1, dim: 0.12 }
+// Lanes are bucketed by where their bounding box centres fall, in tiles this
+// many units wide, so off-screen buckets are skipped.
+const LANE_TILE_UNITS = 64
 
-// Each edge is drawn between the deepest visible nodes that hold its ends, so
-// roads merge as you zoom out and split as you zoom in (see road-cache.ts).
-function drawRoads(
-  ctx: CanvasRenderingContext2D,
-  scene: Scene,
-  scale: number,
-  drawn: Drawn[],
-  state: RenderState,
-): void {
-  let cache = roadCaches.get(scene)
-  if (!cache) {
-    cache = new RoadCache(scene)
-    roadCaches.set(scene, cache)
+// A set of lanes as paths in world units, in buckets with bounds.
+interface LanePaths {
+  buckets: LaneBucket[]
+}
+
+interface LaneBucket {
+  path: Path2D
+  x0: number
+  y0: number
+  x1: number
+  y1: number
+  // The routed links it holds, as indices into the routes.
+  lanes: number[]
+}
+
+const allPaths = new WeakMap<LaneRoutes, LanePaths>()
+const hotPaths = new WeakMap<Uint8Array, { routes: LaneRoutes; paths: LanePaths }>()
+
+// Builds the paths of the routed links that pick() keeps, once.
+function buildLanePaths(routes: LaneRoutes, pick: (i: number) => boolean): LanePaths {
+  const buckets = new Map<string, LaneBucket>()
+  for (let i = 0; i < routes.links.length; i++) {
+    const start = routes.offsets[i] as number
+    const end = routes.offsets[i + 1] as number
+    if (end <= start || !pick(i)) continue
+    let x0 = Number.POSITIVE_INFINITY
+    let y0 = Number.POSITIVE_INFINITY
+    let x1 = Number.NEGATIVE_INFINITY
+    let y1 = Number.NEGATIVE_INFINITY
+    for (let k = start; k < end; k += 2) {
+      const x = routes.points[k] as number
+      const y = routes.points[k + 1] as number
+      x0 = Math.min(x0, x)
+      y0 = Math.min(y0, y)
+      x1 = Math.max(x1, x)
+      y1 = Math.max(y1, y)
+    }
+    const tile = `${Math.floor((x0 + x1) / 2 / LANE_TILE_UNITS)},${Math.floor((y0 + y1) / 2 / LANE_TILE_UNITS)}`
+    let bucket = buckets.get(tile)
+    if (!bucket) {
+      bucket = { path: new Path2D(), x0, y0, x1, y1, lanes: [] }
+      buckets.set(tile, bucket)
+    }
+    bucket.x0 = Math.min(bucket.x0, x0)
+    bucket.y0 = Math.min(bucket.y0, y0)
+    bucket.x1 = Math.max(bucket.x1, x1)
+    bucket.y1 = Math.max(bucket.y1, y1)
+    bucket.lanes.push(i)
+    bucket.path.moveTo(routes.points[start] as number, routes.points[start + 1] as number)
+    for (let k = start + 2; k < end; k += 2) {
+      bucket.path.lineTo(routes.points[k] as number, routes.points[k + 1] as number)
+    }
   }
-  const holders = drawn.filter((item) => item.alpha >= MIN_ROAD_ALPHA)
-  const roads = cache.listRoads(scale, holders, state.selectedSubtree)
+  return { buckets: [...buckets.values()] }
+}
 
-  const dimmed = state.selected !== undefined
-  for (let r = 0; r < roads.count; r++) {
-    const road = {
-      from: holders[roads.from[r] as number] as Drawn,
-      to: holders[roads.to[r] as number] as Drawn,
-      kind: roads.kind[r] as Edge['kind'],
-      proven: roads.proven[r] === 1,
-      count: roads.edges[r] as number,
-      hot: roads.hot[r] === 1,
+// Each lane is a polyline from the importer's side to the imported block's
+// side, where an arrowhead points into the block. With a focus, every lane is
+// dimmed and the focus's lanes drawn bright on top. Paths are built once per
+// routing and drawn in world units, so a frame only strokes the buckets on
+// screen.
+function drawLanes(
+  ctx: CanvasRenderingContext2D,
+  frame: LaneFrame,
+  camera: Camera,
+  view: Viewport,
+): void {
+  const layers: [LaneRoutes, LanePaths, LaneEmphasis][] = []
+  const { all, hot, focus } = frame
+  if (all) {
+    let paths = allPaths.get(all)
+    if (!paths) {
+      paths = buildLanePaths(all, () => true)
+      allPaths.set(all, paths)
     }
-    let ax = road.from.x + road.from.w / 2
-    let ay = road.from.y + road.from.h / 2
-    let bx = road.to.x + road.to.w / 2
-    let by = road.to.y + road.to.h / 2
-    let cx: number
-    let cy: number
-    if (roads.sameFile[r]) {
-      // Calls inside one file loop out of the right edge of the bands.
-      ax = road.from.x + road.from.w
-      bx = road.to.x + road.to.w
-      ay = road.from.y + Math.min(road.from.h / 2, 6)
-      by = road.to.y + Math.min(road.to.h / 2, 6)
-      cx = Math.max(ax, bx) + Math.min(Math.abs(by - ay) * 0.5, 120)
-      cy = (ay + by) / 2
-    } else {
-      // Bend every road a little so two-way roads do not overlap.
-      cx = (ax + bx) / 2 - (by - ay) * 0.15
-      cy = (ay + by) / 2 + (bx - ax) * 0.15
+    layers.push([all, paths, hot ? 'dim' : 'normal'])
+    if (hot) {
+      let held = hotPaths.get(hot)
+      if (held?.routes !== all) {
+        held = {
+          routes: all,
+          paths: buildLanePaths(all, (i) => hot[all.links[i] as number] === 1),
+        }
+        hotPaths.set(hot, held)
+      }
+      layers.push([all, held.paths, 'hot'])
     }
-    const base = road.kind === 'import' ? 0.3 : 0.6
-    ctx.globalAlpha = road.hot ? 0.95 : dimmed ? base * 0.35 : base
-    ctx.strokeStyle = EDGE_COLORS[road.kind]
-    ctx.lineWidth = (road.kind === 'import' ? 0.8 : 1.4) * (1 + Math.log2(road.count))
-    ctx.setLineDash(road.proven ? [] : [6, 4])
+  }
+  if (focus) {
+    let paths = allPaths.get(focus)
+    if (!paths) {
+      paths = buildLanePaths(focus, () => true)
+      allPaths.set(focus, paths)
+    }
+    layers.push([focus, paths, 'hot'])
+  }
+  if (layers.length === 0) return
+
+  const unit = camera.scale
+  const width = Math.min(Math.max(unit * 0.25, LANE_WIDTH_PX[0]), LANE_WIDTH_PX[1])
+  const arrow = Math.min(Math.max(unit * 0.8, ARROW_PX[0]), ARROW_PX[1])
+  const [left, top] = camera.toWorld(0, 0)
+  const [right, bottom] = camera.toWorld(view.width, view.height)
+  const isOnScreen = (b: LaneBucket) =>
+    b.x1 >= left && b.x0 <= right && b.y1 >= top && b.y0 <= bottom
+  const base = ctx.getTransform()
+  ctx.strokeStyle = DEPENDENCY_COLOR
+  ctx.fillStyle = DEPENDENCY_COLOR
+  ctx.setLineDash([])
+  ctx.lineJoin = 'miter'
+  for (const [routes, paths, emphasis] of layers) {
+    const shown = paths.buckets.filter(isOnScreen)
+    ctx.globalAlpha = LANE_ALPHA[emphasis]
+    ctx.setTransform(
+      base.a * unit,
+      0,
+      0,
+      base.d * unit,
+      base.e - camera.x * unit * base.a,
+      base.f - camera.y * unit * base.d,
+    )
+    ctx.lineWidth = (emphasis === 'hot' ? width + 0.75 : width) / unit
+    for (const bucket of shown) ctx.stroke(bucket.path)
+    ctx.setTransform(base)
+    if (unit < ARROW_MIN_PX) continue
     ctx.beginPath()
-    ctx.moveTo(ax, ay)
-    ctx.quadraticCurveTo(cx, cy, bx, by)
-    ctx.stroke()
-    // Direction: an arrowhead at the middle of the curve.
-    const mx = 0.25 * ax + 0.5 * cx + 0.25 * bx
-    const my = 0.25 * ay + 0.5 * cy + 0.25 * by
-    const angle = Math.atan2(by - ay, bx - ax)
-    const size = 4 + ctx.lineWidth
-    ctx.setLineDash([])
-    ctx.fillStyle = EDGE_COLORS[road.kind]
-    ctx.beginPath()
-    ctx.moveTo(mx + Math.cos(angle) * size, my + Math.sin(angle) * size)
-    ctx.lineTo(mx + Math.cos(angle + 2.5) * size, my + Math.sin(angle + 2.5) * size)
-    ctx.lineTo(mx + Math.cos(angle - 2.5) * size, my + Math.sin(angle - 2.5) * size)
+    for (const bucket of shown) {
+      for (const i of bucket.lanes) {
+        const end = routes.offsets[i + 1] as number
+        const [px, py] = camera.toScreen(
+          routes.points[end - 4] as number,
+          routes.points[end - 3] as number,
+        )
+        const [qx, qy] = camera.toScreen(
+          routes.points[end - 2] as number,
+          routes.points[end - 1] as number,
+        )
+        if (qx < 0 || qy < 0 || qx > view.width || qy > view.height) continue
+        const angle = Math.atan2(qy - py, qx - px)
+        const along = [Math.cos(angle) * arrow, Math.sin(angle) * arrow] as const
+        const across = [-along[1] * 0.5, along[0] * 0.5] as const
+        ctx.moveTo(qx, qy)
+        ctx.lineTo(qx - along[0] + across[0], qy - along[1] + across[1])
+        ctx.lineTo(qx - along[0] - across[0], qy - along[1] - across[1])
+        ctx.closePath()
+      }
+    }
     ctx.fill()
   }
   ctx.globalAlpha = 1
 }
 
+// Blocks fainter than this cannot be pointed at.
+const MIN_HIT_ALPHA = 0.25
+
 // The deepest drawn node under a screen point.
 export function hitTest(drawn: Drawn[], sx: number, sy: number): Drawn | undefined {
   for (let i = drawn.length - 1; i >= 0; i--) {
     const item = drawn[i]
-    if (!item || item.alpha < 0.25) continue
+    if (!item || item.alpha < MIN_HIT_ALPHA) continue
     if (sx >= item.x && sx <= item.x + item.w && sy >= item.y && sy <= item.y + item.h) return item
   }
   return undefined
+}
+
+// The node a pointed-at block puts in focus on hover: a symbol stands for its
+// file, files and modules stand for themselves, and a package, repository or
+// project only while it is drawn closed; open container space stands for
+// nothing.
+export function hoverTarget(scene: Scene, item: Drawn): string | undefined {
+  let node: WorldNode | undefined = item.node
+  while (node?.kind === 'symbol') node = scene.parentOf(node)
+  if (!node || node.kind === 'world') return undefined
+  if (node.kind === 'file' || node.kind === 'module') return node.id
+  return item.alpha * item.open < MIN_HIT_ALPHA ? node.id : undefined
 }
