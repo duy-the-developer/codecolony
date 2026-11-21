@@ -10,9 +10,12 @@ Requires Node 24+ and pnpm.
 
 ```bash
 pnpm install
-pnpm dev      # http://127.0.0.1:4320, with hot reload
-pnpm start    # builds the page, then serves it
+pnpm dev               # http://127.0.0.1:4320, with hot reload
+pnpm dev:no-herdr      # the same, with the terminal dock's Herdr switched off
+pnpm start             # builds the page, then serves it
 ```
+
+Automated runs (tests, validation pipelines, screenshot tools) must start the app with Herdr off: `pnpm dev:no-herdr`, `--no-herdr` or `CODECOLONY_HERDR=off`. Otherwise the dock attaches to your live Herdr session and resizes its panes. Herdr is off by default when `CI` is set.
 
 Out of the box it maps its own checkout. `pnpm index` indexes the configured projects once and prints a summary; `pnpm index --relayout` also lays the map out afresh instead of keeping the saved order of modules and files.
 
@@ -30,8 +33,11 @@ The bottom panel runs the real [Herdr](https://herdr.dev) client in the page (xt
 | `--herdr-socket <path>`  | `CODECOLONY_HERDR_SOCKET`  | the session's `herdr.sock` under `~/.config/herdr` |
 | `--herdr-bin <path>`     | `CODECOLONY_HERDR_BIN`     | `herdr`                                            |
 | `--herdr-lab`            | `CODECOLONY_HERDR_LAB=1`   | off                                                |
+| `--no-herdr`             | `CODECOLONY_HERDR=off`     | on, or off when `CI` is set                        |
 
 Pass flags after the script name, for example `pnpm dev --herdr-session work`. Lab mode, for experiments, attaches only to sessions named `fm-lab-*` and refuses any other session.
+
+With Herdr off, the dock never starts the Herdr client or opens its socket: the panel says "Herdr disabled", the terminal and Herdr routes answer 503, and the rest of the app works as usual. `--no-herdr` wins over the environment, and `CODECOLONY_HERDR=on` turns Herdr back on under CI. Any automated run must use it, so it never touches your live session.
 
 Herdr shares its panes between all attached clients and sizes them to the client that most recently attached or sent input, so the last one wins. When the dock and another Herdr client (another tab, or a terminal) are both attached, the panes take the other client's size until the dock is used again. This is accepted for v1: there is no single-client limit or deferred sizing.
 
