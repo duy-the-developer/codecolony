@@ -46,6 +46,15 @@ describe('MapBreadcrumb', () => {
     expect(screen.queryByText('…')).toBeNull()
   })
 
+  it('keeps the selected name out of the shrinking ancestor group', () => {
+    render(<MapBreadcrumb scene={SCENE} selected={SCENE.byId.get('workspaceName')} onPick={() => {}} />)
+    const selected = screen.getByRole('button', { name: 'workspaceName' })
+    const ancestors = screen.getByRole('button', { name: 'herdr.ts' }).parentElement
+    expect(ancestors?.contains(selected)).toBe(false)
+    expect(ancestors?.contains(screen.getByTitle('packages › dock › src'))).toBe(true)
+    expect(selected.parentElement).toBe(screen.getByRole('navigation', { name: 'Selection path' }))
+  })
+
   it('picks an ancestor when clicked', () => {
     const onPick = vi.fn()
     render(<MapBreadcrumb scene={SCENE} selected={SCENE.byId.get('workspaceName')} onPick={onPick} />)

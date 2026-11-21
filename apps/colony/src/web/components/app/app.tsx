@@ -177,6 +177,7 @@ export function App() {
           defaultSize={preferences.left.widthPx}
           groupResizeBehavior="preserve-pixel-size"
           onResize={handleResize('left')}
+          inert={collapsed.left}
         >
           <PanelContent isCollapsed={collapsed.left}>
             <LeftPanel
@@ -215,6 +216,7 @@ export function App() {
           defaultSize={preferences.right.widthPx}
           groupResizeBehavior="preserve-pixel-size"
           onResize={handleResize('right')}
+          inert={collapsed.right}
         >
           <PanelContent isCollapsed={collapsed.right}>
             <RightPanel
@@ -241,11 +243,12 @@ export function App() {
   )
 }
 
-// A collapsed panel stays mounted but out of reach: nothing inside it, such as
-// the terminal's input, can take focus and swallow the page's keys.
+// A collapsed panel stays mounted but out of reach: the panel itself is inert,
+// so nothing inside it, neither the terminal's input nor the library's scroll
+// wrapper, can take focus and swallow the page's keys.
 function PanelContent({ isCollapsed, children }: { isCollapsed: boolean; children: ReactNode }) {
   return (
-    <div className={isCollapsed ? 'invisible h-full' : 'h-full'} inert={isCollapsed}>
+    <div className={isCollapsed ? 'invisible h-full' : 'h-full'}>
       {children}
     </div>
   )
