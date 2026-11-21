@@ -509,7 +509,7 @@ function drawLanes(
 }
 
 // Blocks fainter than this cannot be pointed at.
-export const MIN_HIT_ALPHA = 0.25
+const MIN_HIT_ALPHA = 0.25
 
 // The deepest drawn node under a screen point.
 export function hitTest(drawn: Drawn[], sx: number, sy: number): Drawn | undefined {
@@ -519,4 +519,16 @@ export function hitTest(drawn: Drawn[], sx: number, sy: number): Drawn | undefin
     if (sx >= item.x && sx <= item.x + item.w && sy >= item.y && sy <= item.y + item.h) return item
   }
   return undefined
+}
+
+// The node a pointed-at block puts in focus on hover: a symbol stands for its
+// file, files and modules stand for themselves, and a package, repository or
+// project only while it is drawn closed; open container space stands for
+// nothing.
+export function hoverTarget(scene: Scene, item: Drawn): string | undefined {
+  let node: WorldNode | undefined = item.node
+  while (node?.kind === 'symbol') node = scene.parentOf(node)
+  if (!node || node.kind === 'world') return undefined
+  if (node.kind === 'file' || node.kind === 'module') return node.id
+  return item.alpha * item.open < MIN_HIT_ALPHA ? node.id : undefined
 }

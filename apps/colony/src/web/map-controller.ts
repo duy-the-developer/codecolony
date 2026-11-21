@@ -3,7 +3,7 @@ import { Camera, type Viewport } from './camera.ts'
 import { LaneLayer } from './lane-layer.ts'
 import { createLaneRouter } from './lane-router.ts'
 import type { OverlayId } from './overlays.ts'
-import { type Drawn, hitTest, MIN_HIT_ALPHA, render } from './render.ts'
+import { type Drawn, hitTest, hoverTarget, render } from './render.ts'
 import type { Scene } from './scene.ts'
 
 // The map: one canvas, drawn imperatively. React owns the page around it and
@@ -114,17 +114,6 @@ export function createMapController(
     requestDraw()
   }
 
-  // The module or file a pointed-at block stands for: a symbol stands for its
-  // file, and the open space of a container stands for nothing.
-  function hoverTarget(item: Drawn | undefined): string | undefined {
-    let node = item?.node
-    while (node?.kind === 'symbol') node = node.parent ? scene?.byId.get(node.parent) : undefined
-    if (!item || !node) return undefined
-    if (node.kind === 'file') return node.id
-    const isOpen = item.node === node && item.alpha * item.open >= MIN_HIT_ALPHA
-    return node.kind === 'module' && !isOpen ? node.id : undefined
-  }
-
   function hover(id: string | undefined): void {
     if (id === hovered) return
     hovered = id
@@ -179,7 +168,7 @@ export function createMapController(
     if (!last) {
       const hit = hitTest(drawn, event.offsetX, event.offsetY)
       canvas.style.cursor = hit ? 'pointer' : 'default'
-      hover(hoverTarget(hit))
+      hover(scene && hit ? hoverTarget(scene, hit) : undefined)
       return
     }
     const next = { x: event.offsetX, y: event.offsetY }
