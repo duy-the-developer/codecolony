@@ -67,22 +67,6 @@ export function App() {
     [updatePreferences],
   )
 
-  // The map selected something: a click, or a pick from a panel or search.
-  // A new selection brings up the inspector in place of the terminal; the
-  // File tab stays, since it follows the selection too.
-  const handleSelect = useCallback(
-    (id: string | undefined) => {
-      setSelectedId(id)
-      if (!id) return
-      updatePreferences((current) =>
-        current.right.tab === 'terminal'
-          ? { ...current, right: { ...current.right, tab: 'inspector' } }
-          : current,
-      )
-    },
-    [updatePreferences],
-  )
-
   const pick = useCallback((id: string | undefined) => {
     if (id) mapRef.current?.select(id, true)
     else mapRef.current?.fitAll()
@@ -145,15 +129,17 @@ export function App() {
     }
   }
 
-  // Page-wide keys: ⌘K search, [ and ] toggle the panels.
+  // Page-wide keys: ⌘K search, [ and ] toggle the panels. Ctrl+K opens the
+  // search too, except in a text field or the terminal, where it edits text.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+      const isTyping = isTypingTarget(event.target)
+      if ((event.metaKey || (event.ctrlKey && !isTyping)) && event.key.toLowerCase() === 'k') {
         event.preventDefault()
         setIsSearchOpen(true)
         return
       }
-      if (event.metaKey || event.ctrlKey || event.altKey || isTypingTarget(event.target)) return
+      if (event.metaKey || event.ctrlKey || event.altKey || isTyping) return
       if (event.key === '[') togglePanel('left')
       else if (event.key === ']') togglePanel('right')
       else return
@@ -203,7 +189,7 @@ export function App() {
         </ResizablePanel>
         <ResizableHandle aria-label="Resize left panel" />
         <ResizablePanel id="map" minSize="25%">
-          <MapView scene={scene} handleRef={mapRef} onSelect={handleSelect}>
+          <MapView scene={scene} handleRef={mapRef} onSelect={setSelectedId}>
             <MapBreadcrumb scene={scene} selected={selected} onPick={pick} />
             <WorkerPawns workers={workers} onFocus={focusWorker} />
             <ZoomControls
