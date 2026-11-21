@@ -114,14 +114,21 @@ describe('api', () => {
   })
 
   it('serves symbols for files of the current version, and refuses a stale one', async () => {
-    const ok = await fetch(`${base}/api/symbols?version=1&files=1`)
+    const { session } = (await (await fetch(`${base}/api/world`)).json()) as WorldPayload
+    const ok = await fetch(`${base}/api/symbols?session=${session}&version=1&files=1`)
     expect(await ok.json()).toEqual({
       version: 1,
       files: { 1: [[-1, 'start', null, 0, 2, 4, -1, 0]] },
     })
-    expect((await fetch(`${base}/api/symbols?version=0&files=1`)).status).toBe(409)
-    expect((await fetch(`${base}/api/symbols?version=1`)).status).toBe(400)
-    expect((await fetch(`${base}/api/symbols?version=1&files=x`)).status).toBe(400)
+    expect((await fetch(`${base}/api/symbols?session=${session}&version=0&files=1`)).status).toBe(
+      409,
+    )
+    expect((await fetch(`${base}/api/symbols?session=other&version=1&files=1`)).status).toBe(409)
+    expect((await fetch(`${base}/api/symbols?version=1&files=1`)).status).toBe(400)
+    expect((await fetch(`${base}/api/symbols?session=${session}&version=1`)).status).toBe(400)
+    expect((await fetch(`${base}/api/symbols?session=${session}&version=1&files=x`)).status).toBe(
+      400,
+    )
   })
 
   it('searches files and symbols by name', async () => {

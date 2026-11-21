@@ -49,18 +49,21 @@ export function createApi(config: ColonyConfig, source: WorldSource, deny: DenyR
       )
       res.writeHead(200, { 'content-type': 'application/json' }).end(body)
     } else if (pathname === '/api/symbols') {
+      const session = url.searchParams.get('session')
       const version = Number(url.searchParams.get('version'))
       const files = url.searchParams.get('files')?.split(',').map(Number) ?? []
       const isValid =
+        session !== null &&
         Number.isInteger(version) &&
         files.length > 0 &&
         files.length <= MAX_SYMBOL_FILES &&
         files.every((file) => Number.isInteger(file) && file >= 0)
-      if (!isValid) json(res, 400, { error: 'version and up to 500 file indices are required' })
-      else {
-        const body = encoder.encodeSymbols(source.world, version, files)
+      if (!isValid) {
+        json(res, 400, { error: 'session, version and up to 500 file indices are required' })
+      } else {
+        const body = encoder.encodeSymbols(source.world, { session, version }, files)
         if (body) json(res, 200, body)
-        else json(res, 409, { error: 'the world has a newer version' })
+        else json(res, 409, { error: 'the world has moved on from this version' })
       }
     } else if (pathname === '/api/search') {
       const limit = Number(url.searchParams.get('limit') ?? 8)

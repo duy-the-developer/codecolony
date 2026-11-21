@@ -32,13 +32,22 @@ export interface WorldEncoderHandle {
   // The JSON body of GET /api/world: a patch when the page holds `since`
   // (the version before this one) in this session, else the whole world.
   encodeWorld(world: World, since?: { session: string; version: number }): string
-  // The symbols of files by node index, or undefined when `version` is not the
-  // world's version.
+  // The symbols of files by node index, or undefined when `held` is not the
+  // world's version in this session.
   encodeSymbols(
     world: World,
-    version: number,
+    held: { session: string; version: number },
     files: readonly number[],
   ): SymbolsResponse | undefined
+}
+
+export class WorldEncodeError extends Error {
+  override name = 'WorldEncodeError'
+  readonly code: 'ParentAfterChild'
+  constructor(message: string, code: 'ParentAfterChild', options?: ErrorOptions) {
+    super(message, options)
+    this.code = code
+  }
 }
 
 // What the next version needs to patch from this one. The version before
@@ -137,10 +146,10 @@ export function createWorldEncoder(options: WorldEncoderOptions = {}): WorldEnco
       } satisfies WorldPayload)
       return current.full
     },
-    encodeSymbols(world, version, files) {
-      if (world.version !== version) return undefined
+    encodeSymbols(world, held, files) {
+      if (held.session !== session || held.version !== world.version) return undefined
       const current = resolve(world)
-      const response: SymbolsResponse = { version, files: {} }
+      const response: SymbolsResponse = { version: world.version, files: {} }
       for (const index of files) {
         const rows = current.symbols.get(index)
         if (rows) response.files[index] = rows
@@ -152,17 +161,10 @@ export function createWorldEncoder(options: WorldEncoderOptions = {}): WorldEnco
 
 function encodeVersion(world: World, intern: (text: string) => number): EncodedVersion {
   const byId = new Map<string, WorldNode>()
-  const children = new Map<string, WorldNode[]>()
-  for (const node of world.nodes) {
-    byId.set(node.id, node)
-    if (!node.parent) continue
-    const list = children.get(node.parent)
-    if (list) list.push(node)
-    else children.set(node.parent, [node])
-  }
+  for (const node of world.nodes) byId.set(node.id, node)
 
-  // Nodes other than symbols that hang off the root, parents first: in world
-  // order when it already puts parents first, else depth first.
+  // Nodes other than symbols that hang off the root, in world order, which
+  // puts every parent before its children.
   const skeleton: WorldNode[] = []
   const indexOf = new Map<string, number>()
   const root = world.nodes.find((node) => node.parent === undefined)
@@ -171,29 +173,18 @@ function encodeVersion(world: World, intern: (text: string) => number): EncodedV
     if (node.kind === 'symbol' || !isPlaced) continue
     indexOf.set(node.id, skeleton.push(node) - 1)
   }
-  const reachable = (id: string): boolean => {
-    for (let n = byId.get(id); n; n = n.parent ? byId.get(n.parent) : undefined) {
-      if (n === root) return true
-      if (n.kind === 'symbol') return false
-    }
-    return false
-  }
-  if (
-    world.nodes.some(
-      (node) => node.kind !== 'symbol' && !indexOf.has(node.id) && reachable(node.id),
+  const early = world.nodes.find(
+    (node) =>
+      node.kind !== 'symbol' &&
+      !indexOf.has(node.id) &&
+      node.parent !== undefined &&
+      indexOf.has(node.parent),
+  )
+  if (early) {
+    throw new WorldEncodeError(
+      `node ${early.id} comes before its parent ${early.parent} in world order`,
+      'ParentAfterChild',
     )
-  ) {
-    skeleton.length = 0
-    indexOf.clear()
-    const stack = root ? [root] : []
-    for (let node = stack.pop(); node; node = stack.pop()) {
-      indexOf.set(node.id, skeleton.push(node) - 1)
-      const kids = children.get(node.id) ?? []
-      for (let i = kids.length - 1; i >= 0; i--) {
-        const kid = kids[i] as WorldNode
-        if (kid.kind !== 'symbol') stack.push(kid)
-      }
-    }
   }
 
   // Every symbol under each file, in world order, with its position there.

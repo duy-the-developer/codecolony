@@ -16,11 +16,17 @@ import type { Edge, SymbolRow, SymbolsResponse, World, WorldNode } from '../shar
 // Where a scene gets the symbols it was sent without.
 export interface SymbolSource {
   state: WorldState
-  fetchSymbols(version: number, files: readonly number[]): Promise<SymbolsResponse | undefined>
+  fetchSymbols(
+    session: string,
+    version: number,
+    files: readonly number[],
+  ): Promise<SymbolsResponse | undefined>
 }
 
 // Files per symbols request, as /api/symbols allows.
 const MAX_SYMBOL_FILES = 500
+// How long a scene waits to ask again after a symbols request fails.
+const SYMBOL_RETRY_MS = 5_000
 
 export class Scene {
   readonly byId = new Map<string, WorldNode>()
@@ -37,6 +43,9 @@ export class Scene {
   private readonly symbolRows = new Map<string, readonly SymbolRow[]>()
   private readonly symbolNodes = new Map<string, WorldNode[]>()
   private readonly loading = new Set<string>()
+  // No symbols requests before this time: later after a failure, never once
+  // the server has moved on from this scene's version.
+  private retryAt = 0
   private readonly listeners = new Set<() => void>()
   // File id -> ids of its symbols that edges end on.
   private symbolRefs: Map<string, string[]> | undefined
@@ -147,13 +156,20 @@ export class Scene {
     const source = this.source
     if (!source) return
     const wanted = files.filter((file) => this.needsSymbols(file) && !this.loading.has(file.id))
-    for (let i = 0; i < wanted.length; i += MAX_SYMBOL_FILES) {
+    for (let i = 0; i < wanted.length && Date.now() >= this.retryAt; i += MAX_SYMBOL_FILES) {
       const batch = wanted.slice(i, i + MAX_SYMBOL_FILES)
       for (const file of batch) this.loading.add(file.id)
       const indices = batch.map((file) => this.indexOf.get(file.id) as number)
       try {
-        const response = await source.fetchSymbols(this.world.version, indices)
-        if (!response) continue
+        const response = await source.fetchSymbols(
+          source.state.session,
+          this.world.version,
+          indices,
+        )
+        if (!response) {
+          this.retryAt = Number.POSITIVE_INFINITY
+          continue
+        }
         batch.forEach((file, b) => {
           const rows = response.files[indices[b] as number]
           if (rows) this.addSymbols(file.id, rows)
@@ -161,6 +177,7 @@ export class Scene {
         this.revision++
         for (const listener of this.listeners) listener()
       } catch (error) {
+        this.retryAt = Date.now() + SYMBOL_RETRY_MS
         logError('Could not load symbols', { error })
       } finally {
         for (const file of batch) this.loading.delete(file.id)

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { worldFromResponse } from '../shared/world-decoder.ts'
 import { createWorldEncoder } from '../shared/world-encoder.ts'
 import type { Edge, World, WorldNode, WorldResponse } from '../shared/world-types.ts'
@@ -40,11 +40,16 @@ const CALL: Edge = { from: 'r/a.ts#A.run', to: 'r/b.ts#go', kind: 'call', proven
 function makeScene(world: World, previous?: Scene) {
   const encoder = createWorldEncoder({ session: 's' })
   const state = worldFromResponse(JSON.parse(encoder.encodeWorld(world)) as WorldResponse)
-  const fetchSymbols = vi.fn((version: number, files: readonly number[]) =>
-    Promise.resolve(encoder.encodeSymbols(world, version, files)),
+  const fetchSymbols = vi.fn((session: string, version: number, files: readonly number[]) =>
+    Promise.resolve(encoder.encodeSymbols(world, { session, version }, files)),
   )
   return { scene: new Scene(state.world, { state, fetchSymbols }, previous), fetchSymbols }
 }
+
+afterEach(() => {
+  vi.useRealTimers()
+  vi.restoreAllMocks()
+})
 
 describe('Scene', () => {
   it('starts without symbols and loads a file’s symbols once', async () => {
@@ -80,6 +85,31 @@ describe('Scene', () => {
     expect(scene.fileIdOf('r/b.ts#go')).toBe('r/b.ts')
     expect((await scene.ensureNode('r/b.ts#go'))?.name).toBe('go')
     expect(await scene.ensureNode('r/b.ts#nope')).toBeUndefined()
+  })
+
+  it('stops asking for symbols once the server has moved on from its version', async () => {
+    const { scene, fetchSymbols } = makeScene(makeWorld(1, []))
+    fetchSymbols.mockResolvedValue(undefined)
+    const a = scene.byId.get('r/a.ts') as WorldNode
+    await scene.loadSymbols([a])
+    await scene.loadSymbols([a])
+    expect(fetchSymbols).toHaveBeenCalledTimes(1)
+    expect(scene.needsSymbols(a)).toBe(true)
+  })
+
+  it('waits before asking again after a symbols request fails', async () => {
+    vi.useFakeTimers()
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const { scene, fetchSymbols } = makeScene(makeWorld(1, []))
+    fetchSymbols.mockRejectedValueOnce(new Error('offline'))
+    const a = scene.byId.get('r/a.ts') as WorldNode
+    await scene.loadSymbols([a])
+    await scene.loadSymbols([a])
+    expect(fetchSymbols).toHaveBeenCalledTimes(1)
+    vi.advanceTimersByTime(60_000)
+    await scene.loadSymbols([a])
+    expect(fetchSymbols).toHaveBeenCalledTimes(2)
+    expect(scene.needsSymbols(a)).toBe(false)
   })
 
   it('keeps symbols that did not change from the scene it replaces', async () => {

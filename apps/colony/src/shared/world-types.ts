@@ -186,8 +186,9 @@ export type SymbolRow = [
   complexity: number,
 ]
 
-// GET /api/symbols?version=V&files=i,j: the symbols of the files at those
-// node indices of version V. A stale version is refused with 409.
+// GET /api/symbols?session=S&version=V&files=i,j: the symbols of the files at
+// those node indices of version V in session S. Any other version or session
+// is refused with 409.
 export interface SymbolsResponse {
   version: number
   files: Record<number, SymbolRow[]>

@@ -20,12 +20,15 @@ export async function fetchWorld(base?: WorldState): Promise<WorldState> {
 }
 
 // The symbols of files by node index, or undefined when the server has moved
-// on to a newer version (the page will load that one).
+// on from this session or version (the page will load the new one).
 export async function fetchSymbols(
+  session: string,
   version: number,
   files: readonly number[],
 ): Promise<SymbolsResponse | undefined> {
-  const response = await fetch(`/api/symbols?version=${version}&files=${files.join(',')}`)
+  const response = await fetch(
+    `/api/symbols?session=${encodeURIComponent(session)}&version=${version}&files=${files.join(',')}`,
+  )
   if (response.status === 409) return undefined
   if (!response.ok) throw new Error(`symbols: HTTP ${response.status}`)
   return (await response.json()) as SymbolsResponse

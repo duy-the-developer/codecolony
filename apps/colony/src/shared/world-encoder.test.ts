@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { symbolBand } from './symbol-band.ts'
 import { symbolsFromRows, worldFromResponse } from './world-decoder.ts'
-import { createWorldEncoder } from './world-encoder.ts'
+import { createWorldEncoder, WorldEncodeError } from './world-encoder.ts'
 import type { Edge, World, WorldNode, WorldResponse } from './world-types.ts'
 
 // A small laid-out world with what the wire format has to carry: nested
@@ -203,15 +203,28 @@ describe('createWorldEncoder', () => {
     const encoder = createWorldEncoder()
     const state = decode(encoder.encodeWorld(world))
     const files = state.world.nodes.flatMap((node, i) => (node.kind === 'file' ? [i] : []))
-    const response = encoder.encodeSymbols(world, 1, files)
+    const response = encoder.encodeSymbols(world, { session: state.session, version: 1 }, files)
     const symbols = Object.entries(response?.files ?? {}).flatMap(([index, rows]) =>
       symbolsFromRows(state.world.nodes[Number(index)] as WorldNode, rows),
     )
     expect(symbols).toEqual(world.nodes.filter((node) => node.kind === 'symbol'))
   })
 
-  it('refuses symbols for a stale version', () => {
-    expect(createWorldEncoder().encodeSymbols(makeWorld(2), 1, [5])).toBeUndefined()
+  it('refuses symbols for a stale version or another session', () => {
+    const encoder = createWorldEncoder({ session: 's' })
+    const world = makeWorld(2)
+    expect(encoder.encodeSymbols(world, { session: 's', version: 1 }, [5])).toBeUndefined()
+    expect(encoder.encodeSymbols(world, { session: 'other', version: 2 }, [5])).toBeUndefined()
+    expect(encoder.encodeSymbols(world, { session: 's', version: 2 }, [5])?.files).toHaveProperty(
+      '5',
+    )
+  })
+
+  it('refuses a world that puts a node before its parent', () => {
+    const world = makeWorld()
+    const [root, project, repo, ...rest] = world.nodes
+    world.nodes = [root, repo, project, ...rest] as WorldNode[]
+    expect(() => createWorldEncoder().encodeWorld(world)).toThrow(WorldEncodeError)
   })
 
   it('patches the version before into the same world a fresh load gives', () => {

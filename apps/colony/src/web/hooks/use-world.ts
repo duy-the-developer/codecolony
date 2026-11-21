@@ -16,7 +16,9 @@ export function useWorld(): Scene | undefined {
     let queue: Promise<void> = Promise.resolve()
     async function loadWorld(): Promise<void> {
       const next = await fetchWorld(state)
-      if (isDisposed || (current && next.world.version <= current.world.version)) return
+      if (isDisposed) return
+      // Versions restart with each server session.
+      if (state?.session === next.session && next.world.version <= state.world.version) return
       state = next
       current = new Scene(next.world, { state: next, fetchSymbols }, current)
       setScene(current)
