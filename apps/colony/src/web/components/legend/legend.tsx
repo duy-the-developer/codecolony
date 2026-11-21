@@ -165,7 +165,7 @@ function LegendRow({ mark, label, detail }: LegendRowProps) {
   return (
     <li className="flex items-start gap-2.5">
       <span className="flex h-5 w-9 shrink-0 items-center justify-center">{mark}</span>
-      <span className="leading-5">
+      <span className="min-w-0 leading-5 [overflow-wrap:anywhere]">
         {label}
         {detail && <span className="block text-muted-foreground text-xs leading-4">{detail}</span>}
       </span>
