@@ -25,7 +25,7 @@ The server listens on loopback only and answers 403 to any request whose host is
 
 ## Terminal dock
 
-The right panel's Terminal tab runs the real [Herdr](https://herdr.dev) client in the page (xterm.js over node-pty and a WebSocket), filling the whole tab: Herdr's own sidebar lists the agents and switches between them, and the tab title counts them. The dock needs `herdr` on your `PATH`; without it the terminal shows the client's exit (for example `[herdr exited with code 1]`), a bar above the terminal says the worker list cannot reach the Herdr socket, and the rest of the app keeps working.
+The right panel's Terminal tab runs the real [Herdr](https://herdr.dev) client in the page (xterm.js over node-pty and a WebSocket), filling the whole tab: Herdr's own sidebar lists the agents and switches between them, and the tab title counts them. The dock needs `herdr` on your `PATH`; without it the terminal shows the client's exit (for example `[herdr exited with code 1]`), a bar above the terminal says "Disconnected" with a Reconnect button, and the rest of the app keeps working. While the terminal is connected but the Herdr socket cannot be reached, that bar says "Workers unavailable" instead.
 
 | Flag                     | Environment                | Default                                            |
 | ------------------------ | -------------------------- | -------------------------------------------------- |
@@ -37,7 +37,7 @@ The right panel's Terminal tab runs the real [Herdr](https://herdr.dev) client i
 
 Pass flags after the script name, for example `pnpm dev --herdr-session work`. Lab mode, for experiments, attaches only to sessions named `fm-lab-*` and refuses any other session.
 
-With Herdr off, the dock never starts the Herdr client or opens its socket: the panel says "Herdr disabled", the terminal and Herdr routes answer 503, and the rest of the app works as usual. `--no-herdr` wins over the environment, and `CODECOLONY_HERDR=on` turns Herdr back on under CI. Any automated run must use it, so it never touches your live session.
+With Herdr off, the dock never starts the Herdr client or opens its socket: the panel says "Herdr is disabled for this run", the terminal and Herdr routes answer 503, and the rest of the app works as usual. `--no-herdr` wins over the environment, and `CODECOLONY_HERDR=on` turns Herdr back on under CI. Any automated run must use it, so it never touches your live session.
 
 Herdr shares its panes between all attached clients and sizes them to the client that most recently attached or sent input, so the last one wins. When the dock and another Herdr client (another tab, or a terminal) are both attached, the panes take the other client's size until the dock is used again. This is accepted for v1: there is no single-client limit or deferred sizing.
 
