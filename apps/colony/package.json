@@ -1,0 +1,21 @@
+{
+  "name": "@codecolony/colony",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/server/main.ts --dev",
+    "start": "vite build && tsx src/server/main.ts",
+    "build": "vite build",
+    "check-types": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.1"
+  }
+}
