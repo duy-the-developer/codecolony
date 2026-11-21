@@ -13,6 +13,7 @@ import {
   type Worker,
   type WorkersResponse,
 } from '../shared/protocol.ts'
+import { keySequence } from './keys.ts'
 
 export type { Worker, WorkerStatus } from '../shared/protocol.ts'
 
@@ -144,6 +145,15 @@ export function mountDock(el: HTMLElement, { token, pollMs = 3000 }: DockMountOp
   const send = (data: string) => {
     if (ws?.readyState === WebSocket.OPEN) ws.send(encoder.encode(data))
   }
+  term.attachCustomKeyEventHandler((event) => {
+    const sequence = keySequence(event)
+    if (sequence === null) return true
+    // Swallow the keypress and keyup too, and keep the textarea from
+    // inserting a line break of its own.
+    event.preventDefault()
+    if (event.type === 'keydown') send(sequence)
+    return false
+  })
   term.onData(send)
   term.onBinary((data) => {
     if (ws?.readyState === WebSocket.OPEN) {
