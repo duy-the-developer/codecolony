@@ -71,9 +71,10 @@ const REQUEST_TIMEOUT_MS = 20_000
 // The most language servers open at once.
 const MAX_LSP_SESSIONS = 4
 
-// Language servers share half the machine's memory. Each gets an equal share
-// of it but never less than this, so on a small machine fewer stay open.
-const MIN_SERVER_MEMORY_MB = 3072
+// Language servers share half the machine's memory. Each needs room for a
+// large project (tsserver needs about 5.4 GB for microsoft/vscode), so a
+// smaller machine keeps fewer open, each with a bigger share.
+const MIN_SERVER_MEMORY_MB = 6144
 
 export interface LspMemoryBudget {
   sessions: number
@@ -82,9 +83,11 @@ export interface LspMemoryBudget {
 
 export function resolveLspMemoryBudget(totalBytes = totalmem()): LspMemoryBudget {
   const budgetMb = Math.floor(totalBytes / 2 / 1024 / 1024)
-  const serverMemoryMb = Math.max(MIN_SERVER_MEMORY_MB, Math.floor(budgetMb / MAX_LSP_SESSIONS))
-  const sessions = Math.max(1, Math.min(MAX_LSP_SESSIONS, Math.floor(budgetMb / serverMemoryMb)))
-  return { sessions, serverMemoryMb }
+  const sessions = Math.max(
+    1,
+    Math.min(MAX_LSP_SESSIONS, Math.floor(budgetMb / MIN_SERVER_MEMORY_MB)),
+  )
+  return { sessions, serverMemoryMb: Math.floor(budgetMb / sessions) }
 }
 
 export class LspSession {
