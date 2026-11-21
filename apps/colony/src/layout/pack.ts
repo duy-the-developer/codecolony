@@ -1,4 +1,4 @@
-import type { Rect } from '../shared/world.ts'
+import type { Rect } from '../shared/world-types.ts'
 
 // A stable rectangle packer. Each child keeps a reserved rectangle across
 // runs: while it still fits there it does not move, a child that outgrows its

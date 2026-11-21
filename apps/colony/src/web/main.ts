@@ -1,6 +1,7 @@
 import { mountDock, readToken } from '@codecolony/dock/web'
-import type { ProjectsResponse } from '../shared/api.ts'
-import type { DeepResponse, World, WorldNode } from '../shared/world.ts'
+import type { ProjectsResponse } from '../shared/api-types.ts'
+import { logError } from '../shared/log.ts'
+import type { DeepResponse, World, WorldNode } from '../shared/world-types.ts'
 import { Camera, type Viewport } from './camera.ts'
 import { renderInspector } from './inspector.ts'
 import { type Drawn, hitTest, render } from './render.ts'
@@ -216,7 +217,7 @@ resize()
 // Live: the server announces each new world version.
 const events = new EventSource('/api/events')
 events.addEventListener('world', () => {
-  loadWorld().catch((error: unknown) => console.error('Could not load the world', error))
+  loadWorld().catch((error: unknown) => logError('Could not load the world', { error }))
 })
-loadProjects().catch((error: unknown) => console.error('Could not load projects', error))
+loadProjects().catch((error: unknown) => logError('Could not load projects', { error }))
 mountWorkers(map, mountDock(dockPanel, { token: readToken() }))

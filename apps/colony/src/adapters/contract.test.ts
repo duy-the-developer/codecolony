@@ -1,12 +1,12 @@
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { Colony } from '../indexer/colony.ts'
-import { makeRepo, tempDir } from '../testing/git-fixture.ts'
-import { CONTRACT_SAMPLES } from './contract.ts'
-import { adapterFor, LANGUAGE_ADAPTERS } from './index.ts'
+import { makeRepo, makeTempDir } from '../testing/git-fixture.ts'
+import { CONTRACT_SAMPLES } from './contract-samples.ts'
+import { findAdapter, LANGUAGE_ADAPTERS } from './registry.ts'
 
 // Every language adapter must pass this suite on its own sample (see
-// contract.ts). Adding a language means adding its sample.
+// contract-samples.ts). Adding a language means adding its sample.
 
 describe.each(LANGUAGE_ADAPTERS.map((adapter) => [adapter.id, adapter] as const))(
   '%s adapter contract',
@@ -18,11 +18,12 @@ describe.each(LANGUAGE_ADAPTERS.map((adapter) => [adapter.id, adapter] as const)
 
     beforeAll(async () => {
       if (!sample) return
-      const root = makeRepo(sample.files, join(tempDir(), 'sample'))
+      const root = makeRepo(sample.files, join(makeTempDir(), 'sample'))
       colony = new Colony({
         projects: [{ name: 'p', root, kind: 'repo' }],
-        cacheDir: tempDir(),
+        cacheDir: makeTempDir(),
         source: 'test',
+        port: 0,
       })
       await colony.refresh()
     })
@@ -35,7 +36,7 @@ describe.each(LANGUAGE_ADAPTERS.map((adapter) => [adapter.id, adapter] as const)
     if (!sample) return
 
     it('claims the files of its sample', () => {
-      for (const path of Object.keys(sample.files)) expect(adapterFor(path)?.id).toBe(id)
+      for (const path of Object.keys(sample.files)) expect(findAdapter(path)?.id).toBe(id)
     })
 
     it('reads declarations with kind, container, export, lines and branches', () => {

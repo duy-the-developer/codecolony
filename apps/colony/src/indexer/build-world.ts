@@ -1,8 +1,8 @@
 import { posix } from 'node:path'
-import { adapterFor } from '../adapters/index.ts'
-import { pathsMatch } from '../core/http.ts'
+import { findAdapter } from '../adapters/registry.ts'
+import { pathsMatch } from '../core/http-paths.ts'
 import { type Edge, qualifiedName, type TransportFact } from '../core/model.ts'
-import { WORLD_ID, type WorldNode } from '../shared/world.ts'
+import { WORLD_ID, type WorldNode } from '../shared/world-types.ts'
 import type { RepoIndex } from './repo.ts'
 
 // Turns repository indexes into the world tree (world > project > repo > dir
@@ -186,7 +186,7 @@ function addCodeEdges(repo: RepoIndex, id: string, paths: Set<string>, edges: Ed
   }
   for (const file of repo.files) {
     const fileId = `${id}/${file.path}`
-    const adapter = adapterFor(file.path)
+    const adapter = findAdapter(file.path)
     // Local name -> file it was imported from.
     const bound = new Map<string, string>()
     for (const fact of file.facts.imports) {

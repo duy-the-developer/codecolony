@@ -1,4 +1,4 @@
-import type { AdapterSample } from '../contract.ts'
+import type { AdapterSample } from '../contract-samples.ts'
 
 // The TypeScript adapter's contract sample: a tiny synthetic repository and
 // what the adapter must find in it.

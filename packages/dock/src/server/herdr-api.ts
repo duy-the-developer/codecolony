@@ -1,5 +1,5 @@
 import { createConnection } from 'node:net'
-import { WORKER_STATUSES, type Worker, type WorkerStatus } from '../shared/protocol.ts'
+import { type DockWorker, WORKER_STATUSES, type WorkerStatus } from '../shared/protocol.ts'
 
 // A client for the Herdr API socket. Each request opens the unix socket, writes
 // one JSON line `{id, method, params}` and reads one JSON line back:
@@ -20,7 +20,7 @@ export class HerdrError extends Error {
 
 export interface HerdrApi {
   request(method: string, params?: Record<string, unknown>): Promise<unknown>
-  listWorkers(): Promise<Worker[]>
+  listWorkers(): Promise<DockWorker[]>
   focusPane(paneId: string): Promise<void>
 }
 
@@ -109,7 +109,7 @@ function readReply(line: string, id: string, method: string): unknown {
 }
 
 // Keeps only what the map needs; working directories and titles stay on the server.
-function toWorker(agent: unknown): Worker[] {
+function toWorker(agent: unknown): DockWorker[] {
   if (!isRecord(agent)) return []
   const { pane_id, workspace_id, agent: kind, name, agent_status, focused } = agent
   if (typeof pane_id !== 'string' || typeof workspace_id !== 'string') return []

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { writeAtomic } from '../core/atomic-write.ts'
 import type { FileFacts } from '../core/model.ts'
 
 // Facts are content-addressed: a blob's facts depend only on its bytes, its
@@ -36,11 +37,4 @@ export class FactCache {
 // key holds the language too.
 export function factKey(sha: string, language: string): string {
   return `${sha}-${language}`
-}
-
-export function writeAtomic(path: string, content: string): void {
-  mkdirSync(dirname(path), { recursive: true })
-  const temp = `${path}.${process.pid}.tmp`
-  writeFileSync(temp, content)
-  renameSync(temp, path)
 }

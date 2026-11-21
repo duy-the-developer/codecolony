@@ -1,17 +1,18 @@
 import { EventEmitter } from 'node:events'
 import { readdirSync } from 'node:fs'
 import { join, relative } from 'node:path'
-import { adapterFor, LANGUAGE_ADAPTERS, RULES_VERSION } from '../adapters/index.ts'
-import type { LanguageAdapter } from '../core/adapter.ts'
+import { findAdapter, LANGUAGE_ADAPTERS, RULES_VERSION } from '../adapters/registry.ts'
+import type { ColonyConfig, ProjectConfig } from '../config/load-config.ts'
+import type { LanguageAdapter } from '../core/language-adapter.ts'
 import { LspSession } from '../core/lsp.ts'
 import { type Edge, qualifiedName } from '../core/model.ts'
-import { layoutWorld, loadLayout, saveLayout } from '../layout/layout.ts'
-import type { ColonyConfig, ProjectConfig } from '../server/config.ts'
-import type { World } from '../shared/world.ts'
+import { layoutWorld, loadLayout, saveLayout } from '../layout/world-layout.ts'
+import { logError } from '../shared/log.ts'
+import type { World } from '../shared/world-types.ts'
+import { buildWorld, type ProjectIndex, repoId } from './build-world.ts'
 import { FactCache } from './cache.ts'
 import { isGitRepo } from './git.ts'
 import { type IndexStats, indexRepo, type RepoIndex } from './repo.ts'
-import { buildWorld, type ProjectIndex, repoId } from './world.ts'
 
 // Keeps the world for a config up to date: indexes every repository, lays the
 // world out, and re-indexes when a repository's HEAD moves.
@@ -104,7 +105,7 @@ export class Colony extends EventEmitter<{ update: [World] }> {
   // Polls every repository's HEAD and refreshes when one moves.
   watch(intervalMs: number): void {
     this.timer = setInterval(() => {
-      this.refresh().catch((error: unknown) => console.error('Code Colony: refresh failed', error))
+      this.refresh().catch((error: unknown) => logError('Refresh failed', { error }))
     }, intervalMs)
     this.timer.unref()
   }
@@ -118,7 +119,7 @@ export class Colony extends EventEmitter<{ update: [World] }> {
     const version = this.current.version
     const file = this.current.nodes.find((node) => node.id === fileId && node.kind === 'file')
     const repo = this.repoOf(fileId)
-    const adapter = file?.path ? adapterFor(file.path) : undefined
+    const adapter = file?.path ? findAdapter(file.path) : undefined
     if (!file?.path || !repo || !adapter?.languageServer) return []
 
     const session = await this.session(repo.index.root, adapter)

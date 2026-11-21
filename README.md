@@ -90,7 +90,7 @@ pnpm test          # Vitest
 pnpm index         # index the configured projects once
 ```
 
-Tests and fixtures use synthetic repositories only.
+Tests and fixtures use synthetic repositories only. Naming, layering and error conventions are in [CONVENTIONS.md](CONVENTIONS.md); `pnpm lint` enforces them.
 
 ## License
 

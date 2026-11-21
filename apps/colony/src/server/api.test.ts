@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import type { Edge, World } from '../shared/world.ts'
+import type { Edge, World } from '../shared/world-types.ts'
 import { createApi, type WorldSource } from './api.ts'
 
 class StubSource extends EventEmitter<{ update: [World] }> implements WorldSource {
@@ -32,6 +32,7 @@ describe('api', () => {
         projects: [{ name: 'demo', root: '/private/path/demo', kind: 'repo' }],
         cacheDir: '/cache',
         source: 'default',
+        port: 0,
       },
       source,
     )

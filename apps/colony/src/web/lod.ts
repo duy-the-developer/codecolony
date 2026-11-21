@@ -1,4 +1,4 @@
-import type { NodeKind } from '../shared/world.ts'
+import type { NodeKind } from '../shared/world-types.ts'
 
 // Level-of-detail breakpoints, in screen pixels. Like labels on a web map,
 // detail fades in over a band of sizes as you zoom, instead of switching at

@@ -41,10 +41,16 @@ describe('resolveDockOptions', () => {
 
   it.each(['../etc', 'a/b', '-x', ''])('rejects the session name %j', (name) => {
     expect(() => resolveDockOptions({ 'herdr-session': name }, env)).toThrow(DockOptionsError)
+    expect(() => resolveDockOptions({ 'herdr-session': name }, env)).toThrow(
+      expect.objectContaining({ code: 'InvalidSession' }),
+    )
   })
 
   it('rejects a relative socket', () => {
     expect(() => resolveDockOptions({ 'herdr-socket': 'h.sock' }, env)).toThrow(/absolute/)
+    expect(() => resolveDockOptions({ 'herdr-socket': 'h.sock' }, env)).toThrow(
+      expect.objectContaining({ code: 'RelativeSocket' }),
+    )
   })
 
   describe('lab mode', () => {
@@ -61,6 +67,9 @@ describe('resolveDockOptions', () => {
       expect(() =>
         resolveDockOptions({ 'herdr-lab': true, 'herdr-session': session }, env),
       ).toThrow(/fm-lab-/)
+      expect(() =>
+        resolveDockOptions({ 'herdr-lab': true, 'herdr-session': session }, env),
+      ).toThrow(expect.objectContaining({ code: 'LabSessionRefused' }))
     })
 
     it('can be switched on from the environment', () => {
@@ -75,7 +84,12 @@ describe('resolveDockOptions', () => {
           { 'herdr-lab': true, 'herdr-session': 'fm-lab-a', 'herdr-socket': '/x.sock' },
           env,
         ),
-      ).toThrow(/socket/)
+      ).toThrow(
+        expect.objectContaining({
+          code: 'LabSocketConflict',
+          message: expect.stringMatching(/socket/),
+        }),
+      )
     })
   })
 })

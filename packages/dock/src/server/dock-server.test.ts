@@ -9,9 +9,9 @@ import {
   SUBPROTOCOL,
   WORKERS_PATH,
 } from '../shared/protocol.ts'
+import { FAKE_AGENTS, type FakeHerdr, ok, startFakeHerdr } from '../testing/fake-herdr.ts'
+import { createDock, type Dock, securityHeaders } from './dock-server.ts'
 import type { DockOptions } from './options.ts'
-import { createDock, type Dock, securityHeaders } from './server.ts'
-import { AGENTS, type FakeHerdr, ok, startFakeHerdr } from './testing/fake-herdr.ts'
 
 const TOKEN = 'test-token'
 
@@ -52,7 +52,7 @@ describe('dock server', () => {
 
   beforeAll(async () => {
     fake = await startFakeHerdr((req) => {
-      if (req.method === 'agent.list') return ok(req, { type: 'agent_list', agents: AGENTS })
+      if (req.method === 'agent.list') return ok(req, { type: 'agent_list', agents: FAKE_AGENTS })
       if (req.method === 'pane.focus') return ok(req, { type: 'ok' })
       return null
     })

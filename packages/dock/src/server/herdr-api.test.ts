@@ -3,14 +3,14 @@ import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { createHerdrApi, HerdrError } from './herdr-api.ts'
 import {
-  AGENTS,
+  FAKE_AGENTS,
   type FakeHandler,
   type FakeHerdr,
   ok,
   startFakeHerdr,
-} from './testing/fake-herdr.ts'
+} from '../testing/fake-herdr.ts'
+import { createHerdrApi, HerdrError } from './herdr-api.ts'
 
 describe('createHerdrApi', () => {
   let fake: FakeHerdr | undefined
@@ -26,7 +26,7 @@ describe('createHerdrApi', () => {
   }
 
   it('lists agents as workers, keeping only what the map needs', async () => {
-    const herdr = await api((request) => ok(request, { type: 'agent_list', agents: AGENTS }))
+    const herdr = await api((request) => ok(request, { type: 'agent_list', agents: FAKE_AGENTS }))
     expect(await herdr.listWorkers()).toEqual([
       {
         paneId: 'w1:p1',

@@ -66,7 +66,7 @@ export const WORKER_STATUSES = ['idle', 'working', 'blocked', 'done', 'unknown']
 export type WorkerStatus = (typeof WORKER_STATUSES)[number]
 
 // A worker as the map sees it: one Herdr pane running a coding agent.
-export interface Worker {
+export interface DockWorker {
   paneId: string
   workspaceId: string
   // The agent kind Herdr detected, such as `claude` or `codex`.
@@ -78,7 +78,7 @@ export interface Worker {
 }
 
 export interface WorkersResponse {
-  workers: Worker[]
+  workers: DockWorker[]
 }
 
 export interface FocusRequest {

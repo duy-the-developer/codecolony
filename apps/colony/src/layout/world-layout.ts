@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
-import { writeAtomic } from '../indexer/cache.ts'
-import { type Rect, WORLD_ID, type WorldNode } from '../shared/world.ts'
+import { writeAtomic } from '../core/atomic-write.ts'
+import { type Rect, WORLD_ID, type WorldNode } from '../shared/world-types.ts'
 import { pack } from './pack.ts'
 
 // Lays the world tree out bottom-up. Every container packs its children with

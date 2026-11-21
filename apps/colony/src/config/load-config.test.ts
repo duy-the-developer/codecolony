@@ -2,15 +2,15 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { CONFIG_FILE, ConfigError, loadConfig, parseConfig } from './config.ts'
+import { CONFIG_FILE, ConfigError, DEFAULT_PORT, loadConfig, parseConfig } from './load-config.ts'
 
-function tempDir(): string {
+function makeTempDir(): string {
   return mkdtempSync(join(tmpdir(), 'codecolony-config-'))
 }
 
 describe('loadConfig', () => {
   it('maps its own checkout when there is no config file', () => {
-    const repoRoot = join(tempDir(), 'codecolony')
+    const repoRoot = join(makeTempDir(), 'codecolony')
     const config = loadConfig({ env: {}, repoRoot })
     expect(config.source).toBe('default')
     expect(config.projects).toEqual([{ name: 'codecolony', root: repoRoot, kind: 'repo' }])
@@ -18,7 +18,7 @@ describe('loadConfig', () => {
   })
 
   it('reads the config file at the checkout root', () => {
-    const repoRoot = tempDir()
+    const repoRoot = makeTempDir()
     const file = join(repoRoot, CONFIG_FILE)
     writeFileSync(
       file,
@@ -32,26 +32,43 @@ describe('loadConfig', () => {
   })
 
   it('prefers the file named by the environment', () => {
-    const dir = tempDir()
+    const dir = makeTempDir()
     const file = join(dir, 'elsewhere.json')
     writeFileSync(
       file,
       JSON.stringify({ projects: [{ name: 'org', root: '~/org', kind: 'repos' }] }),
     )
-    const config = loadConfig({ env: { CODECOLONY_CONFIG: file }, repoRoot: tempDir() })
+    const config = loadConfig({ env: { CODECOLONY_CONFIG: file }, repoRoot: makeTempDir() })
     expect(config.projects[0]?.root).toBe(join(homedir(), 'org'))
   })
 
   it('fails loudly when the environment names a missing file', () => {
     expect(() =>
-      loadConfig({ env: { CODECOLONY_CONFIG: join(tempDir(), 'nope.json') }, repoRoot: tempDir() }),
+      loadConfig({
+        env: { CODECOLONY_CONFIG: join(makeTempDir(), 'nope.json') },
+        repoRoot: makeTempDir(),
+      }),
     ).toThrow(ConfigError)
+    expect(() =>
+      loadConfig({
+        env: { CODECOLONY_CONFIG: join(makeTempDir(), 'nope.json') },
+        repoRoot: makeTempDir(),
+      }),
+    ).toThrow(expect.objectContaining({ code: 'MissingFile' }))
   })
 
-  it('reports invalid JSON with the file path', () => {
-    const repoRoot = tempDir()
+  it('reports invalid JSON with the file path and the parse error as its cause', () => {
+    const repoRoot = makeTempDir()
     writeFileSync(join(repoRoot, CONFIG_FILE), '{ nope')
     expect(() => loadConfig({ env: {}, repoRoot })).toThrow(/not valid JSON/)
+    expect(() => loadConfig({ env: {}, repoRoot })).toThrow(
+      expect.objectContaining({ code: 'BadJson', cause: expect.any(SyntaxError) }),
+    )
+  })
+
+  it('reads the port from PORT, with a default', () => {
+    expect(loadConfig({ env: {}, repoRoot: makeTempDir() }).port).toBe(DEFAULT_PORT)
+    expect(loadConfig({ env: { PORT: '5000' }, repoRoot: makeTempDir() }).port).toBe(5000)
   })
 })
 

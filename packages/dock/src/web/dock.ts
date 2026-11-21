@@ -3,6 +3,7 @@ import { Terminal } from '@xterm/xterm'
 import '@xterm/xterm/css/xterm.css'
 import './dock.css'
 import {
+  type DockWorker,
   encodeResize,
   FOCUS_PATH,
   type FocusRequest,
@@ -10,20 +11,19 @@ import {
   SUBPROTOCOL,
   TOKEN_PROTOCOL_PREFIX,
   WORKERS_PATH,
-  type Worker,
   type WorkersResponse,
 } from '../shared/protocol.ts'
 import { keySequence } from './keys.ts'
 
-export type { Worker, WorkerStatus } from '../shared/protocol.ts'
+export type { DockWorker, WorkerStatus } from '../shared/protocol.ts'
 
 export interface DockHandle {
   // Asks Herdr to focus a pane; the terminal then shows it.
   focusPane(paneId: string): Promise<void>
-  listWorkers(): Promise<Worker[]>
+  listWorkers(): Promise<DockWorker[]>
   // Called with the current worker list, then whenever it changes; returns an
   // unsubscribe.
-  onWorkers(listener: (workers: Worker[]) => void): () => void
+  onWorkers(listener: (workers: DockWorker[]) => void): () => void
   dispose(): void
 }
 
@@ -66,8 +66,8 @@ export function mountDock(el: HTMLElement, { token, pollMs = 3000 }: DockMountOp
   screen.className = 'cc-dock-screen'
   el.replaceChildren(bar, screen)
 
-  const listeners = new Set<(workers: Worker[]) => void>()
-  let current: Worker[] | null = null
+  const listeners = new Set<(workers: DockWorker[]) => void>()
+  let current: DockWorker[] | null = null
   let shownKey = ''
   let disposed = false
 
@@ -170,7 +170,7 @@ export function mountDock(el: HTMLElement, { token, pollMs = 3000 }: DockMountOp
 
   const headers = { authorization: `Bearer ${token}` }
 
-  async function listWorkers(): Promise<Worker[]> {
+  async function listWorkers(): Promise<DockWorker[]> {
     const response = await fetch(WORKERS_PATH, { headers, cache: 'no-store' })
     if (response.status === 401) throw new Error(STALE_TOKEN)
     const body = (await response.json()) as WorkersResponse | { error: string }
@@ -196,7 +196,7 @@ export function mountDock(el: HTMLElement, { token, pollMs = 3000 }: DockMountOp
     void refresh()
   }
 
-  function renderWorkers(workers: Worker[]): void {
+  function renderWorkers(workers: DockWorker[]): void {
     workerList.replaceChildren(
       ...workers.map((worker) => {
         const item = document.createElement('li')

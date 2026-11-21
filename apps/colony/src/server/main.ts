@@ -7,21 +7,20 @@ import {
   resolveDockOptions,
   securityHeaders,
 } from '@codecolony/dock/server'
+import { loadConfig } from '../config/load-config.ts'
 import { Colony } from '../indexer/colony.ts'
+import { log } from '../shared/log.ts'
 import { createApi } from './api.ts'
-import { loadConfig } from './config.ts'
 import { isLoopbackHost } from './host.ts'
-import { type Handler, staticFiles } from './static.ts'
+import { createStaticHandler, type Handler } from './static.ts'
 
 const HOST = '127.0.0.1'
-const DEFAULT_PORT = 4320
 const WATCH_MS = 2000
 
 const appRoot = fileURLToPath(new URL('../../', import.meta.url))
 const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url))
 const { values: args } = parseArgs({ options: { dev: { type: 'boolean' }, ...DOCK_CLI_OPTIONS } })
 const dev = args.dev ?? false
-const port = Number(process.env.PORT ?? DEFAULT_PORT)
 
 const config = loadConfig({ repoRoot })
 const colony = new Colony(config)
@@ -41,7 +40,7 @@ if (dev) {
   })
   web = vite.middlewares
 } else {
-  web = staticFiles(`${appRoot}dist/web`)
+  web = createStaticHandler(`${appRoot}dist/web`)
 }
 
 const server = createServer((req, res) => {
@@ -60,10 +59,12 @@ server.on('upgrade', (req, socket, head) => {
 
 // Loopback only: the page shows local source code and agent terminals.
 // The token sits in the URL fragment, which browsers never send to the server.
-server.listen(port, HOST, () => {
-  console.log(
-    `Code Colony on http://${HOST}:${port}/#token=${dock.token} (${dev ? 'dev' : 'built'}; config: ${config.source})`,
-  )
+server.listen(config.port, HOST, () => {
+  log('Code Colony is running', {
+    url: `http://${HOST}:${config.port}/#token=${dock.token}`,
+    mode: dev ? 'dev' : 'built',
+    config: config.source,
+  })
 })
 
 // Stop language servers and the dock's terminals with the app.

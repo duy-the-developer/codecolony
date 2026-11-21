@@ -1,4 +1,4 @@
-import type { Rect } from '../shared/world.ts'
+import type { Rect } from '../shared/world-types.ts'
 
 // A continuous 2D camera, like a web map: scroll, pinch and keys change the
 // scale smoothly; the renderer decides what to show from the scale alone.

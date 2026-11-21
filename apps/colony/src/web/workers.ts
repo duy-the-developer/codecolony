@@ -1,4 +1,5 @@
-import type { DockHandle, Worker } from '@codecolony/dock/web'
+import type { DockHandle, DockWorker } from '@codecolony/dock/web'
+import { logError } from '../shared/log.ts'
 
 // Worker pawns on the map. Until the renderer places them where they work, they
 // stand in a row at the top of the map. Clicking a pawn focuses its Herdr pane
@@ -9,7 +10,7 @@ export function mountWorkers(map: HTMLElement, dock: DockHandle): void {
   layer.setAttribute('aria-label', 'Workers on the map')
   map.append(layer)
 
-  dock.onWorkers((workers: Worker[]) => {
+  dock.onWorkers((workers: DockWorker[]) => {
     layer.replaceChildren(
       ...workers.map((worker) => {
         const item = document.createElement('li')
@@ -22,7 +23,7 @@ export function mountWorkers(map: HTMLElement, dock: DockHandle): void {
         pawn.addEventListener('click', () => {
           dock
             .focusPane(worker.paneId)
-            .catch((error: unknown) => console.error('Could not focus pane', error))
+            .catch((error: unknown) => logError('Could not focus pane', { error }))
         })
         item.append(pawn)
         return item

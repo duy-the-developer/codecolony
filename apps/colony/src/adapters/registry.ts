@@ -1,14 +1,14 @@
 import { extname } from 'node:path'
-import type { LanguageAdapter, TransportDetector } from '../core/adapter.ts'
-import { typescriptHttp } from './typescript/http.ts'
-import { typescript } from './typescript/index.ts'
+import type { LanguageAdapter, TransportDetector } from '../core/language-adapter.ts'
+import { typescriptAdapter } from './typescript/adapter.ts'
+import { typescriptHttpDetector } from './typescript/http-detector.ts'
 
 // The registry: every language adapter and transport detector Code Colony
 // ships. Adding a language is one entry here plus its folder.
 
-export const LANGUAGE_ADAPTERS: readonly LanguageAdapter[] = [typescript]
+export const LANGUAGE_ADAPTERS: readonly LanguageAdapter[] = [typescriptAdapter]
 
-export const TRANSPORT_DETECTORS: readonly TransportDetector[] = [typescriptHttp]
+export const TRANSPORT_DETECTORS: readonly TransportDetector[] = [typescriptHttpDetector]
 
 const byExtension = new Map<string, LanguageAdapter>()
 for (const adapter of LANGUAGE_ADAPTERS) {
@@ -19,7 +19,7 @@ for (const adapter of LANGUAGE_ADAPTERS) {
   }
 }
 
-export function adapterFor(path: string): LanguageAdapter | undefined {
+export function findAdapter(path: string): LanguageAdapter | undefined {
   return byExtension.get(extname(path))
 }
 

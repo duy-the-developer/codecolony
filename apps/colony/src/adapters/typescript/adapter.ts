@@ -1,7 +1,7 @@
 import { createRequire } from 'node:module'
 import { extname, posix } from 'node:path'
 import type { Node } from 'web-tree-sitter'
-import type { LanguageAdapter } from '../../core/adapter.ts'
+import type { LanguageAdapter } from '../../core/language-adapter.ts'
 import type { SymbolKind } from '../../core/model.ts'
 
 // TypeScript and JavaScript: tree-sitter-typescript for the parser side,
@@ -96,7 +96,7 @@ export function resolveImport(
   return candidates.find((candidate) => files.has(candidate))
 }
 
-export const typescript: LanguageAdapter = {
+export const typescriptAdapter: LanguageAdapter = {
   id: 'typescript',
   version: 1,
   extensions: ['.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.cjs'],

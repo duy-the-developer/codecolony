@@ -1,5 +1,5 @@
-import type { Edge, WorldNode } from '../shared/world.ts'
-import { EDGE_COLORS, PROVEN } from './render.ts'
+import type { Edge, WorldNode } from '../shared/world-types.ts'
+import { EDGE_COLORS, PROVEN_PROVENANCES } from './render.ts'
 import type { Scene } from './scene.ts'
 
 // The card for the selected node: its facts, and every road in or out with
@@ -138,7 +138,7 @@ function row(text: string, where: string, provenance: string, color?: string): H
     swatch.style.background = color
     li.append(swatch)
   }
-  const proven = PROVEN.has(provenance as Edge['provenance'])
+  const proven = PROVEN_PROVENANCES.has(provenance as Edge['provenance'])
   li.append(
     el('span', {}, text),
     el('span', { class: 'muted' }, ` ${where}`),

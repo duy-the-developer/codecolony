@@ -1,5 +1,5 @@
 import type { Node } from 'web-tree-sitter'
-import type { TransportDetector } from '../../core/adapter.ts'
+import type { TransportDetector } from '../../core/language-adapter.ts'
 import type { TransportFact } from '../../core/model.ts'
 
 // HTTP for TypeScript and JavaScript: client calls through fetch and common
@@ -49,7 +49,7 @@ function methodOf(node: Node | undefined): string | undefined {
 
 const ID = 'typescript-http'
 
-export const typescriptHttp: TransportDetector = {
+export const typescriptHttpDetector: TransportDetector = {
   id: ID,
   version: 1,
   languages: ['typescript'],

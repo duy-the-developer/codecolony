@@ -11,15 +11,19 @@ Everything left of "facts" is per language. Everything right of it is language-a
 
 ## Source layout (`apps/colony/src`)
 
-| Folder      | Role                                                                                                                                                                                                               |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `core/`     | The language-agnostic model (`model.ts`), the adapter interface (`adapter.ts`), the tree-sitter runner (`parse.ts`), the LSP client (`lsp.ts`) and HTTP path matching (`http.ts`). Never imports from `adapters/`. |
-| `adapters/` | One folder per language, the registry (`index.ts`) and the adapter contract (`contract.ts`, `contract.test.ts`).                                                                                                   |
-| `indexer/`  | Reads committed trees from git, caches facts by content hash, builds the world tree and its edges, and keeps it live (`colony.ts`).                                                                                |
-| `layout/`   | The stable packer and the world layout, persisted between runs.                                                                                                                                                    |
-| `server/`   | Config loading and the loopback HTTP server (`/api/world`, `/api/events`, `/api/deep`).                                                                                                                            |
-| `shared/`   | Types the server sends and the page reads.                                                                                                                                                                         |
-| `web/`      | The canvas page: camera, level of detail, renderer, inspector.                                                                                                                                                     |
+| Folder      | Role                                                                                                                                                                                                                                                                      |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `core/`     | The language-agnostic model (`model.ts`), the adapter interface (`language-adapter.ts`), the tree-sitter runner (`parse.ts`), the LSP client (`lsp.ts`), HTTP path matching (`http-paths.ts`) and atomic file writes (`atomic-write.ts`). Never imports from `adapters/`. |
+| `shared/`   | Types the server sends and the page reads (`api-types.ts`, `world-types.ts`) and the log helper (`log.ts`).                                                                                                                                                               |
+| `config/`   | Config loading (`load-config.ts`): the projects to map, the cache folder and the port.                                                                                                                                                                                    |
+| `adapters/` | One folder per language, the registry (`registry.ts`) and the adapter contract (`contract-samples.ts`, `contract.test.ts`).                                                                                                                                               |
+| `layout/`   | The stable packer (`pack.ts`) and the world layout (`world-layout.ts`), persisted between runs.                                                                                                                                                                           |
+| `indexer/`  | Reads committed trees from git, caches facts by content hash, builds the world tree and its edges (`build-world.ts`), and keeps it live (`colony.ts`).                                                                                                                    |
+| `server/`   | The loopback HTTP server (`/api/world`, `/api/events`, `/api/deep`).                                                                                                                                                                                                      |
+| `web/`      | The canvas page: camera, level of detail, renderer, inspector.                                                                                                                                                                                                            |
+| `testing/`  | Git fixtures for tests.                                                                                                                                                                                                                                                   |
+
+Folders depend on each other in one direction, lowest first: `core` and `shared`, then `config`, `adapters` and `layout`, then `indexer`, then `server`; `web` imports only `shared`. `pnpm lint` enforces it. Naming rules and the full dependency table are in [CONVENTIONS.md](CONVENTIONS.md).
 
 ## The model
 
@@ -40,9 +44,9 @@ The inspector shows the provenance of every edge, so a viewer can tell proven li
 
 ## Adding a language
 
-A language is one `LanguageAdapter` (`core/adapter.ts`) plus a grammar and, optionally, a language server. The core, indexer, layout and renderer do not change.
+A language is one `LanguageAdapter` (`core/language-adapter.ts`) plus a grammar and, optionally, a language server. The core, indexer, layout and renderer do not change.
 
-1. **Create `adapters/<language>/index.ts`** exporting a `LanguageAdapter`:
+1. **Create `adapters/<language>/adapter.ts`** exporting a `LanguageAdapter`:
    - `id`, `version` (bump it when queries change, so cached facts are re-read) and `extensions`.
    - `grammar(path)`: absolute path of the tree-sitter `.wasm` grammar. Most grammars ship one on npm (`tree-sitter-python`, `tree-sitter-go`, ...); resolve it with `createRequire(import.meta.url).resolve(...)`.
    - `queries`: three tree-sitter queries using these capture names:
@@ -57,17 +61,17 @@ A language is one `LanguageAdapter` (`core/adapter.ts`) plus a grammar and, opti
    - `resolveImport(specifier, fromPath, files)`: the repository path an import points to, or `undefined` for external packages.
    - Optional hooks: `symbolKind` (refine or drop a captured definition), `isExported`, `isTypeOnlyImport`.
    - Optional `languageServer`: the command of any server that speaks LSP over stdio (`pyright-langserver --stdio`, `gopls`, `jdtls`, `csharp-ls`, ...), its `languageId` per file and `initializationOptions`. The core drives it through `core/lsp.ts`: `textDocument/prepareCallHierarchy` and `callHierarchy/outgoingCalls` turn calls into `lsp` edges.
-2. **Register it** in `adapters/index.ts` (`LANGUAGE_ADAPTERS`). Two adapters cannot claim one extension.
-3. **Add a contract sample** in `adapters/<language>/sample.ts` and list it in `CONTRACT_SAMPLES` (`adapters/contract.ts`): a few small files, and the symbols, imports, calls, transports and (with a language server) LSP-proven calls the adapter must find. `adapters/contract.test.ts` indexes the sample end to end and checks every expectation; an adapter without a sample fails it.
+2. **Register it** in `adapters/registry.ts` (`LANGUAGE_ADAPTERS`). Two adapters cannot claim one extension.
+3. **Add a contract sample** in `adapters/<language>/sample.ts` and list it in `CONTRACT_SAMPLES` (`adapters/contract-samples.ts`): a few small files, and the symbols, imports, calls, transports and (with a language server) LSP-proven calls the adapter must find. `adapters/contract.test.ts` indexes the sample end to end and checks every expectation; an adapter without a sample fails it.
 4. **Allow its native build to be skipped** if its npm package has an install script: add it to `allowBuilds` in `pnpm-workspace.yaml` with `false`. Only the `.wasm` file is used.
 
 `adapters/typescript/` is the reference adapter.
 
 ## Transport detectors
 
-Cross-process links (HTTP, queues, data access) come from `TransportDetector`s (`core/adapter.ts`), one per language and framework or library. A detector gets the parsed tree and a query compiler and returns `TransportFact`s. The core links them: HTTP clients to routes with the same path (`core/http.ts`), across repositories.
+Cross-process links (HTTP, queues, data access) come from `TransportDetector`s (`core/language-adapter.ts`), one per language and framework or library. A detector gets the parsed tree and a query compiler and returns `TransportFact`s. The core links them: HTTP clients to routes with the same path (`core/http-paths.ts`), across repositories.
 
-To add one, write a detector next to its language (see `adapters/typescript/http.ts`) and register it in `TRANSPORT_DETECTORS`.
+To add one, write a detector next to its language (see `adapters/typescript/http-detector.ts`, named `<framework>-detector.ts`) and register it in `TRANSPORT_DETECTORS` (`adapters/registry.ts`).
 
 ## Indexing
 

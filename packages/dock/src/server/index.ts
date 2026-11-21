@@ -1,3 +1,4 @@
+export { createDock, type Dock, type DockDeps, securityHeaders } from './dock-server.ts'
 export { createHerdrApi, type HerdrApi, HerdrError } from './herdr-api.ts'
 export {
   DOCK_CLI_OPTIONS,
@@ -7,4 +8,3 @@ export {
   resolveDockOptions,
 } from './options.ts'
 export type { PtyCommand } from './pty-bridge.ts'
-export { createDock, type Dock, type DockDeps, securityHeaders } from './server.ts'

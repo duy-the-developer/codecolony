@@ -16,8 +16,19 @@ export interface DockOptions {
   lab: boolean
 }
 
+export type DockOptionsErrorCode =
+  | 'InvalidSession'
+  | 'LabSessionRefused'
+  | 'LabSocketConflict'
+  | 'RelativeSocket'
+
 export class DockOptionsError extends Error {
   override name = 'DockOptionsError'
+  readonly code: DockOptionsErrorCode
+  constructor(code: DockOptionsErrorCode, message: string, options?: ErrorOptions) {
+    super(message, options)
+    this.code = code
+  }
 }
 
 // For node:util parseArgs, merged into the host app's own options.
@@ -48,7 +59,10 @@ export function resolveDockOptions(
   const bin = values['herdr-bin'] ?? env.CODECOLONY_HERDR_BIN ?? 'herdr'
 
   if (rawSession !== undefined && !SESSION_NAME.test(rawSession)) {
-    throw new DockOptionsError(`Herdr session name is not valid: ${JSON.stringify(rawSession)}`)
+    throw new DockOptionsError(
+      'InvalidSession',
+      `Herdr session name is not valid: ${JSON.stringify(rawSession)}`,
+    )
   }
   // Herdr names its default session "default" (herdr session list --json).
   const session = rawSession === undefined || rawSession === 'default' ? null : rawSession
@@ -56,17 +70,19 @@ export function resolveDockOptions(
     // Lab mode never reaches the default session or any session outside the lab.
     if (session === null || !LAB_SESSION_NAME.test(session)) {
       throw new DockOptionsError(
+        'LabSessionRefused',
         `lab mode only attaches to sessions named fm-lab-*, refusing ${session ?? 'the default session'}`,
       )
     }
     if (socket !== undefined) {
       throw new DockOptionsError(
+        'LabSocketConflict',
         'lab mode derives the socket from the session; drop --herdr-socket',
       )
     }
   }
   if (socket !== undefined && !isAbsolute(socket)) {
-    throw new DockOptionsError(`Herdr socket must be an absolute path: ${socket}`)
+    throw new DockOptionsError('RelativeSocket', `Herdr socket must be an absolute path: ${socket}`)
   }
 
   return {
