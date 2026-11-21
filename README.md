@@ -63,7 +63,7 @@ See `codecolony.config.example.json`.
 | Scroll, pinch, `+` / `-` | Zoom smoothly at the cursor; detail fades in and out as you zoom |
 | Drag, arrow keys         | Pan                                                              |
 | Click                    | Inspect: facts, and every road in or out with how it was proven  |
-| Double-click             | Fly into a building                                              |
+| Double-click             | Fly into a block or file                                         |
 | `Home`                   | See everything                                                   |
 | `Esc`                    | Clear the selection                                              |
 
