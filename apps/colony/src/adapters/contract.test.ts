@@ -6,7 +6,7 @@ import { CONTRACT_SAMPLES } from './contract-samples.ts'
 import { findAdapter, LANGUAGE_ADAPTERS } from './registry.ts'
 
 // Every language adapter must pass this suite on its own sample (see
-// contract.ts). Adding a language means adding its sample.
+// contract-samples.ts). Adding a language means adding its sample.
 
 describe.each(LANGUAGE_ADAPTERS.map((adapter) => [adapter.id, adapter] as const))(
   '%s adapter contract',
