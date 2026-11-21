@@ -308,7 +308,8 @@ function ellipsize(ctx: CanvasRenderingContext2D, text: string, width: number): 
   return lo === 0 ? '' : `${text.slice(0, lo)}…`
 }
 
-const roadCaches = new WeakMap<Scene, RoadCache>()
+// One road cache per scene, rebuilt when symbols arrive.
+const roadCaches = new WeakMap<Scene, { revision: number; cache: RoadCache }>()
 
 // Each edge is drawn between the deepest visible nodes that hold its ends, so
 // roads merge as you zoom out and split as you zoom in (see road-cache.ts).
@@ -319,11 +320,12 @@ function drawRoads(
   drawn: Drawn[],
   state: RenderState,
 ): void {
-  let cache = roadCaches.get(scene)
-  if (!cache) {
-    cache = new RoadCache(scene)
-    roadCaches.set(scene, cache)
+  let cached = roadCaches.get(scene)
+  if (cached?.revision !== scene.revision) {
+    cached = { revision: scene.revision, cache: new RoadCache(scene) }
+    roadCaches.set(scene, cached)
   }
+  const { cache } = cached
   const holders = drawn.filter((item) => item.alpha >= MIN_ROAD_ALPHA)
   const roads = cache.listRoads(scale, holders, state.selectedSubtree)
 

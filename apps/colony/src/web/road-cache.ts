@@ -245,8 +245,8 @@ export class RoadCache {
     this.kinds = []
     for (let e = 0; e < count; e++) {
       const edge = this.edges[e] as Edge
-      this.edgeFrom[e] = this.index.get(edge.from) ?? -1
-      this.edgeTo[e] = this.index.get(edge.to) ?? -1
+      this.edgeFrom[e] = this.indexOfEnd(edge.from)
+      this.edgeTo[e] = this.indexOfEnd(edge.to)
       let kind = this.kinds.indexOf(edge.kind)
       if (kind < 0) kind = this.kinds.push(edge.kind) - 1
       this.edgeCode[e] = kind * 2 + (PROVEN_PROVENANCES.has(edge.provenance) ? 1 : 0)
@@ -261,6 +261,15 @@ export class RoadCache {
     let size = 1
     while (size < count * 2) size *= 2
     this.slots = new Int32Array(size)
+  }
+
+  // An edge end's node; a symbol whose file's symbols are not loaded yet is
+  // held by its file.
+  private indexOfEnd(id: string): number {
+    const index = this.index.get(id)
+    if (index !== undefined) return index
+    const file = this.scene.fileIdOf(id)
+    return file === undefined ? -1 : (this.index.get(file) ?? -1)
   }
 
   // Which nodes the renderer draws at this scale with enough alpha to hold a

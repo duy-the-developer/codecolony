@@ -8,8 +8,10 @@ export type EdgeDirection = 'out' | 'in'
 
 export interface EdgeRow {
   edge: Edge
-  // The node at the other end, if it is on the map.
+  // The node at the other end, if it is on the map and loaded: a symbol of a
+  // file whose symbols are not loaded yet has only its id.
   other: WorldNode | undefined
+  otherId: string
   // How many edges share this kind, other end and provenance.
   count: number
 }
@@ -70,7 +72,7 @@ function groupRows(scene: Scene, edges: Edge[], direction: EdgeDirection): EdgeR
     const key = `${edge[end]}|${edge.kind === 'http' ? edge.label : ''}|${edge.provenance}`
     const group = groups.get(key)
     if (group) group.count++
-    else groups.set(key, { edge, other: scene.byId.get(edge[end]), count: 1 })
+    else groups.set(key, { edge, other: scene.byId.get(edge[end]), otherId: edge[end], count: 1 })
   }
   return [...groups.values()].sort((a, b) => b.count - a.count)
 }
@@ -78,13 +80,19 @@ function groupRows(scene: Scene, edges: Edge[], direction: EdgeDirection): EdgeR
 // How a row names its other end: a path for files and folders, `name (file)`
 // for symbols, and the route first for HTTP.
 export function describeEdgeRow(scene: Scene, row: EdgeRow, direction: EdgeDirection): string {
-  const target = describeNode(scene, row.other)
+  const target = describeNode(scene, row.other, row.otherId)
   if (row.edge.kind !== 'http' || !row.edge.label) return target
   return direction === 'out' ? `${row.edge.label} → ${target}` : `${row.edge.label} ← ${target}`
 }
 
-function describeNode(scene: Scene, node: WorldNode | undefined): string {
-  if (!node) return '(outside the map)'
+function describeNode(scene: Scene, node: WorldNode | undefined, id: string): string {
+  if (!node) {
+    // Not loaded: the name is the last part of the symbol's qualified name.
+    const file = scene.byId.get(scene.fileIdOf(id) ?? '')
+    if (!file) return '(outside the map)'
+    const qualified = id.slice(file.id.length + 1)
+    return `${qualified.slice(qualified.lastIndexOf('.') + 1)} (${file.name})`
+  }
   if (node.kind !== 'symbol') return node.path ?? node.name
   const file = node.id.slice(0, node.id.indexOf('#'))
   return `${node.name} (${scene.byId.get(file)?.name ?? ''})`

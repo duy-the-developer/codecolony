@@ -8,11 +8,12 @@ import type {
 import type { DeepResponse, WorldNode } from '../../../shared/world-types.ts'
 import { useDock } from '../../hooks/use-dock.ts'
 import { useProjects } from '../../hooks/use-projects.ts'
+import { useSceneRevision } from '../../hooks/use-scene-revision.ts'
 import { useShellPreferences } from '../../hooks/use-shell-preferences.ts'
 import { useWorld } from '../../hooks/use-world.ts'
 import { type MapHandle, ZOOM_STEP } from '../../map-controller.ts'
-import { buildSearchIndex } from '../../search-index.ts'
 import { MAX_PANEL_PX, MIN_PANEL_PX, type ShellPreferences } from '../../shell-preferences.ts'
+import { fetchSearchMatches } from '../../world-client.ts'
 import { AppHeader } from '../app-header/app-header.tsx'
 import { LeftPanel } from '../left-panel/left-panel.tsx'
 import { MapBreadcrumb } from '../map-breadcrumb/map-breadcrumb.tsx'
@@ -27,6 +28,8 @@ type PanelSide = 'left' | 'right'
 // The page: header, left panel | map | right panel.
 export function App() {
   const scene = useWorld()
+  // Symbols arrive after the scene; the panels re-render with them.
+  useSceneRevision(scene)
   const projects = useProjects()
   const [preferences, updatePreferences] = useShellPreferences()
   const [selectedId, setSelectedId] = useState<string>()
@@ -51,7 +54,6 @@ export function App() {
   const widthsPx = useRef({ left: preferences.left.widthPx, right: preferences.right.widthPx })
 
   const selected = selectedId ? scene?.byId.get(selectedId) : undefined
-  const searchIndex = useMemo(() => (scene ? buildSearchIndex(scene.world) : undefined), [scene])
 
   const updatePanel = useCallback(
     <S extends PanelSide>(side: S, change: Partial<ShellPreferences[S]>) =>
@@ -236,7 +238,7 @@ export function App() {
       </ResizablePanelGroup>
       <SearchPalette
         isOpen={isSearchOpen}
-        index={searchIndex}
+        fetchMatches={fetchSearchMatches}
         onOpenChange={setIsSearchOpen}
         onPick={pick}
         onOpen={openFile}

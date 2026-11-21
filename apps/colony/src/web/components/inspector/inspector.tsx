@@ -33,12 +33,7 @@ export function Inspector({ scene, selected, onPick, onOpen, onTraceCalls }: Ins
   const node = selected
   const kind = node.kind === 'symbol' ? (node.symbolKind ?? 'symbol') : node.kind
   const repo = scene.repoOf(node)
-  const subtree = new Set<string>()
-  const stack = [node]
-  for (let n = stack.pop(); n; n = stack.pop()) {
-    subtree.add(n.id)
-    stack.push(...(scene.children.get(n.id) ?? []))
-  }
+  const subtree = scene.listSubtree(node)
   const facts: [string, string | undefined][] = [
     ['Lines', node.range ? `${node.range.start}-${node.range.end}` : node.lines.toLocaleString()],
     ['Branches', node.complexity.toLocaleString()],
@@ -122,13 +117,13 @@ function EdgeList({ scene, section, onPick }: EdgeListProps) {
         {shown.map((row) => {
           const where =
             row.count > 1 ? `×${row.count}` : row.edge.at ? `line ${row.edge.at.line}` : ''
-          const { other } = row
+          const { other, otherId } = row
           return (
             <li key={`${row.edge.from}|${row.edge.to}|${row.edge.label}|${row.edge.provenance}`}>
               <button
                 type="button"
-                disabled={!other}
-                onClick={() => other && onPick(other.id)}
+                disabled={!other && !scene.fileIdOf(otherId)}
+                onClick={() => onPick(otherId)}
                 className="flex w-full cursor-pointer items-center gap-2 rounded px-1 py-0.5 text-left hover:bg-accent disabled:cursor-default disabled:hover:bg-transparent"
               >
                 <span

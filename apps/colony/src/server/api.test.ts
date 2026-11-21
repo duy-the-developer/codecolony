@@ -3,15 +3,44 @@ import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { FileResponse } from '../shared/api-types.ts'
-import type { Edge, World } from '../shared/world-types.ts'
+import type { Edge, World, WorldNode, WorldPayload } from '../shared/world-types.ts'
 import { createApi, type WorldSource } from './api.ts'
+
+const RECT = { x: 0, y: 0, w: 4, h: 4 }
+
+// world > a.ts > its function `start`.
+const NODES: WorldNode[] = [
+  { id: 'world', kind: 'world', name: 'world', lines: 10, complexity: 0, rect: RECT },
+  {
+    id: 'p/r/a.ts',
+    parent: 'world',
+    kind: 'file',
+    name: 'a.ts',
+    path: 'a.ts',
+    lines: 10,
+    complexity: 0,
+    rect: RECT,
+  },
+  {
+    id: 'p/r/a.ts#start',
+    parent: 'p/r/a.ts',
+    kind: 'symbol',
+    name: 'start',
+    path: 'a.ts',
+    lines: 3,
+    complexity: 0,
+    rect: RECT,
+    symbolKind: 'function',
+    range: { start: 2, end: 4 },
+  },
+]
 
 class StubSource extends EventEmitter<{ update: [World] }> implements WorldSource {
   world: World = {
     version: 1,
     indexedAt: '2026-01-01T00:00:00Z',
     languages: {},
-    nodes: [],
+    nodes: NODES,
     edges: [],
   }
   deepIndex(fileId: string): Promise<Edge[]> {
@@ -70,8 +99,47 @@ describe('api', () => {
     expect(await response.json()).toEqual({ projects: [{ name: 'demo', kind: 'repo' }] })
   })
 
-  it('serves the current world', async () => {
-    expect(await (await fetch(`${base}/api/world`)).json()).toMatchObject({ version: 1 })
+  it('serves the current world without its symbols', async () => {
+    const world = (await (await fetch(`${base}/api/world`)).json()) as WorldPayload
+    expect(world).toMatchObject({ type: 'full', version: 1 })
+    expect(world.nodes.map((row) => row[3])).toEqual(['world', 'p/r/a.ts'])
+  })
+
+  it('sends a page that holds the current version an empty patch', async () => {
+    const { session } = (await (await fetch(`${base}/api/world`)).json()) as WorldPayload
+    const patch = await (await fetch(`${base}/api/world?session=${session}&since=1`)).json()
+    expect(patch).toMatchObject({ type: 'patch', base: 1, version: 1, nodes: [], edges: [] })
+    const other = await (await fetch(`${base}/api/world?session=other&since=1`)).json()
+    expect(other).toMatchObject({ type: 'full' })
+  })
+
+  it('serves symbols for files of the current version, and refuses a stale one', async () => {
+    const ok = await fetch(`${base}/api/symbols?version=1&files=1`)
+    expect(await ok.json()).toEqual({
+      version: 1,
+      files: { 1: [[-1, 'start', null, 0, 2, 4, -1, 0]] },
+    })
+    expect((await fetch(`${base}/api/symbols?version=0&files=1`)).status).toBe(409)
+    expect((await fetch(`${base}/api/symbols?version=1`)).status).toBe(400)
+    expect((await fetch(`${base}/api/symbols?version=1&files=x`)).status).toBe(400)
+  })
+
+  it('searches files and symbols by name', async () => {
+    const response = await fetch(`${base}/api/search?q=sta&limit=5`)
+    expect(await response.json()).toEqual({
+      symbols: [
+        {
+          id: 'p/r/a.ts#start',
+          kind: 'symbol',
+          name: 'start',
+          path: 'a.ts',
+          symbolKind: 'function',
+          line: 2,
+          lines: 3,
+        },
+      ],
+      files: [],
+    })
   })
 
   it('answers a deep index with LSP edges, and reports failures', async () => {

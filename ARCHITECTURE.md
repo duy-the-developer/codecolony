@@ -14,12 +14,12 @@ Everything left of "facts" is per language. Everything right of it is language-a
 | Folder      | Role                                                                                                                                                                                                                                                                      |
 | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `core/`     | The language-agnostic model (`model.ts`), the adapter interface (`language-adapter.ts`), the tree-sitter runner (`parse.ts`), the LSP client (`lsp.ts`), HTTP path matching (`http-paths.ts`) and atomic file writes (`atomic-write.ts`). Never imports from `adapters/`. |
-| `shared/`   | Types the server sends and the page reads (`api-types.ts`, `world-types.ts`) and the log helper (`log.ts`).                                                                                                                                                               |
+| `shared/`   | Types the server sends and the page reads (`api-types.ts`, `world-types.ts`), the world's wire format (`world-encoder.ts`, `world-decoder.ts`, `sequence-diff.ts`), symbol bands (`symbol-band.ts`) and the log helper (`log.ts`).                                        |
 | `config/`   | Config loading (`load-config.ts`): the projects to map, the cache folder and the port.                                                                                                                                                                                    |
 | `adapters/` | One folder per language, the registry (`registry.ts`) and the adapter contract (`contract-samples.ts`, `contract.test.ts`).                                                                                                                                               |
 | `layout/`   | The grid layout: the stable row packer (`pack-rows.ts`), file cells (`pack-cells.ts`), import ranks (`rank-items.ts`) and the world layout (`world-layout.ts`), persisted between runs.                                                                                   |
 | `indexer/`  | Reads committed trees from git, caches facts by content hash, builds the world tree and its edges (`build-world.ts`), and keeps it live (`colony.ts`).                                                                                                                    |
-| `server/`   | The loopback HTTP server (`/api/world`, `/api/events`, `/api/deep`, `/api/file`).                                                                                                                                                                                         |
+| `server/`   | The loopback HTTP server (`/api/world`, `/api/symbols`, `/api/search`, `/api/events`, `/api/deep`, `/api/file`).                                                                                                                                                          |
 | `web/`      | The page: camera, level of detail, renderer, and the React panels.                                                                                                                                                                                                        |
 | `testing/`  | Git fixtures and a fake language server for tests.                                                                                                                                                                                                                        |
 
@@ -81,6 +81,15 @@ To add one, write a detector next to its language (see `adapters/typescript/http
 - New blobs are parsed on a pool of worker threads, one per core (`indexer/parse-pool.ts`), which stops when idle. Adapters and detectors are loaded in each worker by Node's built-in TypeScript type stripping, so the app uses erasable TypeScript only (`erasableSyntaxOnly`): no parameter properties, enums or namespaces.
 - The server watches each repository's `HEAD`, branch refs and `packed-refs` (in the worktree's own git dir and the shared common dir), checks only the repositories that changed, and pushes a `world` event over `/api/events` when the map changes. A full `HEAD` check every minute catches anything the watcher missed. A folder of repositories is watched only at its top level, so a repository created in place there (`mkdir`, then `git init`) can take up to that minute to appear; a clone shows up at once.
 - Tracing a file with its language server (`/api/deep`) reads the working tree, so it matches the map only while that file is unmodified.
+
+## The world on the wire
+
+The page never receives the server's `World` as is (`shared/world-encoder.ts`, `shared/world-decoder.ts`):
+
+- `/api/world` sends the world without symbols. Nodes are rows that refer to their parent by index, ids and paths are front-coded on the parent's, rectangles are relative to the parent and rounded to 1/256 of a grid unit, and edges are a flat array of numbers over a string table. A vscode-sized world is about 18 MB instead of 276 MB, encoded once per version.
+- A file's symbols come from `/api/symbols` when the file is about to open on the map, when its file is shown, or when a symbol is picked. Their rectangles are not sent: the page places them with the layout's own formula (`shared/symbol-band.ts`). Until they arrive, an edge that ends on one of them is held by its file. Search runs on the server (`/api/search`), since the page holds only the symbols it loaded.
+- After a `world` event the page asks `/api/world?session=<s>&since=<version>` and gets a patch, splices over the version before (`shared/sequence-diff.ts`), when the server still has that version; otherwise the whole world.
+- On the page, `web/scene.ts` is the one place that reads world data, and `web/world-client.ts` makes the requests.
 
 ## Layout
 

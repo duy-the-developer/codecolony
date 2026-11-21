@@ -1,7 +1,8 @@
 import { FileIcon } from 'lucide-react'
-import { type KeyboardEvent, useMemo, useState } from 'react'
+import { type KeyboardEvent, useEffect, useState } from 'react'
+import type { SearchEntry, SearchMatches } from '../../../shared/api-types.ts'
+import { logError } from '../../../shared/log.ts'
 import { SYMBOL_COLORS } from '../../render.ts'
-import { listSearchMatches, type SearchEntry, type SearchIndex } from '../../search-index.ts'
 import { SYMBOL_GLYPHS } from '../../symbol-glyphs.ts'
 import {
   Command,
@@ -16,7 +17,8 @@ import { Kbd } from '../ui/kbd.tsx'
 
 export interface SearchPaletteProps {
   isOpen: boolean
-  index: SearchIndex | undefined
+  // Asks the server for the best matches; the page does not hold every symbol.
+  fetchMatches(query: string, limit: number): Promise<SearchMatches>
   onOpenChange(isOpen: boolean): void
   // Enter on a result: fly to it and select it.
   onPick(id: string): void
@@ -25,16 +27,37 @@ export interface SearchPaletteProps {
 }
 
 const MAX_PER_GROUP = 8
+const NO_MATCHES: SearchMatches = { symbols: [], files: [] }
 
 // ⌘K: find a file or symbol by name.
-export function SearchPalette({ isOpen, index, onOpenChange, onPick, onOpen }: SearchPaletteProps) {
+export function SearchPalette({
+  isOpen,
+  fetchMatches,
+  onOpenChange,
+  onPick,
+  onOpen,
+}: SearchPaletteProps) {
   const [query, setQuery] = useState('')
   // The highlighted result's id, which cmdk keeps as the item value.
   const [active, setActive] = useState('')
-  const matches = useMemo(
-    () => (index ? listSearchMatches(index, query, MAX_PER_GROUP) : { symbols: [], files: [] }),
-    [index, query],
-  )
+  const [matches, setMatches] = useState(NO_MATCHES)
+  // Only the answer to the latest query is shown.
+  useEffect(() => {
+    if (query.trim() === '') {
+      setMatches(NO_MATCHES)
+      return
+    }
+    let isCurrent = true
+    fetchMatches(query, MAX_PER_GROUP).then(
+      (next) => {
+        if (isCurrent) setMatches(next)
+      },
+      (error: unknown) => logError('Search failed', { error }),
+    )
+    return () => {
+      isCurrent = false
+    }
+  }, [query, fetchMatches])
   const count = matches.symbols.length + matches.files.length
   const handleOpenChange = (next: boolean) => {
     if (!next) setQuery('')
