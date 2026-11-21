@@ -58,7 +58,7 @@ server.on('upgrade', (req, socket, head) => {
   if (!dock.upgrade(req, socket, head)) socket.destroy()
 })
 
-// Loopback only: the page shows local source code and, later, agent terminals.
+// Loopback only: the page shows local source code and agent terminals.
 // The token sits in the URL fragment, which browsers never send to the server.
 server.listen(port, HOST, () => {
   console.log(

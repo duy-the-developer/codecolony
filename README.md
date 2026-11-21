@@ -16,7 +16,7 @@ pnpm start    # builds the page, then serves it
 
 Out of the box it maps its own checkout. `pnpm index` indexes the configured projects once and prints a summary.
 
-The server prints the page's URL with a one-time token, `http://127.0.0.1:4320/#token=...`; open that exact URL. The token sits in the URL fragment, so it is never sent to the server or logged, and the page keeps it for the tab and strips it from the address bar.
+The server prints the page's URL with a fresh token for this run, `http://127.0.0.1:4320/#token=...`; open that exact URL. The token sits in the URL fragment, so it is never sent to the server or logged, and the page keeps it for the tab and strips it from the address bar.
 
 The server listens on loopback only and answers 403 to any request whose host is not `127.0.0.1`, `localhost` or `[::1]`. Set `PORT` to use another port.
 
