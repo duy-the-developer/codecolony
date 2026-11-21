@@ -1,10 +1,8 @@
 import type { ReactNode } from 'react'
 import type { EdgeKind, SymbolKind, WorldNode } from '../../../shared/world-types.ts'
-import { cn } from '../../class-names.ts'
 import { EDGE_COLORS, hueOf, SYMBOL_COLORS } from '../../render.ts'
 import type { Scene } from '../../scene.ts'
 import { listTreeChildren, listTreeRoots } from '../../tree-entries.ts'
-import { WORKER_STATUS_DOTS } from '../../worker-status-dots.ts'
 import { Kbd } from '../ui/kbd.tsx'
 
 export interface LegendProps {
@@ -99,16 +97,6 @@ export function Legend({ scene }: LegendProps) {
           label="Dashed"
           detail="matched on text"
         />
-      </LegendSection>
-
-      <LegendSection title="Workers" note="labelled by workspace name">
-        {(['working', 'idle', 'blocked', 'done'] as const).map((status) => (
-          <LegendRow
-            key={status}
-            mark={<span className={cn('size-2.5 rounded-full', WORKER_STATUS_DOTS[status])} />}
-            label={status[0]?.toUpperCase() + status.slice(1)}
-          />
-        ))}
       </LegendSection>
 
       <LegendSection title="Keys">
