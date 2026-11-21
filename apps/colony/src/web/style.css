@@ -1,245 +1,113 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/* shadcn/ui tokens, dark only: the map is a dark blueprint. */
 :root {
   color-scheme: dark;
-  --bg: #0d1b2a;
-  --grid: #1b3147;
-  --panel: #102235;
-  --line: #24425f;
-  --text: #dce7f2;
-  --muted: #7d93a8;
-  font:
-    14px / 1.4 system-ui,
-    sans-serif;
+  --background: #0b1724;
+  --foreground: #dce7f2;
+  --card: #0e1c2b;
+  --card-foreground: #dce7f2;
+  --popover: #102133;
+  --popover-foreground: #dce7f2;
+  --primary: #f7a21b;
+  --primary-foreground: #1a1204;
+  --secondary: #16283b;
+  --secondary-foreground: #dce7f2;
+  --muted: #13243a;
+  --muted-foreground: #7d93a8;
+  --accent: #1a3049;
+  --accent-foreground: #eef4fa;
+  --destructive: #e05050;
+  --border: #1e3348;
+  --input: #24405c;
+  --ring: #4f8fd6;
+  --radius: 0.375rem;
+
+  /* Worker status colours, shared with the dock package's CSS variables. */
+  --status-working: #50c878;
+  --status-blocked: #e05050;
+  --status-done: #50a0e0;
+  --status-idle: #e0a040;
 }
 
-* {
-  box-sizing: border-box;
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-status-working: var(--status-working);
+  --color-status-blocked: var(--status-blocked);
+  --color-status-done: var(--status-done);
+  --color-status-idle: var(--status-idle);
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+  --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, Menlo, monospace;
 }
 
-body {
-  margin: 0;
-  height: 100vh;
-  display: grid;
-  grid-template: "map queue" 1fr "dock dock" auto / 1fr 300px;
-  background: var(--bg);
-  color: var(--text);
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans text-sm antialiased;
+    margin: 0;
+    overflow: hidden;
+  }
 }
 
-#map {
-  grid-area: map;
-  position: relative;
-  overflow: hidden;
-}
-
-#canvas {
-  position: absolute;
-  inset: 0;
-  width: 100%;
+/* The dock package styles its own markup; fit it to the right panel. */
+.cc-dock {
   height: 100%;
+  background: #08121c;
 }
 
-#queue {
-  grid-area: queue;
-  padding: 12px 16px;
-  background: var(--panel);
-  border-left: 1px solid var(--line);
-  overflow: auto;
+.cc-dock-bar {
+  align-items: flex-start;
+  padding: 8px;
+  background: var(--card);
 }
 
-#queue h2 {
-  margin: 8px 0;
-  font-size: 12px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
-#projects {
-  margin: 0;
-  padding-left: 18px;
-}
-
-#dock {
-  grid-area: dock;
-  height: 280px;
-  border-top: 1px solid var(--line);
-}
-
-.muted {
-  color: var(--muted);
-}
-
-#canvas {
-  touch-action: none;
-}
-
-#inspector {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  width: 340px;
-  max-height: calc(100% - 64px);
-  overflow: auto;
-  padding: 12px 14px;
-  background: rgb(16 34 53 / 94%);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  font-size: 13px;
-}
-
-#inspector h3 {
-  margin: 0;
-  font-size: 15px;
-  overflow-wrap: anywhere;
-}
-
-#inspector h4 {
-  margin: 12px 0 4px;
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
-#inspector p {
-  margin: 2px 0 8px;
-  overflow-wrap: anywhere;
-}
-
-#inspector dl {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 2px 12px;
-  margin: 0;
-}
-
-#inspector dt {
-  color: var(--muted);
-}
-
-#inspector dd {
-  margin: 0;
-}
-
-#inspector ul {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-#inspector li {
-  padding: 2px 0;
-  overflow-wrap: anywhere;
-}
-
-#inspector li.link {
-  cursor: pointer;
-}
-
-#inspector li.link:hover {
-  background: rgb(255 255 255 / 6%);
-}
-
-#inspector button {
-  margin-top: 12px;
-  padding: 6px 10px;
-  color: var(--text);
-  background: #1d3b5a;
-  border: 1px solid #3b6a98;
-  border-radius: 4px;
-  font: inherit;
-  cursor: pointer;
-}
-
-#inspector button:disabled {
-  opacity: 0.6;
-  cursor: default;
-}
-
-.swatch {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  margin-right: 6px;
-  border-radius: 2px;
-}
-
-.tag {
-  margin-left: 6px;
-  padding: 0 5px;
-  border-radius: 3px;
-  font-size: 11px;
-}
-
-.tag.proven {
-  color: #0d1b2a;
-  background: #7fd49b;
-}
-
-.tag.weak {
-  color: #0d1b2a;
-  background: #f0c060;
-}
-
-#hud,
-#hint {
-  position: absolute;
-  left: 12px;
-  font-size: 12px;
-  color: var(--muted);
-  pointer-events: none;
-}
-
-#hud {
-  bottom: 28px;
-}
-
-#hint {
-  bottom: 10px;
-  opacity: 0.8;
-}
-
-.pawns {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  justify-content: flex-end;
-  max-width: 50%;
-  display: flex;
+.cc-dock-workers {
   flex-wrap: wrap;
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
+  overflow: visible;
 }
 
-.pawn {
-  padding: 4px 10px 4px 22px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--panel)
-    radial-gradient(circle at 11px 50%, var(--pawn, var(--muted)) 4px, transparent 5px);
-  color: var(--text);
-  font: inherit;
-  cursor: pointer;
+.cc-dock-note,
+.cc-dock-state {
+  white-space: normal;
 }
 
-.pawn:hover,
-.pawn[aria-pressed="true"] {
-  border-color: #ffb347;
+.cc-dock-worker {
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-weight: 500;
 }
 
-.pawn.status-working {
-  --pawn: #50c878;
-}
-
-.pawn.status-blocked {
-  --pawn: #e05050;
-}
-
-.pawn.status-done {
-  --pawn: #50a0e0;
-}
-
-.pawn.status-idle {
-  --pawn: #e0a040;
+.cc-dock-worker[aria-pressed="true"] {
+  border-color: var(--primary);
+  background: var(--accent);
 }

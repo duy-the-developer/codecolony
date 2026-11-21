@@ -8,6 +8,8 @@ import {
   FOCUS_PATH,
   type FocusRequest,
   PTY_PATH,
+  STATUS_PATH,
+  type StatusResponse,
   SUBPROTOCOL,
   TOKEN_PROTOCOL_PREFIX,
   WORKERS_PATH,
@@ -35,6 +37,14 @@ export interface DockMountOptions {
 
 const TOKEN_KEY = 'codecolony.dock.token'
 const STALE_TOKEN = 'Token not accepted: the server restarted, open the URL it printed'
+const HERDR_DISABLED =
+  'Herdr is disabled for this run (--no-herdr, CODECOLONY_HERDR=off or CI), so the dock does not attach to any session.'
+
+// The hover text for a worker: agent program, pane and status, such as
+// `claude · pane w4:p1 · working`.
+export function workerTitle(worker: DockWorker): string {
+  return `${worker.agent ?? 'agent'} · pane ${worker.paneId} · ${worker.status}`
+}
 
 // Reads the token from `#token=...` once, keeps it for this tab in
 // sessionStorage and strips it from the address bar.
@@ -170,6 +180,26 @@ export function mountDock(el: HTMLElement, { token, pollMs = 3000 }: DockMountOp
 
   const headers = { authorization: `Bearer ${token}` }
 
+  // Any failure counts as enabled: the terminal and the worker list then show it.
+  async function readStatus(): Promise<StatusResponse['herdr']> {
+    try {
+      const response = await fetch(STATUS_PATH, { headers, cache: 'no-store' })
+      if (!response.ok) return 'enabled'
+      return ((await response.json()) as StatusResponse).herdr
+    } catch {
+      return 'enabled'
+    }
+  }
+
+  function showDisabled(): void {
+    state.textContent = 'Herdr disabled'
+    screen.hidden = true
+    const note = document.createElement('p')
+    note.className = 'cc-dock-off'
+    note.textContent = HERDR_DISABLED
+    el.append(note)
+  }
+
   async function listWorkers(): Promise<DockWorker[]> {
     const response = await fetch(WORKERS_PATH, { headers, cache: 'no-store' })
     if (response.status === 401) throw new Error(STALE_TOKEN)
@@ -204,8 +234,8 @@ export function mountDock(el: HTMLElement, { token, pollMs = 3000 }: DockMountOp
         button.type = 'button'
         button.className = `cc-dock-worker cc-status-${worker.status}`
         button.setAttribute('aria-pressed', String(worker.focused))
-        button.title = `${worker.agent ?? 'agent'} in pane ${worker.paneId} (${worker.status})`
-        button.textContent = worker.name ?? worker.agent ?? worker.paneId
+        button.title = workerTitle(worker)
+        button.textContent = worker.label
         button.addEventListener('click', () => {
           focusPane(worker.paneId).catch(showError)
         })
@@ -244,9 +274,17 @@ export function mountDock(el: HTMLElement, { token, pollMs = 3000 }: DockMountOp
     }
   }
 
-  connect()
-  void refresh()
-  const poll = window.setInterval(() => void refresh(), pollMs)
+  let poll = 0
+  void readStatus().then((status) => {
+    if (disposed) return
+    if (status === 'disabled') {
+      showDisabled()
+      return
+    }
+    connect()
+    void refresh()
+    poll = window.setInterval(() => void refresh(), pollMs)
+  })
 
   return {
     focusPane,

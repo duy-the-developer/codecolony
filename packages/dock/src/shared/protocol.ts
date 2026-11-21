@@ -6,12 +6,15 @@
 // `token.<session token>`, which authenticates the upgrade without putting the
 // token in a URL.
 //
-// HTTP: GET WORKERS_PATH lists the Herdr agents, POST FOCUS_PATH with
-// {paneId} focuses one. Both need `Authorization: Bearer <token>`.
+// HTTP: GET STATUS_PATH says whether Herdr is enabled, GET WORKERS_PATH lists
+// the Herdr agents, POST FOCUS_PATH with {paneId} focuses one. All need
+// `Authorization: Bearer <token>`. With Herdr disabled, the terminal upgrade
+// and the Herdr routes answer 503.
 
 export const SUBPROTOCOL = 'codecolony-dock.v1'
 export const TOKEN_PROTOCOL_PREFIX = 'token.'
 export const PTY_PATH = '/dock/pty'
+export const STATUS_PATH = '/api/dock/status'
 export const WORKERS_PATH = '/api/dock/workers'
 export const FOCUS_PATH = '/api/dock/focus'
 
@@ -73,8 +76,15 @@ export interface DockWorker {
   agent: string | null
   // The name the agent was started or renamed with.
   name: string | null
+  // What the page shows: the Herdr workspace label (the task name), else the
+  // tab label, else the agent name or kind.
+  label: string
   status: WorkerStatus
   focused: boolean
+}
+
+export interface StatusResponse {
+  herdr: 'enabled' | 'disabled'
 }
 
 export interface WorkersResponse {

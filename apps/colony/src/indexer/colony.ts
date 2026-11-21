@@ -3,16 +3,17 @@ import { readdirSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { findAdapter, LANGUAGE_ADAPTERS, RULES_VERSION } from '../adapters/registry.ts'
 import type { ColonyConfig, ProjectConfig } from '../config/load-config.ts'
-import type { LanguageAdapter } from '../core/language-adapter.ts'
-import { LspSession } from '../core/lsp.ts'
 import { type Edge, qualifiedName } from '../core/model.ts'
-import { layoutWorld, loadLayout, saveLayout } from '../layout/world-layout.ts'
+import { emptyLayout, layoutWorld, loadLayout, saveLayout } from '../layout/world-layout.ts'
 import { logError } from '../shared/log.ts'
 import type { World } from '../shared/world-types.ts'
 import { buildWorld, type ProjectIndex, repoId } from './build-world.ts'
 import { FactCache } from './cache.ts'
 import { isGitRepo } from './git.ts'
-import { type IndexStats, indexRepo, type RepoIndex } from './repo.ts'
+import { LspPool } from './lsp-pool.ts'
+import { buildTextFacts } from './parse-facts.ts'
+import { createParsePool, ParsePoolError } from './parse-pool.ts'
+import { type IndexStats, indexRepo, type ParseBlob, type RepoIndex } from './repo.ts'
 
 // Keeps the world for a config up to date: indexes every repository, lays the
 // world out, and re-indexes when a repository's HEAD moves.
@@ -30,18 +31,29 @@ export interface RefreshResult {
   stats: IndexStats[]
 }
 
+export interface ColonyOptions {
+  // Lay the map out afresh on the first refresh instead of keeping the saved
+  // order of modules and files.
+  relayout?: boolean
+}
+
 export class Colony extends EventEmitter<{ update: [World] }> {
   private readonly cache: FactCache
   private readonly layoutPath: string
   private readonly indexes = new Map<string, RepoIndex>()
-  private readonly lsp = new Map<string, Promise<LspSession>>()
+  private readonly lsp = new LspPool()
+  private readonly parser = createParsePool()
   private readonly deep = new Map<string, Edge[]>()
   private current: World = { version: 0, indexedAt: '', languages: {}, nodes: [], edges: [] }
   private refreshing: Promise<RefreshResult> | undefined
   private timer: NodeJS.Timeout | undefined
+  private relayout: boolean
+  private readonly config: ColonyConfig
 
-  constructor(private readonly config: ColonyConfig) {
+  constructor(config: ColonyConfig, { relayout = false }: ColonyOptions = {}) {
     super()
+    this.config = config
+    this.relayout = relayout
     this.cache = new FactCache(config.cacheDir, RULES_VERSION)
     this.layoutPath = join(config.cacheDir, 'layout.json')
   }
@@ -67,7 +79,7 @@ export class Colony extends EventEmitter<{ update: [World] }> {
       const roots = discoverRepos(project)
       for (const root of roots) {
         const key = `${project.name}\0${root}`
-        const result = await indexRepo(root, this.cache, this.indexes.get(key))
+        const result = await indexRepo(root, this.cache, this.indexes.get(key), this.parse)
         if (!result.stats.unchanged) changed = true
         this.indexes.set(key, result.index)
         stats.push(result.stats)
@@ -85,8 +97,9 @@ export class Colony extends EventEmitter<{ update: [World] }> {
     if (!changed) return { changed, stats }
 
     const { nodes, edges } = buildWorld(projects)
-    const store = loadLayout(this.layoutPath)
-    layoutWorld(nodes, store)
+    const store = this.relayout ? emptyLayout() : loadLayout(this.layoutPath)
+    this.relayout = false
+    layoutWorld(nodes, edges, store)
     saveLayout(this.layoutPath, store)
     this.deep.clear()
     this.current = {
@@ -122,7 +135,6 @@ export class Colony extends EventEmitter<{ update: [World] }> {
     const adapter = file?.path ? findAdapter(file.path) : undefined
     if (!file?.path || !repo || !adapter?.languageServer) return []
 
-    const session = await this.session(repo.index.root, adapter)
     const symbols = this.current.nodes.filter(
       (node) =>
         node.kind === 'symbol' &&
@@ -131,41 +143,55 @@ export class Colony extends EventEmitter<{ update: [World] }> {
     )
     const facts = repo.index.files.find((f) => f.path === file.path)?.facts.symbols ?? []
     const edges: Edge[] = []
-    for (const symbol of symbols) {
-      const fact = facts.find((f) => `${fileId}#${qualifiedName(f)}` === symbol.id)
-      if (!fact) continue
-      const calls = await session.outgoingCalls(
-        { path: join(repo.index.root, file.path), line: fact.at.line, column: fact.at.column },
-        fact.name,
-      )
-      for (const call of calls) {
-        const target = this.symbolAt(
-          repo,
-          relative(repo.index.root, call.target.path),
-          call.target.line,
-          call.name,
+    const path = join(repo.index.root, file.path)
+    await this.lsp.use(adapter.id, adapter.languageServer, repo.index.root, async (session) => {
+      for (const symbol of symbols) {
+        const fact = facts.find((f) => `${fileId}#${qualifiedName(f)}` === symbol.id)
+        if (!fact) continue
+        const calls = await session.outgoingCalls(
+          { path, line: fact.at.line, column: fact.at.column },
+          fact.name,
         )
-        if (!target || target === symbol.id) continue
-        edges.push({
-          from: symbol.id,
-          to: target,
-          kind: 'call',
-          provenance: 'lsp',
-          label: call.name,
-          at: { file: fileId, line: call.lines[0] ?? fact.at.line },
-        })
+        for (const call of calls) {
+          const target = this.symbolAt(
+            repo,
+            relative(repo.index.root, call.target.path),
+            call.target.line,
+            call.name,
+          )
+          if (!target || target === symbol.id) continue
+          edges.push({
+            from: symbol.id,
+            to: target,
+            kind: 'call',
+            provenance: 'lsp',
+            label: call.name,
+            at: { file: fileId, line: call.lines[0] ?? fact.at.line },
+          })
+        }
       }
-    }
+    })
     if (this.current.version === version) this.deep.set(fileId, edges)
     return edges
   }
 
   async close(): Promise<void> {
     clearInterval(this.timer)
-    const sessions = await Promise.allSettled(this.lsp.values())
-    await Promise.all(sessions.map((s) => (s.status === 'fulfilled' ? s.value.close() : undefined)))
-    this.lsp.clear()
+    await Promise.all([this.lsp.close(), this.parser.close()])
   }
+
+  // A worker that dies on a file (out of memory, a grammar crash) leaves that
+  // file's size on the map for this index only: the failure may not happen
+  // again, so the file is parsed afresh next time instead of cached.
+  private readonly parse: ParseBlob = (path, bytes) =>
+    this.parser.parse(path, bytes).then(
+      (facts) => ({ facts, provisional: false }),
+      (error: unknown) => {
+        if (!(error instanceof ParsePoolError) || error.code === 'Closed') throw error
+        logError('Parse worker failed', { path, error })
+        return { facts: buildTextFacts(bytes), provisional: true }
+      },
+    )
 
   private repoOf(nodeId: string): { id: string; index: RepoIndex } | undefined {
     for (const [key, index] of this.indexes) {
@@ -185,18 +211,5 @@ export class Colony extends EventEmitter<{ update: [World] }> {
     if (!file) return undefined
     const symbol = file.facts.symbols.find((s) => s.at.line === line && s.name === name)
     return symbol ? `${repo.id}/${path}#${qualifiedName(symbol)}` : undefined
-  }
-
-  private session(root: string, adapter: LanguageAdapter): Promise<LspSession> {
-    const key = `${adapter.id}\0${root}`
-    let session = this.lsp.get(key)
-    if (!session) {
-      if (!adapter.languageServer)
-        return Promise.reject(new Error(`${adapter.id}: no language server`))
-      session = LspSession.start(adapter.languageServer, root)
-      session.catch(() => this.lsp.delete(key))
-      this.lsp.set(key, session)
-    }
-    return session
   }
 }

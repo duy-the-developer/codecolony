@@ -7,8 +7,10 @@ export class Scene {
   readonly children = new Map<string, WorldNode[]>()
   readonly root: WorldNode | undefined
   edges: Edge[]
+  readonly world: World
 
-  constructor(readonly world: World) {
+  constructor(world: World) {
+    this.world = world
     for (const node of world.nodes) {
       this.byId.set(node.id, node)
       if (!node.parent) continue
@@ -29,6 +31,15 @@ export class Scene {
       if (n.parent === ancestor) return true
     }
     return false
+  }
+
+  // The node and its ancestors below the world, outermost first.
+  listAncestry(node: WorldNode): WorldNode[] {
+    const chain: WorldNode[] = []
+    for (let n: WorldNode | undefined = node; n && n.kind !== 'world'; n = this.parentOf(n)) {
+      chain.unshift(n)
+    }
+    return chain
   }
 
   // The repository a node belongs to.

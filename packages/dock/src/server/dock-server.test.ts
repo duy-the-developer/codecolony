@@ -1,15 +1,19 @@
+import { access, mkdtemp } from 'node:fs/promises'
 import { createServer, request, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import WebSocket from 'ws'
 import {
   encodeResize,
   FOCUS_PATH,
   PTY_PATH,
+  STATUS_PATH,
   SUBPROTOCOL,
   WORKERS_PATH,
 } from '../shared/protocol.ts'
-import { FAKE_AGENTS, type FakeHerdr, ok, startFakeHerdr } from '../testing/fake-herdr.ts'
+import { answerWorkerList, type FakeHerdr, startFakeHerdr } from '../testing/fake-herdr.ts'
 import { createDock, type Dock, securityHeaders } from './dock-server.ts'
 import type { DockOptions } from './options.ts'
 
@@ -51,12 +55,9 @@ describe('dock server', () => {
   const auth = { authorization: `Bearer ${TOKEN}` }
 
   beforeAll(async () => {
-    fake = await startFakeHerdr((req) => {
-      if (req.method === 'agent.list') return ok(req, { type: 'agent_list', agents: FAKE_AGENTS })
-      if (req.method === 'pane.focus') return ok(req, { type: 'ok' })
-      return null
-    })
+    fake = await startFakeHerdr(answerWorkerList)
     const options: DockOptions = {
+      enabled: true,
       session: 'fm-lab-test',
       socketPath: fake.socketPath,
       client: { file: 'herdr', args: [] },
@@ -89,8 +90,13 @@ describe('dock server', () => {
     it('lists workers with the token', async () => {
       const response = await send(port, WORKERS_PATH, { headers: auth })
       expect(response.status).toBe(200)
-      const { workers } = JSON.parse(response.body) as { workers: { paneId: string }[] }
-      expect(workers.map((worker) => worker.paneId)).toEqual(['w1:p1', 'w2:p4'])
+      const { workers } = JSON.parse(response.body) as {
+        workers: { paneId: string; label: string }[]
+      }
+      expect(workers.map((worker) => [worker.paneId, worker.label])).toEqual([
+        ['w1:p1', 'codecolony-dock'],
+        ['w2:p4', 'mystery-task'],
+      ])
       expect(response.body).not.toContain('/private/path')
     })
 
@@ -101,6 +107,12 @@ describe('dock server', () => {
       expect(response.headers['x-content-type-options']).toBe('nosniff')
       expect(response.headers['referrer-policy']).toBe('no-referrer')
       expect(response.headers['cache-control']).toBe('no-store')
+    })
+
+    it('reports Herdr as enabled', async () => {
+      const response = await send(port, STATUS_PATH, { headers: auth })
+      expect(response.status).toBe(200)
+      expect(JSON.parse(response.body)).toEqual({ herdr: 'enabled' })
     })
 
     it('rejects a missing or wrong token', async () => {
@@ -229,6 +241,7 @@ describe('dock server without herdr', () => {
   it('tells the page when the client cannot start', async () => {
     const dock = createDock(
       {
+        enabled: true,
         session: null,
         socketPath: '/nonexistent/herdr.sock',
         client: { file: 'herdr', args: [] },
@@ -272,5 +285,83 @@ describe('dock server without herdr', () => {
       dock.close()
       await new Promise<void>((resolve) => server.close(() => resolve()))
     }
+  })
+})
+
+describe('dock server with herdr disabled', () => {
+  let fake: FakeHerdr
+  let dock: Dock
+  let server: Server
+  let port: number
+  let spawned: string
+  const auth = { authorization: `Bearer ${TOKEN}` }
+
+  beforeAll(async () => {
+    fake = await startFakeHerdr(answerWorkerList)
+    spawned = join(await mkdtemp(join(tmpdir(), 'dock-off-')), 'spawned')
+    dock = createDock(
+      {
+        enabled: false,
+        session: null,
+        socketPath: fake.socketPath,
+        client: { file: 'herdr', args: [] },
+        cwd: '/',
+        lab: false,
+      },
+      {
+        token: TOKEN,
+        // Would leave a file behind if the dock ever started the client.
+        command: { file: '/usr/bin/touch', args: [spawned], cwd: '/', env: {} },
+      },
+    )
+    server = createServer((req, res) => {
+      if (!dock.handle(req, res)) res.writeHead(418).end()
+    })
+    server.on('upgrade', (req, socket, head) => {
+      if (!dock.upgrade(req, socket, head)) socket.destroy()
+    })
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    port = (server.address() as AddressInfo).port
+  })
+
+  afterAll(async () => {
+    dock.close()
+    await new Promise<void>((resolve) => server.close(() => resolve()))
+    await fake.close()
+  })
+
+  it('reports Herdr as disabled', async () => {
+    const response = await send(port, STATUS_PATH, { headers: auth })
+    expect(response.status).toBe(200)
+    expect(JSON.parse(response.body)).toEqual({ herdr: 'disabled' })
+  })
+
+  it('still requires the token', async () => {
+    expect((await send(port, STATUS_PATH, {})).status).toBe(401)
+  })
+
+  it('answers the Herdr routes with 503 and never opens the socket', async () => {
+    const workers = await send(port, WORKERS_PATH, { headers: auth })
+    expect(workers.status).toBe(503)
+    expect(JSON.parse(workers.body)).toEqual({ error: 'Herdr is disabled' })
+    const focus = await send(port, FOCUS_PATH, {
+      method: 'POST',
+      headers: { ...auth, 'content-type': 'application/json' },
+      body: JSON.stringify({ paneId: 'w1:p1' }),
+    })
+    expect(focus.status).toBe(503)
+    expect(fake.requests).toEqual([])
+  })
+
+  it('refuses the terminal and never starts the client', async () => {
+    const ws = new WebSocket(`ws://127.0.0.1:${port}${PTY_PATH}`, [SUBPROTOCOL, `token.${TOKEN}`], {
+      headers: { origin: `http://127.0.0.1:${port}` },
+    })
+    const status = await new Promise<number>((resolve) => {
+      ws.on('unexpected-response', (_, res) => resolve(res.statusCode ?? 0))
+      ws.on('error', () => resolve(-1))
+    })
+    expect(status).toBe(503)
+    await expect(access(spawned)).rejects.toThrow()
   })
 })

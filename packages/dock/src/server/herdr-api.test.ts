@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
+  answerWorkerList,
   FAKE_AGENTS,
   type FakeHandler,
   type FakeHerdr,
@@ -26,13 +27,14 @@ describe('createHerdrApi', () => {
   }
 
   it('lists agents as workers, keeping only what the map needs', async () => {
-    const herdr = await api((request) => ok(request, { type: 'agent_list', agents: FAKE_AGENTS }))
+    const herdr = await api(answerWorkerList)
     expect(await herdr.listWorkers()).toEqual([
       {
         paneId: 'w1:p1',
         workspaceId: 'w1',
         agent: 'claude',
         name: 'dock',
+        label: 'codecolony-dock',
         status: 'working',
         focused: true,
       },
@@ -41,13 +43,25 @@ describe('createHerdrApi', () => {
         workspaceId: 'w2',
         agent: null,
         name: null,
+        label: 'mystery-task',
         status: 'unknown',
         focused: false,
       },
     ])
-    expect(fake?.requests).toEqual([
-      { id: expect.stringMatching(/^codecolony:agent\.list:/), method: 'agent.list', params: {} },
+    expect(fake?.requests.map((request) => request.method).sort()).toEqual([
+      'agent.list',
+      'tab.list',
+      'workspace.list',
     ])
+  })
+
+  it('falls back to agent names when Herdr cannot list workspaces or tabs', async () => {
+    const herdr = await api((request) =>
+      request.method === 'agent.list'
+        ? ok(request, { type: 'agent_list', agents: FAKE_AGENTS })
+        : JSON.stringify({ id: request.id, error: { code: 'unknown_method', message: 'no' } }),
+    )
+    expect((await herdr.listWorkers()).map((worker) => worker.label)).toEqual(['dock', 'w2:p4'])
   })
 
   it('focuses a pane by id', async () => {
