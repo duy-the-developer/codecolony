@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { writeAtomic } from '../core/atomic-write.ts'
+import { looseId } from '../shared/route-boxes.ts'
 import { symbolBand } from '../shared/symbol-band.ts'
 import {
   type Edge,
@@ -8,6 +9,7 @@ import {
   WORLD_ID,
   type WorldNode,
 } from '../shared/world-types.ts'
+import { type LaneWidening, resolveLaneWidening } from './lane-widening.ts'
 import { fileUnits, naturalHeight, packCells } from './pack-cells.ts'
 import { packRows, type RowItem, type StoredRow } from './pack-rows.ts'
 import { rankItems } from './rank-items.ts'
@@ -20,7 +22,8 @@ import { rankItems } from './rank-items.ts'
 // with no border or label of its own. Every size, padding and gap is a whole
 // number of units, so every edge lands on a grid line. The order of children
 // is remembered in the layout store, so the map keeps its shape as code
-// changes.
+// changes. Gutters then widen, a whole unit at a time, to make room for the
+// Dependency overlay's lanes (see lane-widening.ts).
 
 export interface LayoutStore {
   // container id -> its rows of child ids.
@@ -36,12 +39,19 @@ export interface StoredModule {
 }
 
 export interface LayoutOptions {
-  // Whole units between modules, and between packages. The dependency
-  // overlay widens it to make room for its lanes.
+  // Whole units between modules, and between packages.
   gutter: number
+  // The widest a gutter grows, in units, to fit the Dependency overlay's
+  // lanes one unit apart (8 by default). At gutter or less, gutters keep
+  // their width.
+  maxGutter?: number
 }
 
 export const DEFAULT_LAYOUT: LayoutOptions = { gutter: 2 }
+const DEFAULT_MAX_GUTTER = 8
+// Times the gutters are measured and widened. Lanes still short after the
+// last round share lanes on the page.
+const WIDEN_ROUNDS = 2
 
 // Bumped when stored layouts can no longer be read as they are; older ones are
 // dropped and the world is laid out afresh. Version 3 keeps the files of a
@@ -62,12 +72,6 @@ const MIN_MODULE_CELLS = 2
 // A module keeps the height its files pack to until they need this many
 // times more or half as much.
 const MODULE_REGROW = 1.5
-
-// The row item that holds a container's own files. "#" only ever follows a
-// file id elsewhere, so it cannot clash with a node id.
-export function looseId(container: string): string {
-  return `${container}#files`
-}
 
 export function emptyLayout(): LayoutStore {
   return { rows: new Map(), modules: new Map() }
@@ -107,7 +111,7 @@ export function layoutWorld(
   nodes: WorldNode[],
   edges: readonly Edge[],
   store: LayoutStore,
-  { gutter }: LayoutOptions = DEFAULT_LAYOUT,
+  { gutter, maxGutter = DEFAULT_MAX_GUTTER }: LayoutOptions = DEFAULT_LAYOUT,
 ): void {
   if (!Number.isInteger(gutter) || gutter < 1) {
     throw new RangeError(`gutter must be a whole number of units, got ${gutter}`)
@@ -124,6 +128,24 @@ export function layoutWorld(
   const root = byId.get(WORLD_ID)
   if (!root) throw new Error('world node missing')
   const graphs = buildGraphs(edges, byId)
+  const widening: LaneWidening = new Map()
+  for (let round = 0; ; round++) {
+    layOut(root, children, graphs, store, gutter, widening)
+    if (round === WIDEN_ROUNDS || maxGutter <= gutter) return
+    if (!resolveLaneWidening(nodes, edges, store.rows, maxGutter, widening)) return
+  }
+}
+
+// One pass over the tree: sizes every container bottom-up, then places every
+// node top-down. Reads the saved order from the store and writes the new one.
+function layOut(
+  root: WorldNode,
+  children: ReadonlyMap<string, WorldNode[]>,
+  graphs: ReadonlyMap<string, Map<string, Set<string>>>,
+  store: LayoutStore,
+  gutter: number,
+  widening: LaneWidening,
+): void {
   const rows = new Map<string, StoredRow[]>()
   const modules = new Map<string, StoredModule>()
   // Child rectangles relative to their container's content area, and the
@@ -179,7 +201,11 @@ export function layoutWorld(
       })
     }
     const gap = node.kind === 'world' ? 2 * gutter : gutter
-    const packed = packRows(items, store.rows.get(node.id) ?? [], { gutter: gap })
+    const widen = widening.get(node.id)
+    const packed = packRows(items, store.rows.get(node.id) ?? [], {
+      gutter: gap,
+      ...(widen ? { widen } : {}),
+    })
     rows.set(node.id, packed.rows)
     placed.set(node.id, packed.placed)
     const pad = node.kind === 'world' ? 0 : PAD
@@ -319,7 +345,7 @@ function buildGraphs(
 function placeSymbol(
   symbol: WorldNode,
   holder: WorldNode,
-  children: Map<string, WorldNode[]>,
+  children: ReadonlyMap<string, WorldNode[]>,
   file: WorldNode = holder,
 ): void {
   const range = symbol.range

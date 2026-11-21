@@ -2,7 +2,11 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { buildChannelGraph, laneCapacity } from '../shared/channel-graph.ts'
+import { buildRouteBoxes } from '../shared/route-boxes.ts'
+import { countChannelLoad } from '../shared/route-lanes.ts'
 import type { Edge, NodeKind, Rect, WorldNode } from '../shared/world-types.ts'
+import { listBlockLinks } from './lane-widening.ts'
 import { emptyLayout, layoutWorld, loadLayout, saveLayout } from './world-layout.ts'
 
 const ZERO = { x: 0, y: 0, w: 0, h: 0 }
@@ -213,6 +217,34 @@ describe('layoutWorld', () => {
       const after = nested.find((n) => n.id === id)?.rect
       const was = before.get(id) as Rect
       expect([after?.x, after?.y], id).toEqual([was.x, was.y])
+    }
+  })
+
+  it('widens gutters to fit a lane per dependency, up to the cap', () => {
+    // Every module imports every other one.
+    const modules = makeNodes().filter((n) => n.kind === 'module')
+    const edges = modules.flatMap((a) =>
+      modules.filter((b) => b !== a).map((b) => importEdge(`${a.id}/f0.ts`, `${b.id}/f0.ts`)),
+    )
+    const narrow = makeNodes()
+    layoutWorld(narrow, edges, emptyLayout(), { gutter: 2, maxGutter: 2 })
+    const wide = makeNodes()
+    layoutWorld(wide, edges, emptyLayout())
+    const area = (nodes: WorldNode[]) => {
+      const { w, h } = (nodes.find((n) => n.kind === 'world') as WorldNode).rect
+      return w * h
+    }
+    expect(area(wide)).toBeGreaterThan(area(narrow))
+
+    const boxes = buildRouteBoxes(wide)
+    const graph = buildChannelGraph(boxes.root as NonNullable<typeof boxes.root>)
+    const load = countChannelLoad(graph, listBlockLinks(edges, boxes.blockOf))
+    graph.channels.forEach((channel, c) => {
+      expect(laneCapacity(channel)).toBeGreaterThanOrEqual(Math.min(load[c] as number, 7))
+    })
+    for (const n of wide) {
+      if (n.kind === 'symbol') continue
+      expect(Number.isInteger(n.rect.x) && Number.isInteger(n.rect.y), n.id).toBe(true)
     }
   })
 

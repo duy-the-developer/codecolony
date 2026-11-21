@@ -12,6 +12,7 @@ import { useSceneRevision } from '../../hooks/use-scene-revision.ts'
 import { useShellPreferences } from '../../hooks/use-shell-preferences.ts'
 import { useWorld } from '../../hooks/use-world.ts'
 import { type MapHandle, ZOOM_STEP } from '../../map-controller.ts'
+import type { OverlayId } from '../../overlays.ts'
 import { MAX_PANEL_PX, MIN_PANEL_PX, type ShellPreferences } from '../../shell-preferences.ts'
 import { fetchSearchMatches } from '../../world-client.ts'
 import { AppHeader } from '../app-header/app-header.tsx'
@@ -35,6 +36,15 @@ export function App() {
   const [selectedId, setSelectedId] = useState<string>()
   const [, setEdgeVersion] = useState(0)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
+  // Overlays start off: the map shows only blocks until one is switched on.
+  const [overlays, setOverlays] = useState<ReadonlySet<OverlayId>>(() => new Set())
+  const toggleOverlay = useCallback((id: OverlayId) => {
+    setOverlays((current) => {
+      const next = new Set(current)
+      if (!next.delete(id)) next.add(id)
+      return next
+    })
+  }, [])
   const [dockElement, setDockElement] = useState<HTMLDivElement | null>(null)
   const { workers } = useDock(dockElement)
   const mapRef = useRef<MapHandle | null>(null)
@@ -163,6 +173,8 @@ export function App() {
         isRightCollapsed={collapsed.right}
         onToggleLeft={() => togglePanel('left')}
         onToggleRight={() => togglePanel('right')}
+        overlays={overlays}
+        onToggleOverlay={toggleOverlay}
       />
       <ResizablePanelGroup
         className="min-h-0 flex-1"
@@ -196,7 +208,13 @@ export function App() {
         </ResizablePanel>
         <ResizableHandle aria-label="Resize left panel" />
         <ResizablePanel id="map" minSize="25%">
-          <MapView scene={scene} handleRef={mapRef} onSelect={setSelectedId} onOpen={showFile}>
+          <MapView
+            scene={scene}
+            handleRef={mapRef}
+            overlays={overlays}
+            onSelect={setSelectedId}
+            onOpen={showFile}
+          >
             <div className="pointer-events-none absolute inset-x-3 top-3 flex items-start gap-2">
               <MapBreadcrumb scene={scene} selected={selected} onPick={pick} />
             </div>
