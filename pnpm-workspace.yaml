@@ -3,3 +3,6 @@ packages:
   - packages/*
 allowBuilds:
   esbuild: true
+  # Grammars are loaded from their bundled .wasm files; the native bindings are not needed.
+  tree-sitter-javascript: false
+  tree-sitter-typescript: false

@@ -1,5 +1,6 @@
 import { createServer } from 'node:http'
 import { fileURLToPath } from 'node:url'
+import { Colony } from '../indexer/colony.ts'
 import { createApi } from './api.ts'
 import { loadConfig } from './config.ts'
 import { isLoopbackHost } from './host.ts'
@@ -7,6 +8,7 @@ import { type Handler, staticFiles } from './static.ts'
 
 const HOST = '127.0.0.1'
 const DEFAULT_PORT = 4320
+const WATCH_MS = 2000
 
 const appRoot = fileURLToPath(new URL('../../', import.meta.url))
 const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url))
@@ -14,7 +16,10 @@ const dev = process.argv.includes('--dev')
 const port = Number(process.env.PORT ?? DEFAULT_PORT)
 
 const config = loadConfig({ repoRoot })
-const api = createApi(config)
+const colony = new Colony(config)
+await colony.refresh()
+colony.watch(WATCH_MS)
+const api = createApi(config, colony)
 
 let web: Handler
 if (dev) {
@@ -43,3 +48,11 @@ server.listen(port, HOST, () => {
     `Code Colony on http://${HOST}:${port} (${dev ? 'dev' : 'built'}; config: ${config.source})`,
   )
 })
+
+// Stop language servers with the app.
+for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+  process.once(signal, () => {
+    server.close()
+    colony.close().finally(() => process.exit(0))
+  })
+}
