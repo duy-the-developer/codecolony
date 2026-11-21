@@ -57,7 +57,7 @@ A language is one `LanguageAdapter` (`core/language-adapter.ts`) plus a grammar 
      | `imports` | `@import` on the statement, `@import.source` on the module string, `@import.name` on each bound name. Several patterns may match one statement; they are merged.                                                                                                                            |
      | `calls`   | `@call` on the call, `@call.name` on the called identifier, `@call.member` when it is a member call.                                                                                                                                                                                        |
 
-   - `isBranch(node)`: true for nodes that add a branch (if, loops, case, catch, short-circuit operators). It drives the complexity shadows.
+   - `isBranch(type, node)`: true for nodes that add a branch (if, loops, case, catch, short-circuit operators). It drives the complexity shadows. It runs on every syntax node, so decide from `type` where you can and call `node()` only when the type is not enough (it builds the full node, which is much slower).
    - `resolveImport(specifier, fromPath, files)`: the repository path an import points to, or `undefined` for external packages.
    - Optional hooks: `symbolKind` (refine or drop a captured definition), `isExported`, `isTypeOnlyImport`.
    - Optional `languageServer`: the command of any server that speaks LSP over stdio (`pyright-langserver --stdio`, `gopls`, `jdtls`, `csharp-ls`, ...), its `languageId` per file and `initializationOptions`. The core drives it through `core/lsp.ts`: `textDocument/prepareCallHierarchy` and `callHierarchy/outgoingCalls` turn calls into `lsp` edges.

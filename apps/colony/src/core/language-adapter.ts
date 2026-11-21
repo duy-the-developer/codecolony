@@ -22,7 +22,9 @@ export interface LanguageAdapter {
   grammar(path: string): string
   queries: AdapterQueries
   // True for syntax nodes that add a branch (if, loop, case, catch, &&, ...).
-  isBranch(node: Node): boolean
+  // Called for every node of every file, so decide from the node type when
+  // possible: node() builds the full node, which is several times slower.
+  isBranch(type: string, node: () => Node): boolean
   // Maps a symbol query capture suffix (definition.<suffix>) to a kind.
   // Defaults to the suffix itself when it is a SymbolKind.
   symbolKind?(suffix: string, node: Node): SymbolKind | undefined

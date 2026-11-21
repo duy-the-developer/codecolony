@@ -108,10 +108,10 @@ export const typescriptAdapter: LanguageAdapter = {
     return require.resolve(`tree-sitter-typescript/tree-sitter-${name}.wasm`)
   },
   queries: { symbols: SYMBOLS, imports: IMPORTS, calls: CALLS },
-  isBranch(node) {
-    if (BRANCHES.has(node.type)) return true
-    if (node.type !== 'binary_expression') return false
-    return LOGICAL.has(node.childForFieldName('operator')?.type ?? '')
+  isBranch(type, node) {
+    if (BRANCHES.has(type)) return true
+    if (type !== 'binary_expression') return false
+    return LOGICAL.has(node().childForFieldName('operator')?.type ?? '')
   },
   symbolKind,
   isExported,

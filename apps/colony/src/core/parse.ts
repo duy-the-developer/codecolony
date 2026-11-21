@@ -100,15 +100,16 @@ export async function parseFile(
 function branchOffsets(tree: Tree, adapter: LanguageAdapter): number[] {
   const offsets: number[] = []
   const cursor = tree.walk()
+  const current = () => cursor.currentNode
   let descend = true
   for (;;) {
     if (descend && cursor.gotoFirstChild()) {
-      if (adapter.isBranch(cursor.currentNode)) offsets.push(cursor.startIndex)
+      if (adapter.isBranch(cursor.nodeType, current)) offsets.push(cursor.startIndex)
       continue
     }
     if (cursor.gotoNextSibling()) {
       descend = true
-      if (adapter.isBranch(cursor.currentNode)) offsets.push(cursor.startIndex)
+      if (adapter.isBranch(cursor.nodeType, current)) offsets.push(cursor.startIndex)
       continue
     }
     if (!cursor.gotoParent()) break
