@@ -20,7 +20,8 @@ export interface DockHandle {
   // Asks Herdr to focus a pane; the terminal then shows it.
   focusPane(paneId: string): Promise<void>
   listWorkers(): Promise<Worker[]>
-  // Called with the worker list on every refresh; returns an unsubscribe.
+  // Called with the current worker list, then whenever it changes; returns an
+  // unsubscribe.
   onWorkers(listener: (workers: Worker[]) => void): () => void
   dispose(): void
 }
@@ -32,6 +33,7 @@ export interface DockMountOptions {
 }
 
 const TOKEN_KEY = 'codecolony.dock.token'
+const STALE_TOKEN = 'Token not accepted: the server restarted, open the URL it printed'
 
 // Reads the token from `#token=...` once, keeps it for this tab in
 // sessionStorage and strips it from the address bar.
@@ -64,15 +66,20 @@ export function mountDock(el: HTMLElement, { token, pollMs = 3000 }: DockMountOp
   el.replaceChildren(bar, screen)
 
   const listeners = new Set<(workers: Worker[]) => void>()
+  let current: Worker[] | null = null
+  let shownKey = ''
   let disposed = false
+
+  // Opening a token URL in a tab already on this page only changes the hash,
+  // which reloads nothing; a server restart prints a new token, so take it.
+  const onHash = () => {
+    const next = readToken()
+    if (next && next !== token) location.reload()
+  }
+  window.addEventListener('hashchange', onHash)
 
   if (!token) {
     state.textContent = 'No token: open the URL the server printed, with #token=...'
-    // Pasting that URL into this tab only changes the hash, which reloads nothing.
-    const onHash = () => {
-      if (readToken()) location.reload()
-    }
-    window.addEventListener('hashchange', onHash)
     return {
       focusPane: () => Promise.reject(new Error('dock has no token')),
       listWorkers: () => Promise.reject(new Error('dock has no token')),
@@ -155,6 +162,7 @@ export function mountDock(el: HTMLElement, { token, pollMs = 3000 }: DockMountOp
 
   async function listWorkers(): Promise<Worker[]> {
     const response = await fetch(WORKERS_PATH, { headers, cache: 'no-store' })
+    if (response.status === 401) throw new Error(STALE_TOKEN)
     const body = (await response.json()) as WorkersResponse | { error: string }
     if (!response.ok || !('workers' in body)) {
       throw new Error('error' in body ? body.error : `workers: HTTP ${response.status}`)
@@ -169,6 +177,7 @@ export function mountDock(el: HTMLElement, { token, pollMs = 3000 }: DockMountOp
       headers: { ...headers, 'content-type': 'application/json' },
       body: JSON.stringify(request),
     })
+    if (response.status === 401) throw new Error(STALE_TOKEN)
     if (!response.ok) {
       const body = (await response.json().catch(() => null)) as { error?: string } | null
       throw new Error(body?.error ?? `focus: HTTP ${response.status}`)
@@ -204,10 +213,16 @@ export function mountDock(el: HTMLElement, { token, pollMs = 3000 }: DockMountOp
     try {
       const workers = await listWorkers()
       if (disposed) return
+      // Rebuilding the buttons on every poll would drop a click that lands mid-rebuild.
+      const key = JSON.stringify(workers)
+      if (key === shownKey) return
+      shownKey = key
+      current = workers
       renderWorkers(workers)
       for (const listener of listeners) listener(workers)
     } catch (error) {
       if (disposed) return
+      shownKey = ''
       const item = document.createElement('li')
       item.className = 'cc-dock-note'
       item.textContent = `Workers unavailable: ${error instanceof Error ? error.message : error}`
@@ -224,10 +239,12 @@ export function mountDock(el: HTMLElement, { token, pollMs = 3000 }: DockMountOp
     listWorkers,
     onWorkers(listener) {
       listeners.add(listener)
+      if (current) listener(current)
       return () => listeners.delete(listener)
     },
     dispose() {
       disposed = true
+      window.removeEventListener('hashchange', onHash)
       window.clearInterval(poll)
       resizer.disconnect()
       ws?.close()
