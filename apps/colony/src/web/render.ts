@@ -1,6 +1,7 @@
 import { type Edge, HEADER_UNITS, type SymbolKind, type WorldNode } from '../shared/world-types.ts'
 import type { Camera, Viewport } from './camera.ts'
-import type { FrameLane, LaneLayer } from './lane-layer.ts'
+import type { LaneFrame, LaneLayer } from './lane-layer.ts'
+import type { LaneRoutes } from './lane-world.ts'
 import { MIN_LINK_ALPHA } from './link-cache.ts'
 import { fade, GRID_FADE, LABEL_FONT, MIN_VISIBLE_PX, openness } from './lod.ts'
 import { OVERLAYS, type OverlayId } from './overlays.ts'
@@ -105,7 +106,7 @@ export function render(
     state.focusSubtree,
     state.overlays.has('dependency'),
   )
-  if (frame) drawLanes(ctx, frame.lanes, camera, view)
+  if (frame) drawLanes(ctx, frame, camera, view)
   drawLabels(ctx, labels)
   ctx.globalAlpha = 1
   ctx.setLineDash([])
@@ -342,88 +343,167 @@ function ellipsize(ctx: CanvasRenderingContext2D, text: string, width: number): 
   return lo === 0 ? '' : `${text.slice(0, lo)}…`
 }
 
-// Lanes sit one grid unit apart, so lines and arrowheads scale with the unit
-// up to these sizes, in pixels.
+// Lanes sit one grid unit apart, so lines scale with the unit up to these
+// widths, in pixels. Arrowheads show once a unit is ARROW_MIN_PX wide.
 const LANE_WIDTH_PX: readonly [number, number] = [0.75, 2]
 const ARROW_PX: readonly [number, number] = [3, 8]
-const LANE_ALPHA: Record<FrameLane['emphasis'], number> = { normal: 0.75, hot: 1, dim: 0.12 }
+const ARROW_MIN_PX = 2
+type LaneEmphasis = 'normal' | 'hot' | 'dim'
+const LANE_ALPHA: Record<LaneEmphasis, number> = { normal: 0.75, hot: 1, dim: 0.12 }
+// Lanes are bucketed by where their bounding box centres fall, in tiles this
+// many units wide, so off-screen buckets are skipped.
+const LANE_TILE_UNITS = 64
+
+// A set of lanes as paths in world units, in buckets with bounds.
+interface LanePaths {
+  buckets: LaneBucket[]
+}
+
+interface LaneBucket {
+  path: Path2D
+  x0: number
+  y0: number
+  x1: number
+  y1: number
+  // The routed links it holds, as indices into the routes.
+  lanes: number[]
+}
+
+const allPaths = new WeakMap<LaneRoutes, LanePaths>()
+const hotPaths = new WeakMap<Uint8Array, { routes: LaneRoutes; paths: LanePaths }>()
+
+// Builds the paths of the routed links that pick() keeps, once.
+function buildLanePaths(routes: LaneRoutes, pick: (i: number) => boolean): LanePaths {
+  const buckets = new Map<string, LaneBucket>()
+  for (let i = 0; i < routes.links.length; i++) {
+    const start = routes.offsets[i] as number
+    const end = routes.offsets[i + 1] as number
+    if (end <= start || !pick(i)) continue
+    let x0 = Number.POSITIVE_INFINITY
+    let y0 = Number.POSITIVE_INFINITY
+    let x1 = Number.NEGATIVE_INFINITY
+    let y1 = Number.NEGATIVE_INFINITY
+    for (let k = start; k < end; k += 2) {
+      const x = routes.points[k] as number
+      const y = routes.points[k + 1] as number
+      x0 = Math.min(x0, x)
+      y0 = Math.min(y0, y)
+      x1 = Math.max(x1, x)
+      y1 = Math.max(y1, y)
+    }
+    const tile = `${Math.floor((x0 + x1) / 2 / LANE_TILE_UNITS)},${Math.floor((y0 + y1) / 2 / LANE_TILE_UNITS)}`
+    let bucket = buckets.get(tile)
+    if (!bucket) {
+      bucket = { path: new Path2D(), x0, y0, x1, y1, lanes: [] }
+      buckets.set(tile, bucket)
+    }
+    bucket.x0 = Math.min(bucket.x0, x0)
+    bucket.y0 = Math.min(bucket.y0, y0)
+    bucket.x1 = Math.max(bucket.x1, x1)
+    bucket.y1 = Math.max(bucket.y1, y1)
+    bucket.lanes.push(i)
+    bucket.path.moveTo(routes.points[start] as number, routes.points[start + 1] as number)
+    for (let k = start + 2; k < end; k += 2) {
+      bucket.path.lineTo(routes.points[k] as number, routes.points[k + 1] as number)
+    }
+  }
+  return { buckets: [...buckets.values()] }
+}
 
 // Each lane is a polyline from the importer's side to the imported block's
-// side, where an arrowhead points into the block. Lanes off screen are
-// skipped; dimmed ones go first so highlighted ones stay on top.
+// side, where an arrowhead points into the block. With a focus, every lane is
+// dimmed and the focus's lanes drawn bright on top. Paths are built once per
+// routing and drawn in world units, so a frame only strokes the buckets on
+// screen.
 function drawLanes(
   ctx: CanvasRenderingContext2D,
-  lanes: readonly FrameLane[],
+  frame: LaneFrame,
   camera: Camera,
   view: Viewport,
 ): void {
+  const layers: [LaneRoutes, LanePaths, LaneEmphasis][] = []
+  const { all, hot, focus } = frame
+  if (all) {
+    let paths = allPaths.get(all)
+    if (!paths) {
+      paths = buildLanePaths(all, () => true)
+      allPaths.set(all, paths)
+    }
+    layers.push([all, paths, hot ? 'dim' : 'normal'])
+    if (hot) {
+      let held = hotPaths.get(hot)
+      if (held?.routes !== all) {
+        held = {
+          routes: all,
+          paths: buildLanePaths(all, (i) => hot[all.links[i] as number] === 1),
+        }
+        hotPaths.set(hot, held)
+      }
+      layers.push([all, held.paths, 'hot'])
+    }
+  }
+  if (focus) {
+    let paths = allPaths.get(focus)
+    if (!paths) {
+      paths = buildLanePaths(focus, () => true)
+      allPaths.set(focus, paths)
+    }
+    layers.push([focus, paths, 'hot'])
+  }
+  if (layers.length === 0) return
+
   const unit = camera.scale
   const width = Math.min(Math.max(unit * 0.25, LANE_WIDTH_PX[0]), LANE_WIDTH_PX[1])
   const arrow = Math.min(Math.max(unit * 0.8, ARROW_PX[0]), ARROW_PX[1])
   const [left, top] = camera.toWorld(0, 0)
   const [right, bottom] = camera.toWorld(view.width, view.height)
+  const isOnScreen = (b: LaneBucket) =>
+    b.x1 >= left && b.x0 <= right && b.y1 >= top && b.y0 <= bottom
+  const base = ctx.getTransform()
   ctx.strokeStyle = DEPENDENCY_COLOR
   ctx.fillStyle = DEPENDENCY_COLOR
   ctx.setLineDash([])
   ctx.lineJoin = 'miter'
-  for (const emphasis of ['dim', 'normal', 'hot'] as const) {
+  for (const [routes, paths, emphasis] of layers) {
+    const shown = paths.buckets.filter(isOnScreen)
     ctx.globalAlpha = LANE_ALPHA[emphasis]
-    ctx.lineWidth = emphasis === 'hot' ? width + 0.75 : width
-    const heads: number[] = []
+    ctx.setTransform(
+      base.a * unit,
+      0,
+      0,
+      base.d * unit,
+      base.e - camera.x * unit * base.a,
+      base.f - camera.y * unit * base.d,
+    )
+    ctx.lineWidth = (emphasis === 'hot' ? width + 0.75 : width) / unit
+    for (const bucket of shown) ctx.stroke(bucket.path)
+    ctx.setTransform(base)
+    if (unit < ARROW_MIN_PX) continue
     ctx.beginPath()
-    for (const lane of lanes) {
-      if (lane.emphasis !== emphasis || !isInView(lane.points, left, top, right, bottom)) continue
-      const p = lane.points
-      for (let k = 0; k + 1 < p.length; k += 2) {
-        const [sx, sy] = camera.toScreen(p[k] as number, p[k + 1] as number)
-        if (k === 0) ctx.moveTo(sx, sy)
-        else ctx.lineTo(sx, sy)
+    for (const bucket of shown) {
+      for (const i of bucket.lanes) {
+        const end = routes.offsets[i + 1] as number
+        const [px, py] = camera.toScreen(
+          routes.points[end - 4] as number,
+          routes.points[end - 3] as number,
+        )
+        const [qx, qy] = camera.toScreen(
+          routes.points[end - 2] as number,
+          routes.points[end - 1] as number,
+        )
+        if (qx < 0 || qy < 0 || qx > view.width || qy > view.height) continue
+        const angle = Math.atan2(qy - py, qx - px)
+        const along = [Math.cos(angle) * arrow, Math.sin(angle) * arrow] as const
+        const across = [-along[1] * 0.5, along[0] * 0.5] as const
+        ctx.moveTo(qx, qy)
+        ctx.lineTo(qx - along[0] + across[0], qy - along[1] + across[1])
+        ctx.lineTo(qx - along[0] - across[0], qy - along[1] - across[1])
+        ctx.closePath()
       }
-      heads.push(...p.subarray(p.length - 4))
-    }
-    ctx.stroke()
-    ctx.beginPath()
-    for (let h = 0; h < heads.length; h += 4) {
-      const [px, py] = camera.toScreen(heads[h] as number, heads[h + 1] as number)
-      const [qx, qy] = camera.toScreen(heads[h + 2] as number, heads[h + 3] as number)
-      const angle = Math.atan2(qy - py, qx - px)
-      const back = (side: number) => [
-        qx - Math.cos(angle) * arrow + side * Math.sin(angle) * arrow * 0.5,
-        qy - Math.sin(angle) * arrow - side * Math.cos(angle) * arrow * 0.5,
-      ]
-      const [ax, ay] = back(1) as [number, number]
-      const [bx, by] = back(-1) as [number, number]
-      ctx.moveTo(qx, qy)
-      ctx.lineTo(ax, ay)
-      ctx.lineTo(bx, by)
-      ctx.closePath()
     }
     ctx.fill()
   }
   ctx.globalAlpha = 1
-}
-
-// Whether a lane's bounding box meets the world-space window.
-function isInView(
-  points: Float64Array,
-  left: number,
-  top: number,
-  right: number,
-  bottom: number,
-): boolean {
-  let x0 = Number.POSITIVE_INFINITY
-  let y0 = Number.POSITIVE_INFINITY
-  let x1 = Number.NEGATIVE_INFINITY
-  let y1 = Number.NEGATIVE_INFINITY
-  for (let k = 0; k + 1 < points.length; k += 2) {
-    const x = points[k] as number
-    const y = points[k + 1] as number
-    if (x < x0) x0 = x
-    if (x > x1) x1 = x
-    if (y < y0) y0 = y
-    if (y > y1) y1 = y
-  }
-  return x1 >= left && x0 <= right && y1 >= top && y0 <= bottom
 }
 
 // The deepest drawn node under a screen point.

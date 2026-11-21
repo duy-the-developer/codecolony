@@ -12,17 +12,15 @@ import type { Scene } from './scene.ts'
 // of the hovered or selected node. Until a level's routes arrive, the last
 // ones routed are drawn.
 
-export type LaneEmphasis = 'normal' | 'hot' | 'dim'
-
-export interface FrameLane {
-  // Corner points x0, y0, x1, y1, ... in world units, from the importer to
-  // the imported block, whose edge gets the arrowhead.
-  points: Float64Array
-  emphasis: LaneEmphasis
-}
-
 export interface LaneFrame {
-  lanes: FrameLane[]
+  // Every link of the level, with the overlay on.
+  all: LaneRoutes | undefined
+  // Per link of all's level, whether it stands out (1) because it carries an
+  // import of the focus; undefined when nothing is in focus. Kept while the
+  // focus and level stay the same.
+  hot: Uint8Array | undefined
+  // Only the focus's links, with the overlay off.
+  focus: LaneRoutes | undefined
   // Drawn nodes at the other end of the focus's imports, by id.
   partners: ReadonlySet<string>
 }
@@ -83,7 +81,12 @@ export class LaneLayer {
     const open = this.links.listOpenContainers(scale)
     const level = this.levels.get(open.key)
     let job: Job | undefined
-    const lanes: FrameLane[] = []
+    const frame: LaneFrame = {
+      all: undefined,
+      hot: undefined,
+      focus: undefined,
+      partners: new Set(),
+    }
     if (!level) {
       job = { kind: 'level', key: open.key, open: open.ids }
     } else if (isOverlayOn) {
@@ -94,34 +97,35 @@ export class LaneLayer {
       hot.forEach((isHot, link) => {
         if (isHot) only.push(link)
       })
-      const routes = this.focusRoutes.get(`${open.key}\n${focus}`)
-      if (routes) addLanes(lanes, routes, () => 'hot')
-      else if (only.length > 0) job = { kind: 'focus', key: open.key, open: open.ids, focus, only }
+      frame.focus = this.focusRoutes.get(`${open.key}\n${focus}`)
+      if (!frame.focus && only.length > 0) {
+        job = { kind: 'focus', key: open.key, open: open.ids, focus, only }
+      }
     }
     if (isOverlayOn) {
       const routed = this.allRoutes.get(open.key)
       const shown = routed ? { key: open.key, routes: routed } : this.lastAll
-      if (shown) {
-        const shownLevel = this.levels.get(shown.key)
-        const hot =
-          focus && shownLevel ? this.listHot(shown.key, shownLevel, focusSubtree) : undefined
-        addLanes(lanes, shown.routes, (link) => (hot ? (hot[link] ? 'hot' : 'dim') : 'normal'))
+      const shownLevel = shown && this.levels.get(shown.key)
+      if (shown && shownLevel) {
+        frame.all = shown.routes
+        if (focus) frame.hot = this.listHot(shown.key, shownLevel, focusSubtree)
       }
     }
     this.want(job)
 
-    const partners = new Set<string>()
     if (focus) {
-      const frame = this.links.listLinks(scale, holders, focusSubtree)
-      for (let r = 0; r < frame.count; r++) {
-        if (!frame.hot[r] || frame.kind[r] !== 'import') continue
-        const from = holders[frame.from[r] as number]?.node.id
-        const to = holders[frame.to[r] as number]?.node.id
+      const partners = new Set<string>()
+      const links = this.links.listLinks(scale, holders, focusSubtree)
+      for (let r = 0; r < links.count; r++) {
+        if (!links.hot[r] || links.kind[r] !== 'import') continue
+        const from = holders[links.from[r] as number]?.node.id
+        const to = holders[links.to[r] as number]?.node.id
         if (from && !focusSubtree.has(from)) partners.add(from)
         if (to && !focusSubtree.has(to)) partners.add(to)
       }
+      frame.partners = partners
     }
-    return { lanes, partners }
+    return frame
   }
 
   // Which of a level's links carry an import into or out of the focus. Imports
@@ -178,23 +182,6 @@ export class LaneLayer {
         }
         done()
       }, failed)
-  }
-}
-
-// Adds each routed link's lane, drawn as emphasisOf(its link) says.
-function addLanes(
-  lanes: FrameLane[],
-  routes: LaneRoutes,
-  emphasisOf: (link: number) => LaneEmphasis,
-): void {
-  for (let i = 0; i < routes.links.length; i++) {
-    const start = routes.offsets[i] as number
-    const end = routes.offsets[i + 1] as number
-    if (end <= start) continue
-    lanes.push({
-      points: routes.points.subarray(start, end),
-      emphasis: emphasisOf(routes.links[i] as number),
-    })
   }
 }
 

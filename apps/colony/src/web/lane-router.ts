@@ -1,3 +1,4 @@
+import { logError } from '../shared/log.ts'
 import type { RouteNode } from '../shared/route-boxes.ts'
 import { type LaneEdge, type LaneLevel, type LaneRoutes, LaneWorld } from './lane-world.ts'
 
@@ -64,6 +65,13 @@ function createWorkerRouter(): LaneRouterHandle {
     const resolve = waiting.get(event.data.id)
     waiting.delete(event.data.id)
     resolve?.(event.data)
+  }
+  // A crashed worker answers nothing more: fail what is waiting, so callers
+  // stop waiting for it.
+  worker.onerror = (event: ErrorEvent) => {
+    logError('Lane worker failed', { message: event.message })
+    for (const [id, resolve] of waiting) resolve({ id, error: 'worker failed' })
+    waiting.clear()
   }
   const ask = (request: Exclude<LaneRequest, { op: 'world' }>) =>
     new Promise<LaneReply>((resolve) => {

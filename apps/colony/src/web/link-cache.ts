@@ -41,8 +41,8 @@ interface LevelLinks {
   readonly toTop: Int32Array
   // The link each edge was merged into, or -1.
   readonly linkOfEdge: Int32Array
-  // The containers that show their children at this level, and a key that is
-  // the same for every level with the same ones.
+  // The containers holding folders that show their children at this level,
+  // and a key that is the same for every level with the same ones.
   readonly open: OpenContainers
 }
 
@@ -75,6 +75,8 @@ export class LinkCache {
   private readonly depth: Int32Array
   private readonly side: Float64Array
   private readonly hasKids: Uint8Array
+  // Holds a folder or larger: whether it is open decides lane blocks.
+  private readonly hasFolders: Uint8Array
   // For a symbol, the file that holds it; otherwise -1.
   private readonly fileOf: Int32Array
   private readonly index = new Map<string, number>()
@@ -125,6 +127,7 @@ export class LinkCache {
     this.depth = new Int32Array(n)
     this.side = new Float64Array(n)
     this.hasKids = new Uint8Array(n)
+    this.hasFolders = new Uint8Array(n)
     this.fileOf = new Int32Array(n)
     this.onScreen = new Int32Array(n)
     this.holderAt = new Int32Array(n)
@@ -135,6 +138,11 @@ export class LinkCache {
       this.depth[i] = p < 0 ? 0 : (this.depth[p] as number) + 1
       this.side[i] = Math.min(node.rect.w, node.rect.h)
       this.hasKids[i] = scene.children.has(node.id) ? 1 : 0
+      this.hasFolders[i] = scene.children
+        .get(node.id)
+        ?.some((kid) => kid.kind !== 'file' && kid.kind !== 'symbol')
+        ? 1
+        : 0
       this.fileOf[i] =
         node.kind !== 'symbol' || p < 0
           ? -1
@@ -316,11 +324,13 @@ export class LinkCache {
       while (i >= 0 && !visible[i]) i = parent[i] as number
       return i
     }
+    // A container is open when a child shows. Only containers that hold
+    // folders count: a module of files, or a file showing its symbols, is one
+    // lane block either way.
     const isOpen = new Uint8Array(visible.length)
     for (let i = 0; i < visible.length; i++) {
-      if (visible[i] && parent[i] !== undefined && (parent[i] as number) >= 0) {
-        isOpen[parent[i] as number] = 1
-      }
+      const p = parent[i] as number
+      if (visible[i] && p >= 0 && this.hasFolders[p]) isOpen[p] = 1
     }
     const openIndices: number[] = []
     for (let i = 0; i < isOpen.length; i++) if (isOpen[i]) openIndices.push(i)
