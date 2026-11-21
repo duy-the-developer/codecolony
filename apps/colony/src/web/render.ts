@@ -157,7 +157,7 @@ function shadowLength(node: WorldNode, w: number, h: number): number {
   const side = Math.min(w, h)
   const density =
     node.kind === 'file' ? node.complexity : (node.complexity * 40) / Math.max(node.lines, 1)
-  return Math.min(Math.log2(1 + density) * 0.06 * side, 0.35 * side)
+  return Math.min(Math.log2(1 + density) * 0.025 * side, 0.15 * side)
 }
 
 function drawBody(ctx: CanvasRenderingContext2D, item: Drawn, open: number, labels: Label[]): void {
@@ -192,7 +192,7 @@ function drawBody(ctx: CanvasRenderingContext2D, item: Drawn, open: number, labe
   if (node.kind === 'file' || closed > 0.01) {
     const d = shadowLength(node, w, h)
     if (d > 0.5) {
-      ctx.globalAlpha = alpha * (node.kind === 'file' ? 1 : closed) * 0.45
+      ctx.globalAlpha = alpha * (node.kind === 'file' ? 1 : closed) * 0.3
       ctx.fillStyle = '#000'
       ctx.fillRect(x + d, y + d, w, h)
     }
@@ -334,15 +334,25 @@ function drawRoads(
 
   const dimmed = state.selected !== undefined
   for (const road of roads.values()) {
-    const ax = road.from.x + road.from.w / 2
-    const ay = road.from.y + road.from.h / 2
-    const bx = road.to.x + road.to.w / 2
-    const by = road.to.y + road.to.h / 2
-    const dx = bx - ax
-    const dy = by - ay
-    // Bend every road a little so two-way roads do not overlap.
-    const cx = (ax + bx) / 2 - dy * 0.15
-    const cy = (ay + by) / 2 + dx * 0.15
+    let ax = road.from.x + road.from.w / 2
+    let ay = road.from.y + road.from.h / 2
+    let bx = road.to.x + road.to.w / 2
+    let by = road.to.y + road.to.h / 2
+    let cx: number
+    let cy: number
+    if (sameFile(road.from.node, road.to.node)) {
+      // Calls inside one file loop out of the right edge of the bands.
+      ax = road.from.x + road.from.w
+      bx = road.to.x + road.to.w
+      ay = road.from.y + Math.min(road.from.h / 2, 6)
+      by = road.to.y + Math.min(road.to.h / 2, 6)
+      cx = Math.max(ax, bx) + Math.min(Math.abs(by - ay) * 0.5, 120)
+      cy = (ay + by) / 2
+    } else {
+      // Bend every road a little so two-way roads do not overlap.
+      cx = (ax + bx) / 2 - (by - ay) * 0.15
+      cy = (ay + by) / 2 + (bx - ax) * 0.15
+    }
     const base = road.kind === 'import' ? 0.3 : 0.6
     ctx.globalAlpha = road.hot ? 0.95 : dimmed ? base * 0.35 : base
     ctx.strokeStyle = EDGE_COLORS[road.kind]
@@ -366,6 +376,11 @@ function drawRoads(
     ctx.fill()
   }
   ctx.globalAlpha = 1
+}
+
+function sameFile(a: WorldNode, b: WorldNode): boolean {
+  if (a.kind !== 'symbol' || b.kind !== 'symbol') return false
+  return a.id.slice(0, a.id.indexOf('#')) === b.id.slice(0, b.id.indexOf('#'))
 }
 
 // The deepest drawn node under a screen point.

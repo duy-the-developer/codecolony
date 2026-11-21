@@ -5,7 +5,7 @@ const PARAM = /^(:\w+|\{\w+\}|\[\w+\]|<\w+>|\*)$/
 // '/api/users/:id?x=1' and 'http://host:4320/api/users/${id}' both become
 // ['api', 'users', '*'].
 export function pathSegments(target: string): string[] | undefined {
-  let path = target.trim()
+  let path = target.trim().replace(/\$\{[^}]*\}/g, ':param')
   const scheme = path.match(/^[a-z][a-z0-9+.-]*:\/\/[^/]*/i)
   if (scheme) path = path.slice(scheme[0].length)
   // A client target that starts with a substitution (a base URL from config)

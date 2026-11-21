@@ -65,11 +65,21 @@ export function renderInspector(
   ] as const) {
     if (edges.length === 0) continue
     root.append(el('h4', {}, `${title} (${edges.length})`))
-    const items = edges.slice(0, MAX_ROADS).map((edge) => {
+    // One row per kind, other end and provenance, with the first line seen.
+    const groups = new Map<string, { edge: Edge; count: number }>()
+    for (const edge of edges) {
+      const key = `${edge.kind}|${edge[end]}|${edge.provenance}`
+      const group = groups.get(key)
+      if (group) group.count++
+      else groups.set(key, { edge, count: 1 })
+    }
+    const sorted = [...groups.values()].sort((a, b) => b.count - a.count)
+    const items = sorted.slice(0, MAX_ROADS).map(({ edge, count }) => {
       const other = scene.byId.get(edge[end])
+      const where = count > 1 ? `×${count}` : edge.at ? `line ${edge.at.line}` : ''
       const item = row(
         `${edge.kind} ${describe(scene, other)}`,
-        edge.at ? `line ${edge.at.line}` : '',
+        where,
         edge.provenance,
         EDGE_COLORS[edge.kind],
       )
@@ -79,8 +89,8 @@ export function renderInspector(
       }
       return item
     })
-    if (edges.length > MAX_ROADS)
-      items.push(el('li', { class: 'muted' }, `+ ${edges.length - MAX_ROADS} more`))
+    if (sorted.length > MAX_ROADS)
+      items.push(el('li', { class: 'muted' }, `+ ${sorted.length - MAX_ROADS} more`))
     root.append(list(items))
   }
 

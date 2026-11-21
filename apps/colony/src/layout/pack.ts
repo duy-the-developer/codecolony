@@ -2,9 +2,11 @@ import type { Rect } from '../shared/world.ts'
 
 // A stable rectangle packer. Each child keeps a reserved rectangle across
 // runs: while it still fits there it does not move, a child that outgrows its
-// reservation moves alone, and new children take free space. Reservations of
+// reservation grows in place if the space around it is free or else moves
+// alone, and new children take free space. Reservations of
 // children that disappeared stay held, so a deleted file leaves a gap rather
-// than shifting its neighbours (and replay can show it again).
+// than shifting its neighbours (and replay can show it again). When moves and
+// ghosts leave the container mostly empty, it is packed afresh once.
 
 export interface PackItem {
   id: string
@@ -17,6 +19,9 @@ export interface PackOptions {
   // New reservations are this much larger than the item, room to grow.
   slack: number
 }
+
+// Below this share of live item area in the packed bounds, start afresh.
+export const MIN_FILL = 0.4
 
 export interface PackResult {
   // Reserved rectangle per id, ghosts included. Items sit at its top left.
@@ -48,13 +53,30 @@ export function pack(
     const widest = Math.max(0, ...pending.map((item) => item.w * slack))
     const width = Math.max(bounds(placed).width, Math.sqrt(area), widest)
     for (const item of pending) {
-      const rect = place(item.w * slack, item.h * slack, placed, width, gap)
+      // An item that outgrew its reservation first tries to grow where it is.
+      const before = saved.get(item.id)
+      const grown = before && { x: before.x, y: before.y, w: item.w * slack, h: item.h * slack }
+      const rect =
+        grown && grown.x + grown.w <= width && !placed.some((other) => overlaps(grown, other, gap))
+          ? grown
+          : place(item.w * slack, item.h * slack, placed, width, gap)
       placed.push(rect)
       reserved.set(item.id, rect)
     }
   }
   const { width, height } = bounds([...reserved.values()])
-  return { reserved, width, height }
+  const result = { reserved, width, height }
+  if (saved.size === 0 || fill(items, result) >= MIN_FILL) return result
+  // Only when a fresh packing really is tighter, so this cannot repeat.
+  const fresh = pack(items, new Map(), { gap, slack })
+  return fill(items, fresh) > fill(items, result) ? fresh : result
+}
+
+function fill(items: readonly PackItem[], { width, height }: PackResult): number {
+  if (width <= 0 || height <= 0) return 1
+  let used = 0
+  for (const item of items) used += item.w * item.h
+  return used / (width * height)
 }
 
 // Bottom-left placement: the lowest, then leftmost, free spot within width.

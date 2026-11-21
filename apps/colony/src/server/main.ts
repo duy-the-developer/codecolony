@@ -48,3 +48,11 @@ server.listen(port, HOST, () => {
     `Code Colony on http://${HOST}:${port} (${dev ? 'dev' : 'built'}; config: ${config.source})`,
   )
 })
+
+// Stop language servers with the app.
+for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+  process.once(signal, () => {
+    server.close()
+    colony.close().finally(() => process.exit(0))
+  })
+}

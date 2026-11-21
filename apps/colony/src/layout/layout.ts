@@ -7,8 +7,27 @@ import { pack } from './pack.ts'
 // the stable packer and remembers their reserved rectangles (relative to the
 // container) in the layout store, so the map keeps its shape as code changes.
 
-// parent id -> child id -> reserved rectangle.
-export type LayoutStore = Map<string, Map<string, Rect>>
+export interface LayoutStore {
+  // parent id -> child id -> reserved rectangle.
+  slots: Map<string, Map<string, Rect>>
+  // container id -> the padding it was given and the size that set it.
+  pads: Map<string, Pad>
+}
+
+interface Pad {
+  x: number
+  y: number
+  extent: number
+}
+
+interface StoredLayout {
+  slots: Record<string, Record<string, Rect>>
+  pads: Record<string, Pad>
+}
+
+export function emptyLayout(): LayoutStore {
+  return { slots: new Map(), pads: new Map() }
+}
 
 const SLACK = 1.12
 // Files are square; their area grows with lines, plus a floor so that tiny
@@ -21,18 +40,24 @@ export function fileSide(lines: number): number {
 
 export function loadLayout(path: string): LayoutStore {
   try {
-    const raw = JSON.parse(readFileSync(path, 'utf8')) as Record<string, Record<string, Rect>>
-    return new Map(
-      Object.entries(raw).map(([parent, children]) => [parent, new Map(Object.entries(children))]),
-    )
+    const raw = JSON.parse(readFileSync(path, 'utf8')) as Partial<StoredLayout>
+    return {
+      slots: new Map(
+        Object.entries(raw.slots ?? {}).map(([parent, kids]) => [
+          parent,
+          new Map(Object.entries(kids)),
+        ]),
+      ),
+      pads: new Map(Object.entries(raw.pads ?? {})),
+    }
   } catch {
-    return new Map()
+    return emptyLayout()
   }
 }
 
 export function saveLayout(path: string, store: LayoutStore): void {
-  const raw: Record<string, Record<string, Rect>> = {}
-  for (const [parent, children] of store) raw[parent] = Object.fromEntries(children)
+  const raw: StoredLayout = { slots: {}, pads: Object.fromEntries(store.pads) }
+  for (const [parent, kids] of store.slots) raw.slots[parent] = Object.fromEntries(kids)
   writeAtomic(path, JSON.stringify(raw))
 }
 
@@ -72,14 +97,31 @@ export function layoutWorld(nodes: WorldNode[], store: LayoutStore): void {
     let area = 0
     for (const item of items) area += item.w * item.h
     const gap = Math.max(0.5, 0.06 * Math.sqrt(area / Math.max(items.length, 1)))
-    const packed = pack(items, store.get(node.id) ?? new Map(), { gap, slack: SLACK })
-    store.set(node.id, packed.reserved)
-    const extent = Math.max(packed.width, packed.height, 4)
-    const padX = Math.max(0.8, 0.025 * extent)
-    const padY = Math.max(1.6, 0.06 * extent)
+    const packed = pack(items, store.slots.get(node.id) ?? new Map(), { gap, slack: SLACK })
+    store.slots.set(node.id, packed.reserved)
+    // The container wraps what is drawn, not the spare room in reservations
+    // or the places held for deleted children.
+    let width = 0
+    let height = 0
+    for (const item of items) {
+      const slot = packed.reserved.get(item.id)
+      if (!slot) continue
+      width = Math.max(width, slot.x + item.w)
+      height = Math.max(height, slot.y + item.h)
+    }
+    // Padding scales with the container but is kept until the container has
+    // halved or doubled, so ordinary growth does not nudge every child.
+    const extent = Math.max(width, height, 4)
+    let pad = store.pads.get(node.id)
+    if (!pad || extent > 2 * pad.extent || extent < pad.extent / 2) {
+      pad = { x: Math.max(0.8, 0.025 * extent), y: Math.max(1.6, 0.06 * extent), extent }
+      store.pads.set(node.id, pad)
+    }
+    const padX = pad.x
+    const padY = pad.y
     const frame = {
-      w: Math.max(packed.width, 4) + 2 * padX,
-      h: Math.max(packed.height, 2) + padY + padX,
+      w: Math.max(width, 4) + 2 * padX,
+      h: Math.max(height, 2) + padY + padX,
       padX,
       padY,
     }
@@ -95,7 +137,7 @@ export function layoutWorld(nodes: WorldNode[], store: LayoutStore): void {
     const frame = frames.get(node.id)
     if (!frame) return
     node.rect = { x, y, w: frame.w, h: frame.h }
-    const reserved = store.get(node.id)
+    const reserved = store.slots.get(node.id)
     for (const kid of children.get(node.id) ?? []) {
       if (kid.kind === 'symbol') {
         placeSymbol(kid, node, children)
