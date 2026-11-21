@@ -1,6 +1,5 @@
-// Works out the human label for a worker from what Herdr reports, so chips
-// and pawns read `firstmate` or `alphagal-mockup` instead of `claude` for
-// every pane.
+// Works out the human label for a worker from what Herdr reports, so a worker
+// reads `firstmate` or `alphagal-mockup` instead of `claude` for every pane.
 //
 // - Workspace label: `firstmate`, or `└ alphagal-mockup · p:<parent id>` for a
 //   worker a supervisor launched. The tree marker and the parent tag go.

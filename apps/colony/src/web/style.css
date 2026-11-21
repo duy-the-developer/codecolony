@@ -23,12 +23,6 @@
   --input: #24405c;
   --ring: #4f8fd6;
   --radius: 0.375rem;
-
-  /* Worker status colours, shared with the dock package's CSS variables. */
-  --status-working: #50c878;
-  --status-blocked: #e05050;
-  --status-done: #50a0e0;
-  --status-idle: #e0a040;
 }
 
 @theme inline {
@@ -50,10 +44,6 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --color-status-working: var(--status-working);
-  --color-status-blocked: var(--status-blocked);
-  --color-status-done: var(--status-done);
-  --color-status-idle: var(--status-idle);
   --radius-sm: calc(var(--radius) - 2px);
   --radius-md: var(--radius);
   --radius-lg: calc(var(--radius) + 2px);
@@ -86,28 +76,10 @@
 }
 
 .cc-dock-bar {
-  align-items: flex-start;
   padding: 8px;
   background: var(--card);
 }
 
-.cc-dock-workers {
-  flex-wrap: wrap;
-  overflow: visible;
-}
-
-.cc-dock-note,
 .cc-dock-state {
   white-space: normal;
-}
-
-.cc-dock-worker {
-  padding: 3px 10px;
-  border-radius: 999px;
-  font-weight: 500;
-}
-
-.cc-dock-worker[aria-pressed="true"] {
-  border-color: var(--primary);
-  background: var(--accent);
 }

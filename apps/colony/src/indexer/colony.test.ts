@@ -115,6 +115,55 @@ describe('Colony', () => {
     }
   })
 
+  it('nests subfolder modules inside their parent folder', async () => {
+    const root = makeRepo(
+      {
+        'package.json': '{}\n',
+        'src/web/main.ts': 'export const main = 1\n',
+        'src/web/components/app/app.tsx': 'export const App = 1\n',
+        'src/web/components/ui/button.tsx': 'export const Button = 1\n',
+        'src/web/components/ui/forms/input.tsx': 'export const Input = 1\n',
+        'src/web/hooks/use-world.ts': 'export const useWorld = 1\n',
+        'src/server/api.ts': 'export const api = 1\n',
+        '.github/workflows/ci.yml': 'on: push\n',
+      },
+      join(makeTempDir(), 'demo'),
+    )
+    const colony = colonyFor([{ name: 'p', root, kind: 'repo' }])
+    await colony.refresh()
+    const byId = new Map(colony.world.nodes.map((n) => [n.id, n]))
+    const repo = 'project:p/demo'
+    const modules = colony.world.nodes
+      .filter((n) => n.kind === 'module')
+      .map((n) => [n.path, n.name, n.parent?.slice(repo.length + 1) || '.'])
+    expect(modules).toEqual([
+      // A folder with no files and one subfolder merges into it.
+      ['.github/workflows', '.github/workflows', '.'],
+      // A folder with no files but several subfolders still holds them.
+      ['src', 'src', '.'],
+      ['src/server', 'server', 'src'],
+      ['src/web', 'web', 'src'],
+      ['src/web/components', 'components', 'src/web'],
+      ['src/web/components/app', 'app', 'src/web/components'],
+      ['src/web/components/ui', 'ui', 'src/web/components'],
+      ['src/web/components/ui/forms', 'forms', 'src/web/components/ui'],
+      ['src/web/hooks', 'hooks', 'src/web'],
+    ])
+    expect(byId.get(`${repo}/src/web/main.ts`)?.parent).toBe(`${repo}/src/web`)
+    expect(byId.get(`${repo}/src/web/components/ui/button.tsx`)?.parent).toBe(
+      `${repo}/src/web/components/ui`,
+    )
+    expect(byId.get(`${repo}/src/web`)?.lines).toBe(5)
+    for (const n of colony.world.nodes) {
+      const parent = n.parent ? byId.get(n.parent) : undefined
+      if (!parent || n.kind === 'symbol') continue
+      expect(n.rect.x, n.id).toBeGreaterThanOrEqual(parent.rect.x)
+      expect(n.rect.y, n.id).toBeGreaterThanOrEqual(parent.rect.y)
+      expect(n.rect.x + n.rect.w, n.id).toBeLessThanOrEqual(parent.rect.x + parent.rect.w)
+      expect(n.rect.y + n.rect.h, n.id).toBeLessThanOrEqual(parent.rect.y + parent.rect.h)
+    }
+  })
+
   it('skips vendored and generated files', async () => {
     const root = makeRepo({
       'index.js': 'module.exports = 1\n',

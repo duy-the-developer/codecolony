@@ -13,12 +13,13 @@ import { rankItems } from './rank-items.ts'
 
 // Lays the world tree out on the unit grid, bottom-up. Files are squares on
 // their module's cell grid; modules, packages, repositories and projects sit
-// in rows inside their parent (see pack-rows.ts). Files directly in a
-// repository or package share one more cell grid in its rows, with no border
-// or label of its own. Every size, padding and gap
-// is a whole number of units, so every edge lands on a grid line. The order of
-// children is remembered in the layout store, so the map keeps its shape as
-// code changes.
+// in rows inside their parent (see pack-rows.ts). A module with subfolders
+// lays its subfolders' modules out in rows the same way. Files directly in a
+// repository, package or such a module share one more cell grid in its rows,
+// with no border or label of its own. Every size, padding and gap is a whole
+// number of units, so every edge lands on a grid line. The order of children
+// is remembered in the layout store, so the map keeps its shape as code
+// changes.
 
 export interface LayoutStore {
   // container id -> its rows of child ids.
@@ -43,8 +44,9 @@ export const DEFAULT_LAYOUT: LayoutOptions = { gutter: 2 }
 
 // Bumped when stored layouts can no longer be read as they are; older ones are
 // dropped and the world is laid out afresh. Version 3 keeps the files of a
-// repository's or package's own folder as loose files instead of a root module.
-const STORE_VERSION = 3
+// repository's or package's own folder as loose files instead of a root module;
+// version 4 nests a folder's subfolders inside its module.
+const STORE_VERSION = 4
 
 interface StoredLayout {
   version: number
@@ -145,14 +147,14 @@ export function layoutWorld(
     }
     const kids = (children.get(node.id) ?? []).filter((kid) => kid.kind !== 'symbol')
     const top = HEADER_UNITS[node.kind]
-    if (node.kind === 'module') {
+    const loose = kids.filter((kid) => kid.kind === 'file')
+    const blocks = kids.filter((kid) => kid.kind !== 'file')
+    if (node.kind === 'module' && blocks.length === 0) {
       const { sizes, height } = packFiles(node.id, kids)
       const width = (h: number) =>
         Math.max(packCells(sizes, h - top - PAD).width, MIN_MODULE_CELLS) + 2 * PAD
       return { w: width(height + top + PAD), h: height + top + PAD, fit: width }
     }
-    const loose = kids.filter((kid) => kid.kind === 'file')
-    const blocks = kids.filter((kid) => kid.kind !== 'file')
     const group = looseId(node.id)
     const ids = blocks.map((kid) => kid.id)
     if (loose.length > 0) ids.push(group)
@@ -204,7 +206,7 @@ export function layoutWorld(
   const place = (node: WorldNode, rect: Rect): void => {
     node.rect = rect
     const top = HEADER_UNITS[node.kind]
-    if (node.kind === 'module') {
+    if (node.kind === 'module' && !placed.has(node.id)) {
       placeFiles(node.id, rect.x + PAD, rect.y + top, rect.h - top - PAD)
       return
     }
