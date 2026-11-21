@@ -160,8 +160,7 @@ const hues = new Map<string, number>()
 // A stable hue per module, so a module's files share a colour and
 // neighbouring modules tell apart at every zoom.
 export function hueOf(node: WorldNode): number {
-  const path = node.path ?? ''
-  const key = node.kind === 'file' ? path.slice(0, path.lastIndexOf('/') + 1) : path || node.name
+  const key = (node.kind === 'file' ? node.parent : undefined) ?? node.id
   let hue = hues.get(key)
   if (hue === undefined) {
     let hash = 2166136261

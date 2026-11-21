@@ -123,6 +123,17 @@ describe('packRows', () => {
     expect(packRows([module('a', 6, 4)], first.rows, OPTIONS).rows[0]?.h).toBe(4)
   })
 
+  it('puts a new item that outranks every saved row above them', () => {
+    const saved = [{ h: 6, slots: [['a'], ['b'], ['c']] }]
+    const { placed } = packRows(
+      [item('a', 6, 6), item('b', 6, 6), item('c', 6, 6), item('n', 6, 6, 1)],
+      saved,
+      OPTIONS,
+    )
+    expect(placed.get('n')?.y).toBe(0)
+    expect(placed.get('a')?.y).toBe(8)
+  })
+
   it('ignores ids the saved rows list twice', () => {
     const next = packRows([item('a', 3, 3)], [{ h: 3, slots: [['a'], ['a']] }], OPTIONS)
     expect(next.rows).toEqual([{ h: 3, slots: [['a']] }])

@@ -90,14 +90,13 @@ export function packRows(
     const topRank = rows.map((row) => Math.max(...row.slots.flat().map((item) => item.rank)))
     for (const item of pending) {
       // The lowest row that still holds something ranked at or above the item.
-      let r = topRank.findLastIndex((rank) => rank >= item.rank)
-      if (r < 0) r = 0
+      const r = topRank.findLastIndex((rank) => rank >= item.rank)
       const row = rows[r]
       if (row && insert(row, item, target, gutter)) {
         topRank[r] = Math.max(topRank[r] as number, item.rank)
         continue
       }
-      const at = row ? r + 1 : 0
+      const at = r + 1
       rows.splice(at, 0, { stored: undefined, slots: [[item]] })
       topRank.splice(at, 0, item.rank)
     }
