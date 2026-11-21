@@ -1,6 +1,7 @@
-import type { Edge, Provenance, SymbolKind, WorldNode } from '../shared/world-types.ts'
+import type { Edge, SymbolKind, WorldNode } from '../shared/world-types.ts'
 import type { Camera, Viewport } from './camera.ts'
 import { fade, LABEL_FONT, MIN_VISIBLE_PX, openness } from './lod.ts'
+import { MIN_ROAD_ALPHA, RoadCache } from './road-cache.ts'
 import type { Scene } from './scene.ts'
 
 // Draws one frame: blueprint grid, buildings (with complexity shadows),
@@ -43,8 +44,6 @@ export const EDGE_COLORS: Record<Edge['kind'], string> = {
   queue: '#b48cff',
   data: '#ef6f6c',
 }
-
-export const PROVEN_PROVENANCES: ReadonlySet<Provenance> = new Set(['lsp', 'tree-sitter'])
 
 interface Label {
   text: string
@@ -89,7 +88,7 @@ export function render(
   }
   if (scene.root) visit(scene.root, 1)
 
-  drawRoads(ctx, scene, drawn, state)
+  drawRoads(ctx, scene, camera.scale, drawn, state)
   drawLabels(ctx, labels)
   const selected = drawn.find((d) => d.node.id === state.selected)
   if (selected) {
@@ -289,58 +288,42 @@ function ellipsize(ctx: CanvasRenderingContext2D, text: string, width: number): 
   return lo === 0 ? '' : `${text.slice(0, lo)}…`
 }
 
-interface Road {
-  from: Drawn
-  to: Drawn
-  kind: Edge['kind']
-  proven: boolean
-  count: number
-  hot: boolean
-}
+const roadCaches = new WeakMap<Scene, RoadCache>()
 
 // Each edge is drawn between the deepest visible nodes that hold its ends, so
-// roads merge as you zoom out and split as you zoom in.
+// roads merge as you zoom out and split as you zoom in (see road-cache.ts).
 function drawRoads(
   ctx: CanvasRenderingContext2D,
   scene: Scene,
+  scale: number,
   drawn: Drawn[],
   state: RenderState,
 ): void {
-  const visible = new Map<string, Drawn>()
-  for (const item of drawn) if (item.alpha >= 0.25) visible.set(item.node.id, item)
-  const holder = (id: string): Drawn | undefined => {
-    for (let node = scene.byId.get(id); node; node = scene.parentOf(node)) {
-      const item = visible.get(node.id)
-      if (item) return item
-    }
-    return undefined
+  let cache = roadCaches.get(scene)
+  if (!cache) {
+    cache = new RoadCache(scene)
+    roadCaches.set(scene, cache)
   }
-  const roads = new Map<string, Road>()
-  for (const edge of scene.edges) {
-    const from = holder(edge.from)
-    const to = holder(edge.to)
-    if (!from || !to || from === to) continue
-    if (scene.isAncestor(from.node.id, to.node.id) || scene.isAncestor(to.node.id, from.node.id))
-      continue
-    const proven = PROVEN_PROVENANCES.has(edge.provenance)
-    const key = `${edge.kind}|${from.node.id}|${to.node.id}|${proven}`
-    const hot = state.selectedSubtree.has(edge.from) || state.selectedSubtree.has(edge.to)
-    const road = roads.get(key)
-    if (road) {
-      road.count++
-      road.hot ||= hot
-    } else roads.set(key, { from, to, kind: edge.kind, proven, count: 1, hot })
-  }
+  const holders = drawn.filter((item) => item.alpha >= MIN_ROAD_ALPHA)
+  const roads = cache.listRoads(scale, holders, state.selectedSubtree)
 
   const dimmed = state.selected !== undefined
-  for (const road of roads.values()) {
+  for (let r = 0; r < roads.count; r++) {
+    const road = {
+      from: holders[roads.from[r] as number] as Drawn,
+      to: holders[roads.to[r] as number] as Drawn,
+      kind: roads.kind[r] as Edge['kind'],
+      proven: roads.proven[r] === 1,
+      count: roads.edges[r] as number,
+      hot: roads.hot[r] === 1,
+    }
     let ax = road.from.x + road.from.w / 2
     let ay = road.from.y + road.from.h / 2
     let bx = road.to.x + road.to.w / 2
     let by = road.to.y + road.to.h / 2
     let cx: number
     let cy: number
-    if (sameFile(road.from.node, road.to.node)) {
+    if (roads.sameFile[r]) {
       // Calls inside one file loop out of the right edge of the bands.
       ax = road.from.x + road.from.w
       bx = road.to.x + road.to.w
@@ -376,11 +359,6 @@ function drawRoads(
     ctx.fill()
   }
   ctx.globalAlpha = 1
-}
-
-function sameFile(a: WorldNode, b: WorldNode): boolean {
-  if (a.kind !== 'symbol' || b.kind !== 'symbol') return false
-  return a.id.slice(0, a.id.indexOf('#')) === b.id.slice(0, b.id.indexOf('#'))
 }
 
 // The deepest drawn node under a screen point.
