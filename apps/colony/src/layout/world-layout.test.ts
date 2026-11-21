@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { Edge, NodeKind, Rect, WorldNode } from '../shared/world-types.ts'
-import { emptyLayout, layoutWorld, loadLayout, saveLayout } from './world-layout.ts'
+import { emptyLayout, layoutWorld, loadLayout, looseId, saveLayout } from './world-layout.ts'
 
 const ZERO = { x: 0, y: 0, w: 0, h: 0 }
 
@@ -13,13 +13,17 @@ function node(id: string, kind: NodeKind, parent?: string, lines = 0): WorldNode
   return base
 }
 
-// world > project > repo > two packages; modules hold files of mixed sizes.
+// world > project > repo > two packages; modules hold files of mixed sizes,
+// and the repository and one package hold loose files of their own.
 function makeNodes(extra: WorldNode[] = []): WorldNode[] {
   const nodes = [
     node('world', 'world'),
     node('p', 'project', 'world'),
     node('p/r', 'repo', 'p'),
+    node('p/r/README.md', 'file', 'p/r', 10),
+    node('p/r/package.json', 'file', 'p/r', 40),
     node('p/r/package:app', 'package', 'p/r'),
+    node('p/r/app/index.ts', 'file', 'p/r/package:app', 100),
     node('p/r/package:lib', 'package', 'p/r'),
   ]
   const modules: [string, string, number][] = [
@@ -50,6 +54,7 @@ function importEdge(from: string, to: string): Edge {
 }
 
 const EDGES = [
+  importEdge('p/r/app/index.ts', 'p/r/app/web/f0.ts'),
   importEdge('p/r/app/web/f0.ts', 'p/r/app/server/f0.ts'),
   importEdge('p/r/app/server/f0.ts', 'p/r/app/core/f0.ts'),
   importEdge('p/r/app/web/f1.ts#s', 'p/r/app/core/f1.ts'),
@@ -134,6 +139,29 @@ describe('layoutWorld', () => {
     }
   })
 
+  it('packs loose files a gutter apart from the blocks beside them', () => {
+    const nodes = makeNodes()
+    layoutWorld(nodes, EDGES, emptyLayout(), { gutter: 3 })
+    for (const parent of ['p/r', 'p/r/package:app']) {
+      const kids = nodes.filter((n) => n.parent === parent)
+      const loose = kids.filter((n) => n.kind === 'file')
+      const blocks = kids.filter((n) => n.kind !== 'file')
+      expect(loose.length, parent).toBeGreaterThan(0)
+      for (const file of loose) {
+        for (const block of blocks) {
+          expect(apart(file.rect, block.rect, 3), `${file.id} / ${block.id}`).toBe(true)
+        }
+      }
+    }
+  })
+
+  it('ranks loose files with the blocks they import', () => {
+    const nodes = makeNodes()
+    layoutWorld(nodes, EDGES, emptyLayout())
+    const y = (id: string) => nodes.find((n) => n.id === id)?.rect.y ?? Number.NaN
+    expect(y('p/r/app/index.ts')).toBeLessThan(y('p/r/app/core'))
+  })
+
   it('rejects a gutter that is not a whole number of units', () => {
     expect(() => layoutWorld(makeNodes(), EDGES, emptyLayout(), { gutter: 1.5 })).toThrow(
       RangeError,
@@ -192,6 +220,46 @@ describe('loadLayout', () => {
     layoutWorld(makeNodes(), EDGES, store)
     saveLayout(path, store)
     expect(loadLayout(path)).toEqual(store)
+  })
+
+  it('migrates repository and package root modules to loose-file groups', () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'codecolony-layout-')), 'layout.json')
+    const v2 = {
+      version: 2,
+      rows: {
+        world: [{ h: 40, slots: [['p']] }],
+        p: [{ h: 38, slots: [['p/r']] }],
+        'p/r': [{ h: 30, slots: [['p/r/package:.'], ['p/r/package:app']] }],
+        'p/r/package:.': [
+          { h: 4, slots: [['p/r/.', 'p/r/docs']] },
+          { h: 6, slots: [['p/r/scripts']] },
+        ],
+        'p/r/package:app': [{ h: 10, slots: [['p/r/app'], ['p/r/app/web']] }],
+      },
+      modules: {
+        'p/r/.': { files: ['p/r/README.md'], h: 1 },
+        'p/r/docs': { files: ['p/r/docs/a.md'], h: 1 },
+        'p/r/app': { files: ['p/r/app/index.ts'], h: 2 },
+      },
+    }
+    writeFileSync(path, JSON.stringify(v2))
+    const store = loadLayout(path)
+    expect(store.rows.get('p/r')).toEqual([
+      { h: 4, slots: [[looseId('p/r'), 'p/r/docs']] },
+      { h: 6, slots: [['p/r/scripts']] },
+      { h: 30, slots: [['p/r/package:app']] },
+    ])
+    expect(store.rows.has('p/r/package:.')).toBe(false)
+    expect(store.rows.get('p/r/package:app')).toEqual([
+      { h: 10, slots: [[looseId('p/r/package:app')], ['p/r/app/web']] },
+    ])
+    expect(store.modules.get(looseId('p/r'))).toEqual({ files: ['p/r/README.md'], h: 1 })
+    expect(store.modules.get(looseId('p/r/package:app'))).toEqual({
+      files: ['p/r/app/index.ts'],
+      h: 2,
+    })
+    expect(store.modules.has('p/r/.')).toBe(false)
+    expect(store.modules.get('p/r/docs')).toEqual(v2.modules['p/r/docs'])
   })
 
   it('drops a layout saved in an older format', () => {

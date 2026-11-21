@@ -7,8 +7,9 @@ export type { Edge, EdgeKind, Provenance, SymbolKind } from '../core/model.ts'
 
 export const WORLD_ID = 'world'
 
-// A package is a band of modules: a folder with a package manifest, or the
-// rest of its repository. A module is a folder that holds files directly.
+// A package is a band of modules: a folder below its repository's root with a
+// package manifest. A module is a folder that holds files directly. Files in a
+// repository's or package's own folder sit directly in it, outside any module.
 export type NodeKind = 'world' | 'project' | 'repo' | 'package' | 'module' | 'file' | 'symbol'
 
 // Rectangles are measured in grid squares: the page draws its background grid
@@ -43,7 +44,7 @@ export interface WorldNode {
   rect: Rect
   // file: adapter id, 'text' or 'binary'.
   language?: string
-  // package: holds a package manifest (package.json, go.mod, Cargo.toml, ...).
+  // repo, package: holds a package manifest (package.json, go.mod, Cargo.toml, ...).
   package?: boolean
   // repo: the indexed commit.
   commit?: string

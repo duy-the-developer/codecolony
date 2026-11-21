@@ -13,7 +13,9 @@ import { rankItems } from './rank-items.ts'
 
 // Lays the world tree out on the unit grid, bottom-up. Files are squares on
 // their module's cell grid; modules, packages, repositories and projects sit
-// in rows inside their parent (see pack-rows.ts). Every size, padding and gap
+// in rows inside their parent (see pack-rows.ts). Files directly in a
+// repository or package share one more cell grid in its rows, with no border
+// or label of its own. Every size, padding and gap
 // is a whole number of units, so every edge lands on a grid line. The order of
 // children is remembered in the layout store, so the map keeps its shape as
 // code changes.
@@ -21,7 +23,8 @@ import { rankItems } from './rank-items.ts'
 export interface LayoutStore {
   // container id -> its rows of child ids.
   rows: Map<string, StoredRow[]>
-  // module id -> the order of its files and the height they pack to.
+  // module id, or loose-file group id (see looseId) -> the order of its files
+  // and the height they pack to.
   modules: Map<string, StoredModule>
 }
 
@@ -38,9 +41,10 @@ export interface LayoutOptions {
 
 export const DEFAULT_LAYOUT: LayoutOptions = { gutter: 2 }
 
-// Bumped when stored layouts can no longer be read; older ones are dropped
-// and the world is laid out afresh.
-const STORE_VERSION = 2
+// Bumped when stored layouts can no longer be read as they are; version 2,
+// whose repositories and packages kept their own files in a root module, is
+// migrated, and older ones are dropped and the world is laid out afresh.
+const STORE_VERSION = 3
 
 interface StoredLayout {
   version: number
@@ -56,6 +60,12 @@ const MIN_MODULE_CELLS = 2
 // times more or half as much.
 const MODULE_REGROW = 1.5
 
+// The row item that holds a container's own files. "#" only ever follows a
+// file id elsewhere, so it cannot clash with a node id.
+export function looseId(container: string): string {
+  return `${container}#files`
+}
+
 export function emptyLayout(): LayoutStore {
   return { rows: new Map(), modules: new Map() }
 }
@@ -63,11 +73,12 @@ export function emptyLayout(): LayoutStore {
 export function loadLayout(path: string): LayoutStore {
   try {
     const raw = JSON.parse(readFileSync(path, 'utf8')) as Partial<StoredLayout>
-    if (raw.version !== STORE_VERSION) return emptyLayout()
-    return {
+    if (raw.version !== STORE_VERSION && raw.version !== 2) return emptyLayout()
+    const store = {
       rows: new Map(Object.entries(raw.rows ?? {})),
       modules: new Map(Object.entries(raw.modules ?? {})),
     }
+    return raw.version === 2 ? migrateRootModules(store) : store
   } catch {
     return emptyLayout()
   }
@@ -86,6 +97,47 @@ interface Sized {
   w: number
   h: number
   fit?: (h: number) => number
+}
+
+// Version 2 kept the modules outside any package in a "<repo>/package:."
+// package, and the files of a repository's or package's own folder in a
+// module of that folder. The root package's rows take its place in the
+// repository's rows, and those modules become loose-file groups.
+function migrateRootModules(old: LayoutStore): LayoutStore {
+  const rows = new Map(old.rows)
+  const renames = new Map<string, string>()
+  for (const [id, own] of old.rows) {
+    const marker = id.lastIndexOf('/package:')
+    if (marker < 0) continue
+    const repo = id.slice(0, marker)
+    const pkg = id.slice(marker + '/package:'.length)
+    if (pkg !== '.') {
+      renames.set(`${repo}/${pkg}`, looseId(id))
+      continue
+    }
+    renames.set(`${repo}/.`, looseId(repo))
+    rows.delete(id)
+    const outer = rows.get(repo) ?? []
+    const at = outer.findIndex((row) => row.slots.some((slot) => slot.includes(id)))
+    const rest = outer
+      .map((row) => ({
+        h: row.h,
+        slots: row.slots.map((slot) => slot.filter((item) => item !== id)).filter((s) => s.length),
+      }))
+      .filter((row) => row.slots.length > 0)
+    const keep = at < 0 ? rest.length : at
+    rows.set(repo, [...rest.slice(0, keep), ...own, ...rest.slice(keep)])
+  }
+  const rename = (id: string) => renames.get(id) ?? id
+  return {
+    rows: new Map(
+      [...rows].map(([id, list]) => [
+        id,
+        list.map((row) => ({ h: row.h, slots: row.slots.map((slot) => slot.map(rename)) })),
+      ]),
+    ),
+    modules: new Map([...old.modules].map(([id, module]) => [rename(id), module])),
+  }
 }
 
 // Fills node.rect for every node. Replaces the store's entries with the
@@ -113,10 +165,20 @@ export function layoutWorld(
   const graphs = buildGraphs(edges, byId)
   const rows = new Map<string, StoredRow[]>()
   const modules = new Map<string, StoredModule>()
-  // Child rectangles relative to their container's content area, and each
-  // module's files in packing order.
+  // Child rectangles relative to their container's content area, and the
+  // files of each module and loose-file group in packing order.
   const placed = new Map<string, Map<string, Rect>>()
   const files = new Map<string, WorldNode[]>()
+
+  // Orders a module's or group's files and picks the height they pack to.
+  const packFiles = (id: string, kids: readonly WorldNode[]) => {
+    const order = fileOrder(kids, store.modules.get(id))
+    files.set(id, order)
+    const sizes = order.map((file) => fileUnits(file.lines))
+    const height = moduleHeight(sizes, store.modules.get(id)?.h)
+    modules.set(id, { files: order.map((file) => file.id), h: height })
+    return { sizes, height }
+  }
 
   const size = (node: WorldNode): Sized => {
     if (node.kind === 'file') {
@@ -126,25 +188,34 @@ export function layoutWorld(
     const kids = (children.get(node.id) ?? []).filter((kid) => kid.kind !== 'symbol')
     const top = HEADER_UNITS[node.kind]
     if (node.kind === 'module') {
-      const order = fileOrder(kids, store.modules.get(node.id))
-      files.set(node.id, order)
-      const sizes = order.map((file) => fileUnits(file.lines))
-      const height = moduleHeight(sizes, store.modules.get(node.id)?.h)
-      modules.set(node.id, { files: order.map((file) => file.id), h: height })
+      const { sizes, height } = packFiles(node.id, kids)
       const width = (h: number) =>
         Math.max(packCells(sizes, h - top - PAD).width, MIN_MODULE_CELLS) + 2 * PAD
       return { w: width(height + top + PAD), h: height + top + PAD, fit: width }
     }
+    const loose = kids.filter((kid) => kid.kind === 'file')
+    const blocks = kids.filter((kid) => kid.kind !== 'file')
+    const group = looseId(node.id)
+    const ids = blocks.map((kid) => kid.id)
+    if (loose.length > 0) ids.push(group)
+    const ranks = rankItems(ids, liftFiles(graphs.get(node.id), loose, group))
     const items: RowItem[] = []
-    const ranks = rankItems(
-      kids.map((kid) => kid.id),
-      graphs.get(node.id) ?? new Map(),
-    )
-    for (const kid of kids) {
+    for (const kid of blocks) {
       const sized = size(kid)
       const item: RowItem = { id: kid.id, rank: ranks.get(kid.id) ?? 0, w: sized.w, h: sized.h }
       if (sized.fit) item.fit = sized.fit
       items.push(item)
+    }
+    if (loose.length > 0) {
+      const { sizes, height } = packFiles(group, loose)
+      const width = (h: number) => packCells(sizes, h).width
+      items.push({
+        id: group,
+        rank: ranks.get(group) ?? 0,
+        w: width(height),
+        h: height,
+        fit: width,
+      })
     }
     const gap = node.kind === 'world' ? 2 * gutter : gutter
     const packed = packRows(items, store.rows.get(node.id) ?? [], { gutter: gap })
@@ -158,20 +229,25 @@ export function layoutWorld(
   store.rows = rows
   store.modules = modules
 
+  // Packs a module's or group's files into the area at x, y, height tall.
+  const placeFiles = (id: string, x: number, y: number, height: number): void => {
+    const order = files.get(id) ?? []
+    const { cells } = packCells(
+      order.map((file) => fileUnits(file.lines)),
+      height,
+    )
+    order.forEach((file, i) => {
+      const cell = cells[i] as { x: number; y: number }
+      const units = fileUnits(file.lines)
+      place(file, { x: x + cell.x, y: y + cell.y, w: units, h: units })
+    })
+  }
+
   const place = (node: WorldNode, rect: Rect): void => {
     node.rect = rect
     const top = HEADER_UNITS[node.kind]
     if (node.kind === 'module') {
-      const order = files.get(node.id) ?? []
-      const { cells } = packCells(
-        order.map((file) => fileUnits(file.lines)),
-        rect.h - top - PAD,
-      )
-      order.forEach((file, i) => {
-        const cell = cells[i] as { x: number; y: number }
-        const units = fileUnits(file.lines)
-        place(file, { x: rect.x + PAD + cell.x, y: rect.y + top + cell.y, w: units, h: units })
-      })
+      placeFiles(node.id, rect.x + PAD, rect.y + top, rect.h - top - PAD)
       return
     }
     if (node.kind === 'file') {
@@ -181,9 +257,12 @@ export function layoutWorld(
     const pad = node.kind === 'world' ? 0 : PAD
     const kids = placed.get(node.id)
     for (const kid of children.get(node.id) ?? []) {
+      if (kid.kind === 'file') continue
       const at = kids?.get(kid.id)
       if (at) place(kid, { x: rect.x + pad + at.x, y: rect.y + top + at.y, w: at.w, h: at.h })
     }
+    const group = kids?.get(looseId(node.id))
+    if (group) placeFiles(looseId(node.id), rect.x + pad + group.x, rect.y + top + group.y, group.h)
   }
   place(root, { x: 0, y: 0, w: rootSize.w, h: rootSize.h })
 }
@@ -202,6 +281,23 @@ function fileOrder(kids: readonly WorldNode[], saved: StoredModule | undefined):
     (a, b) => b.lines - a.lines || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
   )
   return [...order, ...fresh]
+}
+
+// A container's item graph with its loose files merged into their group.
+function liftFiles(
+  graph: ReadonlyMap<string, ReadonlySet<string>> | undefined,
+  loose: readonly WorldNode[],
+  group: string,
+): Map<string, Set<string>> {
+  const ids = new Set(loose.map((file) => file.id))
+  const lift = (id: string) => (ids.has(id) ? group : id)
+  const lifted = new Map<string, Set<string>>()
+  for (const [from, targets] of graph ?? []) {
+    const set = lifted.get(lift(from)) ?? new Set()
+    for (const to of targets) set.add(lift(to))
+    lifted.set(lift(from), set)
+  }
+  return lifted
 }
 
 function moduleHeight(sizes: readonly number[], saved: number | undefined): number {

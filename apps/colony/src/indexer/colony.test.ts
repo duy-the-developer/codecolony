@@ -62,6 +62,47 @@ describe('Colony', () => {
     expect(file.rect.x + file.rect.w).toBeLessThanOrEqual(src.rect.x + src.rect.w)
   })
 
+  it('keeps loose files directly in their repository or package', async () => {
+    const root = makeRepo(
+      {
+        'package.json': '{}\n',
+        'README.md': '# demo\n',
+        'scripts/build.ts': 'export const build = 1\n',
+        'packages/lib/package.json': '{}\n',
+        'packages/lib/index.ts': 'export const lib = 1\n',
+        'packages/lib/src/util.ts': 'export const util = 1\n',
+      },
+      join(makeTempDir(), 'demo'),
+    )
+    const colony = colonyFor([{ name: 'p', root, kind: 'repo' }])
+    await colony.refresh()
+    const byId = new Map(colony.world.nodes.map((n) => [n.id, n]))
+    const parentOf = (id: string) => byId.get(id)?.parent
+    const repo = 'project:p/demo'
+    const lib = `${repo}/package:packages/lib`
+    expect(parentOf(`${repo}/README.md`)).toBe(repo)
+    expect(parentOf(`${repo}/package.json`)).toBe(repo)
+    expect(parentOf(`${repo}/scripts`)).toBe(repo)
+    expect(parentOf(`${repo}/scripts/build.ts`)).toBe(`${repo}/scripts`)
+    expect(parentOf(lib)).toBe(repo)
+    expect(parentOf(`${lib.replace('package:', '')}/index.ts`)).toBe(lib)
+    expect(parentOf(`${repo}/packages/lib/src`)).toBe(lib)
+    expect(byId.get(`${repo}/packages/lib/src`)?.name).toBe('src')
+    expect(byId.get(repo)?.package).toBe(true)
+    // No folder becomes a module of its own repository or package root.
+    for (const id of [`${repo}/.`, `${repo}/package:.`, `${repo}/packages/lib`]) {
+      expect(byId.has(id), id).toBe(false)
+    }
+    for (const n of colony.world.nodes) {
+      const parent = n.parent ? byId.get(n.parent) : undefined
+      if (!parent || n.kind === 'symbol') continue
+      expect(n.rect.x, n.id).toBeGreaterThanOrEqual(parent.rect.x)
+      expect(n.rect.y, n.id).toBeGreaterThanOrEqual(parent.rect.y)
+      expect(n.rect.x + n.rect.w, n.id).toBeLessThanOrEqual(parent.rect.x + parent.rect.w)
+      expect(n.rect.y + n.rect.h, n.id).toBeLessThanOrEqual(parent.rect.y + parent.rect.h)
+    }
+  })
+
   it('skips vendored and generated files', async () => {
     const root = makeRepo({
       'index.js': 'module.exports = 1\n',
