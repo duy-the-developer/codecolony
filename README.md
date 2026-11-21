@@ -20,7 +20,7 @@ The server listens on loopback only and answers 403 to any request whose host is
 
 ## Terminal dock
 
-The bottom panel runs the real [Herdr](https://herdr.dev) client in the page (xterm.js over node-pty and a WebSocket), with a list of the agents Herdr knows about. Clicking a worker, in the dock or on the map, focuses its pane. The dock needs `herdr` on your `PATH`; without it the panel says so and the rest of the app still works.
+The bottom panel runs the real [Herdr](https://herdr.dev) client in the page (xterm.js over node-pty and a WebSocket), with a list of the agents Herdr knows about. Clicking a worker, in the dock or on the map, focuses its pane. The dock needs `herdr` on your `PATH`; without it the terminal shows the client's exit (for example `[herdr exited with code 1]`), the worker list says it cannot reach the Herdr socket, and the rest of the app keeps working.
 
 | Flag                     | Environment                | Default                                            |
 | ------------------------ | -------------------------- | -------------------------------------------------- |
@@ -30,6 +30,8 @@ The bottom panel runs the real [Herdr](https://herdr.dev) client in the page (xt
 | `--herdr-lab`            | `CODECOLONY_HERDR_LAB=1`   | off                                                |
 
 Pass flags after the script name, for example `pnpm dev --herdr-session work`. Lab mode, for experiments, attaches only to sessions named `fm-lab-*` and refuses any other session.
+
+Herdr shares its panes between all attached clients and sizes them to the client that most recently attached or sent input, so the last one wins. When the dock and another Herdr client (another tab, or a terminal) are both attached, the panes take the other client's size until the dock is used again. This is accepted for v1: there is no single-client limit or deferred sizing.
 
 The terminal WebSocket and the dock's `/api/dock/*` routes need the token, a loopback `Host` and, when the browser sends one, a matching `Origin`. Every response carries a strict Content-Security-Policy, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer` and `Cache-Control: no-store`. Terminal data is never logged.
 
