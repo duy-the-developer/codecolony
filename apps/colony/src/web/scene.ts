@@ -7,8 +7,10 @@ export class Scene {
   readonly children = new Map<string, WorldNode[]>()
   readonly root: WorldNode | undefined
   edges: Edge[]
+  readonly world: World
 
-  constructor(readonly world: World) {
+  constructor(world: World) {
+    this.world = world
     for (const node of world.nodes) {
       this.byId.set(node.id, node)
       if (!node.parent) continue

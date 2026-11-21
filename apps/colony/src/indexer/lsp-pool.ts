@@ -23,8 +23,10 @@ export class LspPool {
   // In use order: the first entry is the least recently used.
   private readonly entries = new Map<string, PoolEntry>()
   private readonly maxSessions: number
+  private readonly options: LspPoolOptions
 
-  constructor(private readonly options: LspPoolOptions = {}) {
+  constructor(options: LspPoolOptions = {}) {
+    this.options = options
     this.maxSessions = Math.max(1, options.maxSessions ?? resolveLspMemoryBudget().sessions)
   }
 

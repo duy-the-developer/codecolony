@@ -57,7 +57,7 @@ A language is one `LanguageAdapter` (`core/language-adapter.ts`) plus a grammar 
      | `imports` | `@import` on the statement, `@import.source` on the module string, `@import.name` on each bound name. Several patterns may match one statement; they are merged.                                                                                                                            |
      | `calls`   | `@call` on the call, `@call.name` on the called identifier, `@call.member` when it is a member call.                                                                                                                                                                                        |
 
-   - `isBranch(node)`: true for nodes that add a branch (if, loops, case, catch, short-circuit operators). It drives the branch counts in the inspector.
+   - `isBranch(type, node)`: true for nodes that add a branch (if, loops, case, catch, short-circuit operators). It drives the branch counts in the inspector. It runs on every syntax node, so decide from `type` where you can and call `node()` only when the type is not enough (it builds the full node, which is much slower).
    - `resolveImport(specifier, fromPath, files)`: the repository path an import points to, or `undefined` for external packages.
    - Optional hooks: `symbolKind` (refine or drop a captured definition), `isExported`, `isTypeOnlyImport`.
    - Optional `languageServer`: the command of any server that speaks LSP over stdio (`pyright-langserver --stdio`, `gopls`, `jdtls`, `csharp-ls`, ...), its `languageId` per file and `initializationOptions`. The core drives it through `core/lsp.ts`: `textDocument/prepareCallHierarchy` and `callHierarchy/outgoingCalls` turn calls into `lsp` edges.
@@ -78,6 +78,7 @@ To add one, write a detector next to its language (see `adapters/typescript/http
 - Each repository is read at its `HEAD` commit with `git ls-tree` and `git cat-file --batch`, never from the working tree, and nothing is written into it.
 - Vendored and generated files (`node_modules`, `dist`, lockfiles, minified files, files over 1 MB) are skipped.
 - Facts are cached on disk by blob hash and language under `cacheDir` (default `~/.cache/codecolony`), namespaced by the adapters' ids and versions. A repository whose `HEAD` has not moved is skipped; otherwise only new blobs are parsed.
+- New blobs are parsed on a pool of worker threads, one per core (`indexer/parse-pool.ts`), which stops when idle. Adapters and detectors are loaded in each worker by Node's built-in TypeScript type stripping, so the app uses erasable TypeScript only (`erasableSyntaxOnly`): no parameter properties, enums or namespaces.
 - The server polls every repository's `HEAD` every two seconds and pushes a `world` event over `/api/events` when the map changes.
 - Tracing a file with its language server (`/api/deep`) reads the working tree, so it matches the map only while that file is unmodified.
 
