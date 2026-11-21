@@ -70,7 +70,7 @@ The page has a header (project picker, search, map controls), the map, and a sid
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
 | Scroll, pinch, `+` / `-` | Zoom smoothly at the cursor; detail fades in and out as you zoom                                                                     |
 | Drag, arrow keys         | Pan                                                                                                                                  |
-| Hover                    | Show the module's or file's dependencies; with an overlay on, highlight them                                                         |
+| Hover                    | Show the dependencies of the module, file or closed block under the pointer; with an overlay on, highlight them                      |
 | Click                    | Select and keep the highlight; the Inspector lists facts, then imports, calls and HTTP requests in and out, with how each was proven |
 | Double-click             | Fly into a block or file; on a file or symbol, also show it in the File tab                                                          |
 | `Home`                   | See everything                                                                                                                       |
