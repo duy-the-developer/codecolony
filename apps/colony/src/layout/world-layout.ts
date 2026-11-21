@@ -41,9 +41,9 @@ export interface LayoutOptions {
 
 export const DEFAULT_LAYOUT: LayoutOptions = { gutter: 2 }
 
-// Bumped when stored layouts can no longer be read as they are; version 2,
-// whose repositories and packages kept their own files in a root module, is
-// migrated, and older ones are dropped and the world is laid out afresh.
+// Bumped when stored layouts can no longer be read as they are; older ones are
+// dropped and the world is laid out afresh. Version 3 keeps the files of a
+// repository's or package's own folder as loose files instead of a root module.
 const STORE_VERSION = 3
 
 interface StoredLayout {
@@ -73,12 +73,11 @@ export function emptyLayout(): LayoutStore {
 export function loadLayout(path: string): LayoutStore {
   try {
     const raw = JSON.parse(readFileSync(path, 'utf8')) as Partial<StoredLayout>
-    if (raw.version !== STORE_VERSION && raw.version !== 2) return emptyLayout()
-    const store = {
+    if (raw.version !== STORE_VERSION) return emptyLayout()
+    return {
       rows: new Map(Object.entries(raw.rows ?? {})),
       modules: new Map(Object.entries(raw.modules ?? {})),
     }
-    return raw.version === 2 ? migrateRootModules(store) : store
   } catch {
     return emptyLayout()
   }
@@ -97,47 +96,6 @@ interface Sized {
   w: number
   h: number
   fit?: (h: number) => number
-}
-
-// Version 2 kept the modules outside any package in a "<repo>/package:."
-// package, and the files of a repository's or package's own folder in a
-// module of that folder. The root package's rows take its place in the
-// repository's rows, and those modules become loose-file groups.
-function migrateRootModules(old: LayoutStore): LayoutStore {
-  const rows = new Map(old.rows)
-  const renames = new Map<string, string>()
-  for (const [id, own] of old.rows) {
-    const marker = id.lastIndexOf('/package:')
-    if (marker < 0) continue
-    const repo = id.slice(0, marker)
-    const pkg = id.slice(marker + '/package:'.length)
-    if (pkg !== '.') {
-      renames.set(`${repo}/${pkg}`, looseId(id))
-      continue
-    }
-    renames.set(`${repo}/.`, looseId(repo))
-    rows.delete(id)
-    const outer = rows.get(repo) ?? []
-    const at = outer.findIndex((row) => row.slots.some((slot) => slot.includes(id)))
-    const rest = outer
-      .map((row) => ({
-        h: row.h,
-        slots: row.slots.map((slot) => slot.filter((item) => item !== id)).filter((s) => s.length),
-      }))
-      .filter((row) => row.slots.length > 0)
-    const keep = at < 0 ? rest.length : at
-    rows.set(repo, [...rest.slice(0, keep), ...own, ...rest.slice(keep)])
-  }
-  const rename = (id: string) => renames.get(id) ?? id
-  return {
-    rows: new Map(
-      [...rows].map(([id, list]) => [
-        id,
-        list.map((row) => ({ h: row.h, slots: row.slots.map((slot) => slot.map(rename)) })),
-      ]),
-    ),
-    modules: new Map([...old.modules].map(([id, module]) => [rename(id), module])),
-  }
 }
 
 // Fills node.rect for every node. Replaces the store's entries with the

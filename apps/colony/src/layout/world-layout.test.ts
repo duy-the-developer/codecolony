@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { Edge, NodeKind, Rect, WorldNode } from '../shared/world-types.ts'
-import { emptyLayout, layoutWorld, loadLayout, looseId, saveLayout } from './world-layout.ts'
+import { emptyLayout, layoutWorld, loadLayout, saveLayout } from './world-layout.ts'
 
 const ZERO = { x: 0, y: 0, w: 0, h: 0 }
 
@@ -222,49 +222,20 @@ describe('loadLayout', () => {
     expect(loadLayout(path)).toEqual(store)
   })
 
-  it('migrates repository and package root modules to loose-file groups', () => {
-    const path = join(mkdtempSync(join(tmpdir(), 'codecolony-layout-')), 'layout.json')
-    const v2 = {
-      version: 2,
-      rows: {
-        world: [{ h: 40, slots: [['p']] }],
-        p: [{ h: 38, slots: [['p/r']] }],
-        'p/r': [{ h: 30, slots: [['p/r/package:.'], ['p/r/package:app']] }],
-        'p/r/package:.': [
-          { h: 4, slots: [['p/r/.', 'p/r/docs']] },
-          { h: 6, slots: [['p/r/scripts']] },
-        ],
-        'p/r/package:app': [{ h: 10, slots: [['p/r/app'], ['p/r/app/web']] }],
-      },
-      modules: {
-        'p/r/.': { files: ['p/r/README.md'], h: 1 },
-        'p/r/docs': { files: ['p/r/docs/a.md'], h: 1 },
-        'p/r/app': { files: ['p/r/app/index.ts'], h: 2 },
-      },
-    }
-    writeFileSync(path, JSON.stringify(v2))
-    const store = loadLayout(path)
-    expect(store.rows.get('p/r')).toEqual([
-      { h: 4, slots: [[looseId('p/r'), 'p/r/docs']] },
-      { h: 6, slots: [['p/r/scripts']] },
-      { h: 30, slots: [['p/r/package:app']] },
-    ])
-    expect(store.rows.has('p/r/package:.')).toBe(false)
-    expect(store.rows.get('p/r/package:app')).toEqual([
-      { h: 10, slots: [[looseId('p/r/package:app')], ['p/r/app/web']] },
-    ])
-    expect(store.modules.get(looseId('p/r'))).toEqual({ files: ['p/r/README.md'], h: 1 })
-    expect(store.modules.get(looseId('p/r/package:app'))).toEqual({
-      files: ['p/r/app/index.ts'],
-      h: 2,
-    })
-    expect(store.modules.has('p/r/.')).toBe(false)
-    expect(store.modules.get('p/r/docs')).toEqual(v2.modules['p/r/docs'])
-  })
-
   it('drops a layout saved in an older format', () => {
     const path = join(mkdtempSync(join(tmpdir(), 'codecolony-layout-')), 'layout.json')
     writeFileSync(path, JSON.stringify({ slots: { world: {} }, pads: {} }))
+    expect(loadLayout(path)).toEqual(emptyLayout())
+  })
+
+  it('drops a version 2 layout that kept root modules', () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'codecolony-layout-')), 'layout.json')
+    const v2 = {
+      version: 2,
+      rows: { 'p/r': [{ h: 4, slots: [['p/r/package:.']] }] },
+      modules: { 'p/r/.': { files: ['p/r/README.md'], h: 1 } },
+    }
+    writeFileSync(path, JSON.stringify(v2))
     expect(loadLayout(path)).toEqual(emptyLayout())
   })
 })
