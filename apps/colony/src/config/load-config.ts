@@ -1,13 +1,15 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
-import { PROJECT_KINDS, type ProjectKind, type ProjectSummary } from '../shared/api.ts'
+import { PROJECT_KINDS, type ProjectKind, type ProjectSummary } from '../shared/api-types.ts'
 
 // Project roots are read at runtime from a local, gitignored file so that no
 // path, name or rule for a private codebase ever lands in this repository.
 
 export const CONFIG_ENV = 'CODECOLONY_CONFIG'
 export const CONFIG_FILE = 'codecolony.config.json'
+export const PORT_ENV = 'PORT'
+export const DEFAULT_PORT = 4320
 
 export interface ProjectConfig extends ProjectSummary {
   root: string
@@ -18,10 +20,19 @@ export interface ColonyConfig {
   cacheDir: string
   // Where the config came from: a file path, or 'default'.
   source: string
+  // The server's port, from PORT.
+  port: number
 }
+
+export type ConfigErrorCode = 'MissingFile' | 'BadJson' | 'InvalidConfig'
 
 export class ConfigError extends Error {
   override name = 'ConfigError'
+  readonly code: ConfigErrorCode
+  constructor(code: ConfigErrorCode, message: string, options?: ErrorOptions) {
+    super(message, options)
+    this.code = code
+  }
 }
 
 export interface LoadConfigOptions {
@@ -32,42 +43,49 @@ export interface LoadConfigOptions {
 }
 
 export function loadConfig({ env = process.env, repoRoot }: LoadConfigOptions): ColonyConfig {
+  const port = Number(env[PORT_ENV] ?? DEFAULT_PORT)
   const fromEnv = env[CONFIG_ENV]
   const file = fromEnv ? resolve(expandHome(fromEnv)) : join(repoRoot, CONFIG_FILE)
   if (!existsSync(file)) {
-    if (fromEnv) throw new ConfigError(`${CONFIG_ENV} points at a missing file: ${file}`)
+    if (fromEnv) {
+      throw new ConfigError('MissingFile', `${CONFIG_ENV} points at a missing file: ${file}`)
+    }
     return {
       projects: [{ name: basename(repoRoot), root: repoRoot, kind: 'repo' }],
       cacheDir: defaultCacheDir(),
       source: 'default',
+      port,
     }
   }
   let raw: unknown
   try {
     raw = JSON.parse(readFileSync(file, 'utf8'))
   } catch (error) {
-    throw new ConfigError(`${file}: not valid JSON (${(error as Error).message})`)
+    throw new ConfigError('BadJson', `${file}: not valid JSON (${(error as Error).message})`, {
+      cause: error,
+    })
   }
-  return { ...parseConfig(raw, dirname(file)), source: file }
+  return { ...parseConfig(raw, dirname(file)), source: file, port }
 }
 
 // Relative roots and cacheDir resolve against the config file's folder.
-export function parseConfig(raw: unknown, baseDir: string): Omit<ColonyConfig, 'source'> {
-  if (!isRecord(raw)) throw new ConfigError('config: expected an object')
+export function parseConfig(raw: unknown, baseDir: string): Omit<ColonyConfig, 'source' | 'port'> {
+  if (!isRecord(raw)) throw new ConfigError('InvalidConfig', 'config: expected an object')
   const { projects, cacheDir } = raw
   if (!Array.isArray(projects) || projects.length === 0) {
-    throw new ConfigError('config.projects: expected a non-empty array')
+    throw new ConfigError('InvalidConfig', 'config.projects: expected a non-empty array')
   }
   const parsed = projects.map((project, i) =>
     parseProject(project, `config.projects[${i}]`, baseDir),
   )
   const names = new Set<string>()
   for (const { name } of parsed) {
-    if (names.has(name)) throw new ConfigError(`config.projects: duplicate name "${name}"`)
+    if (names.has(name))
+      throw new ConfigError('InvalidConfig', `config.projects: duplicate name "${name}"`)
     names.add(name)
   }
   if (cacheDir !== undefined && typeof cacheDir !== 'string') {
-    throw new ConfigError('config.cacheDir: expected a string')
+    throw new ConfigError('InvalidConfig', 'config.cacheDir: expected a string')
   }
   return {
     projects: parsed,
@@ -76,16 +94,19 @@ export function parseConfig(raw: unknown, baseDir: string): Omit<ColonyConfig, '
 }
 
 function parseProject(raw: unknown, at: string, baseDir: string): ProjectConfig {
-  if (!isRecord(raw)) throw new ConfigError(`${at}: expected an object`)
+  if (!isRecord(raw)) throw new ConfigError('InvalidConfig', `${at}: expected an object`)
   const { name, root, kind = 'repo' } = raw
   if (typeof name !== 'string' || !/^[\w.-]+$/.test(name)) {
-    throw new ConfigError(`${at}.name: expected letters, digits, ".", "_" or "-"`)
+    throw new ConfigError('InvalidConfig', `${at}.name: expected letters, digits, ".", "_" or "-"`)
   }
   if (typeof root !== 'string' || root === '') {
-    throw new ConfigError(`${at}.root: expected a path`)
+    throw new ConfigError('InvalidConfig', `${at}.root: expected a path`)
   }
   if (!isProjectKind(kind)) {
-    throw new ConfigError(`${at}.kind: expected one of ${PROJECT_KINDS.join(', ')}`)
+    throw new ConfigError(
+      'InvalidConfig',
+      `${at}.kind: expected one of ${PROJECT_KINDS.join(', ')}`,
+    )
   }
   return { name, root: resolvePath(root, baseDir), kind }
 }

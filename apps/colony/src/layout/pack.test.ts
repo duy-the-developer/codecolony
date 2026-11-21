@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { Rect } from '../shared/world.ts'
+import type { Rect } from '../shared/world-types.ts'
 import { type PackItem, pack } from './pack.ts'
 
 const OPTIONS = { gap: 1, slack: 1.12 }

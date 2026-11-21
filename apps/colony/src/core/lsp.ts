@@ -15,7 +15,7 @@ import {
   StreamMessageReader,
   StreamMessageWriter,
 } from 'vscode-languageserver-protocol/node'
-import type { LanguageServerSpec } from './adapter.ts'
+import type { LanguageServerSpec } from './language-adapter.ts'
 
 // A language-agnostic LSP client over stdio: the semantic half of every
 // language adapter. Paths are absolute; lines are 1-based and columns 0-based.

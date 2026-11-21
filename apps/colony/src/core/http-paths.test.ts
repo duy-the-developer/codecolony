@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { pathSegments, pathsMatch } from './http.ts'
+import { pathSegments, pathsMatch } from './http-paths.ts'
 
 describe('HTTP path matching', () => {
   it.each([

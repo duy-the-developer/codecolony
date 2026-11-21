@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path'
 
 // Synthetic git repositories for tests. Never point tests at real projects.
 
-export function tempDir(prefix = 'codecolony-'): string {
+export function makeTempDir(prefix = 'codecolony-'): string {
   return mkdtempSync(join(tmpdir(), prefix))
 }
 
@@ -33,7 +33,7 @@ export function commit(repo: string, files: Record<string, string>, message = 'c
   return git(repo, 'rev-parse', 'HEAD')
 }
 
-export function makeRepo(files: Record<string, string>, dir = tempDir()): string {
+export function makeRepo(files: Record<string, string>, dir = makeTempDir()): string {
   mkdirSync(dir, { recursive: true })
   git(dir, 'init', '-q', '-b', 'main')
   if (Object.keys(files).length > 0) commit(dir, files, 'initial')

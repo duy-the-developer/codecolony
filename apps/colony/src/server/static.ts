@@ -15,7 +15,7 @@ const TYPES: Record<string, string> = {
 }
 
 // Serves the built page; unknown paths fall back to index.html.
-export function staticFiles(dir: string): Handler {
+export function createStaticHandler(dir: string): Handler {
   const root = normalize(dir + sep)
   return (req, res) => {
     let path: string

@@ -19,7 +19,7 @@ export function isGitRepo(dir: string): boolean {
   return existsSync(join(dir, '.git'))
 }
 
-export async function headCommit(repo: string): Promise<string | undefined> {
+export async function readHeadCommit(repo: string): Promise<string | undefined> {
   try {
     const { stdout } = await run('git', ['-C', repo, 'rev-parse', '--verify', '--quiet', 'HEAD'])
     return stdout.trim() || undefined

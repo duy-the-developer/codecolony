@@ -1,4 +1,4 @@
-import type { Edge, World, WorldNode } from '../shared/world.ts'
+import type { Edge, World, WorldNode } from '../shared/world-types.ts'
 
 // Lookup structures over one world version.
 

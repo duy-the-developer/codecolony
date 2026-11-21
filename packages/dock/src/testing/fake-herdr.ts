@@ -49,7 +49,7 @@ export function ok(request: FakeRequest, result: unknown): string {
   return JSON.stringify({ id: request.id, result })
 }
 
-export const AGENTS = [
+export const FAKE_AGENTS = [
   {
     pane_id: 'w1:p1',
     workspace_id: 'w1',

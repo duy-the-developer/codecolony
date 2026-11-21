@@ -1,4 +1,4 @@
-import type { Edge, Provenance, SymbolKind, WorldNode } from '../shared/world.ts'
+import type { Edge, Provenance, SymbolKind, WorldNode } from '../shared/world-types.ts'
 import type { Camera, Viewport } from './camera.ts'
 import { fade, LABEL_FONT, MIN_VISIBLE_PX, openness } from './lod.ts'
 import type { Scene } from './scene.ts'
@@ -44,7 +44,7 @@ export const EDGE_COLORS: Record<Edge['kind'], string> = {
   data: '#ef6f6c',
 }
 
-export const PROVEN: ReadonlySet<Provenance> = new Set(['lsp', 'tree-sitter'])
+export const PROVEN_PROVENANCES: ReadonlySet<Provenance> = new Set(['lsp', 'tree-sitter'])
 
 interface Label {
   text: string
@@ -322,7 +322,7 @@ function drawRoads(
     if (!from || !to || from === to) continue
     if (scene.isAncestor(from.node.id, to.node.id) || scene.isAncestor(to.node.id, from.node.id))
       continue
-    const proven = PROVEN.has(edge.provenance)
+    const proven = PROVEN_PROVENANCES.has(edge.provenance)
     const key = `${edge.kind}|${from.node.id}|${to.node.id}|${proven}`
     const hot = state.selectedSubtree.has(edge.from) || state.selectedSubtree.has(edge.to)
     const road = roads.get(key)

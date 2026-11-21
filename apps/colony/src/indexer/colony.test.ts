@@ -1,8 +1,8 @@
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import type { ColonyConfig } from '../server/config.ts'
-import type { World } from '../shared/world.ts'
-import { commit, makeRepo, tempDir } from '../testing/git-fixture.ts'
+import type { ColonyConfig } from '../config/load-config.ts'
+import type { World } from '../shared/world-types.ts'
+import { commit, makeRepo, makeTempDir } from '../testing/git-fixture.ts'
 import { Colony } from './colony.ts'
 
 const colonies: Colony[] = []
@@ -10,8 +10,8 @@ afterEach(async () => {
   await Promise.all(colonies.splice(0).map((c) => c.close()))
 })
 
-function colonyFor(projects: ColonyConfig['projects'], cacheDir = tempDir()): Colony {
-  const colony = new Colony({ projects, cacheDir, source: 'test' })
+function colonyFor(projects: ColonyConfig['projects'], cacheDir = makeTempDir()): Colony {
+  const colony = new Colony({ projects, cacheDir, source: 'test', port: 0 })
   colonies.push(colony)
   return colony
 }
@@ -29,7 +29,7 @@ describe('Colony', () => {
         'README.md': '# demo\n',
         'package.json': '{}\n',
       },
-      join(tempDir(), 'demo'),
+      join(makeTempDir(), 'demo'),
     )
     const colony = colonyFor([{ name: 'p', root, kind: 'repo' }])
     await colony.refresh()
@@ -80,7 +80,7 @@ describe('Colony', () => {
     const files: Record<string, string> = {}
     for (let i = 0; i < 12; i++) files[`src/f${i}.ts`] = `export const v${i} = ${i}\n`.repeat(i + 1)
     const root = makeRepo(files)
-    const cacheDir = tempDir()
+    const cacheDir = makeTempDir()
     const colony = colonyFor([{ name: 'p', root, kind: 'repo' }], cacheDir)
 
     const first = await colony.refresh()
@@ -124,7 +124,7 @@ describe('Colony', () => {
   })
 
   it('maps every repository in a folder of repositories', async () => {
-    const org = tempDir()
+    const org = makeTempDir()
     makeRepo({ 'a.ts': 'export const a = 1\n' }, join(org, 'alpha'))
     makeRepo({ 'b.ts': 'export const b = 1\n' }, join(org, 'beta'))
     const colony = colonyFor([{ name: 'org', root: org, kind: 'repos' }])
@@ -134,7 +134,7 @@ describe('Colony', () => {
   })
 
   it('links an HTTP client in one repository to the route in another', async () => {
-    const org = tempDir()
+    const org = makeTempDir()
     makeRepo(
       { 'client.ts': "export const get = () => fetch('http://api:8080/v1/users/42?x=1')\n" },
       join(org, 'web'),
@@ -164,7 +164,7 @@ describe('Colony', () => {
   })
 
   it('draws no HTTP road from a client whose path has no literal segment', async () => {
-    const org = tempDir()
+    const org = makeTempDir()
     makeRepo(
       // biome-ignore lint/suspicious/noTemplateCurlyInString: a URL template as written in source
       { 'client.ts': 'export const get = (base: string, p: string) => fetch(`${base}/${p}`)\n' },
@@ -177,7 +177,7 @@ describe('Colony', () => {
   })
 
   it('reads HTTP client instances named api or server as clients, not routes', async () => {
-    const org = tempDir()
+    const org = makeTempDir()
     makeRepo(
       {
         'client.ts':

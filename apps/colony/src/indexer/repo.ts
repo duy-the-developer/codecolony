@@ -1,9 +1,9 @@
 import { basename } from 'node:path'
-import { adapterFor, TRANSPORT_DETECTORS } from '../adapters/index.ts'
+import { findAdapter, TRANSPORT_DETECTORS } from '../adapters/registry.ts'
 import type { FileFacts } from '../core/model.ts'
 import { parseFile, textFacts } from '../core/parse.ts'
 import { type FactCache, factKey } from './cache.ts'
-import { headCommit, listTree, readBlobs, type TreeEntry } from './git.ts'
+import { listTree, readBlobs, readHeadCommit, type TreeEntry } from './git.ts'
 
 // Indexes one repository at its HEAD commit, incrementally: an unchanged HEAD
 // is skipped, and only blobs missing from the fact cache are read and parsed.
@@ -77,7 +77,7 @@ export async function indexRepo(
   previous?: RepoIndex,
 ): Promise<{ index: RepoIndex; stats: IndexStats }> {
   const name = basename(root)
-  const commit = await headCommit(root)
+  const commit = await readHeadCommit(root)
   const stats: IndexStats = { parsed: 0, reused: 0, skipped: 0, unchanged: false }
   if (previous && previous.commit === commit) {
     return { index: previous, stats: { ...stats, unchanged: true } }
@@ -119,13 +119,13 @@ export async function indexRepo(
 }
 
 function keyOf(entry: TreeEntry): string {
-  return factKey(entry.sha, adapterFor(entry.path)?.id ?? 'text')
+  return factKey(entry.sha, findAdapter(entry.path)?.id ?? 'text')
 }
 
 async function factsFor(path: string, bytes: Buffer): Promise<FileFacts> {
   if (isBinary(bytes)) return { ...textFacts(''), language: 'binary' }
   const source = bytes.toString('utf8')
-  const adapter = adapterFor(path)
+  const adapter = findAdapter(path)
   if (!adapter) return textFacts(source)
   try {
     return await parseFile(adapter, TRANSPORT_DETECTORS, path, source)

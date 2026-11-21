@@ -1,5 +1,5 @@
 import { Language, type Node, Parser, Query, type Tree } from 'web-tree-sitter'
-import type { LanguageAdapter, TransportDetector } from './adapter.ts'
+import type { LanguageAdapter, TransportDetector } from './language-adapter.ts'
 import {
   type CallFact,
   type FileFacts,

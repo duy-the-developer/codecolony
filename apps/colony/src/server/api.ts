@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import type { ProjectsResponse } from '../shared/api.ts'
-import type { DeepResponse, Edge, World } from '../shared/world.ts'
-import type { ColonyConfig } from './config.ts'
+import type { ColonyConfig } from '../config/load-config.ts'
+import type { ProjectsResponse } from '../shared/api-types.ts'
+import type { DeepResponse, Edge, World } from '../shared/world-types.ts'
 
 // The part of the Colony the API reads; tests pass a stub.
 export interface WorldSource {
