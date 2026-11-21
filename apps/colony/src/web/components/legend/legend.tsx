@@ -34,7 +34,6 @@ const KEYS: [string, string][] = [
   ['+ −', 'Zoom (or scroll, pinch)'],
   ['← →', 'Pan (or drag)'],
   ['Home', 'Show the whole map'],
-  ['D', 'Toggle the Dependency overlay'],
   ['Esc', 'Clear the selection'],
 ]
 

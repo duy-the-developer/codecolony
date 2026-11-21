@@ -17,7 +17,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu.tsx'
-import { Kbd } from '../ui/kbd.tsx'
 
 export interface MapControlsProps {
   isLeftCollapsed: boolean
@@ -67,7 +66,6 @@ export function MapControls({
             >
               <span className="h-0.5 w-4 rounded-full" style={{ background: overlay.color }} />
               {overlay.name}
-              <Kbd className="ml-auto">D</Kbd>
             </DropdownMenuCheckboxItem>
           ))}
           {PLANNED_OVERLAYS.map((name) => (

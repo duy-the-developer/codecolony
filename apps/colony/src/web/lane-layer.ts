@@ -16,8 +16,8 @@ export interface LaneFrame {
   // Every link of the level, with the overlay on.
   all: LaneRoutes | undefined
   // Per link of all's level, whether it stands out (1) because it carries an
-  // import of the focus; undefined when nothing is in focus. Kept while the
-  // focus and level stay the same.
+  // import of the focus; undefined when nothing in focus has such a link.
+  // Kept while the focus and level stay the same.
   hot: Uint8Array | undefined
   // Only the focus's links, with the overlay off.
   focus: LaneRoutes | undefined
@@ -50,7 +50,9 @@ export class LaneLayer {
   private readonly allRoutes = new Map<string, LaneRoutes>()
   private readonly focusRoutes = new Map<string, LaneRoutes>()
   private lastAll: { key: string; routes: LaneRoutes } | undefined
-  private hot: { key: string; subtree: ReadonlySet<string>; links: Uint8Array } | undefined
+  private hot:
+    | { key: string; subtree: ReadonlySet<string>; links: Uint8Array | undefined }
+    | undefined
   private busy: Job | undefined
   private wanted: Job | undefined
 
@@ -94,7 +96,7 @@ export class LaneLayer {
     } else if (focus) {
       const hot = this.listHot(open.key, level, focusSubtree)
       const only: number[] = []
-      hot.forEach((isHot, link) => {
+      hot?.forEach((isHot, link) => {
         if (isHot) only.push(link)
       })
       frame.focus = this.focusRoutes.get(`${open.key}\n${focus}`)
@@ -128,14 +130,21 @@ export class LaneLayer {
     return frame
   }
 
-  // Which of a level's links carry an import into or out of the focus. Imports
-  // inside it are left out, as in the inspector.
-  private listHot(key: string, level: LaneLevel, subtree: ReadonlySet<string>): Uint8Array {
+  // Which of a level's links carry an import into or out of the focus, or
+  // undefined when none does. Imports inside it are left out, as in the
+  // inspector.
+  private listHot(
+    key: string,
+    level: LaneLevel,
+    subtree: ReadonlySet<string>,
+  ): Uint8Array | undefined {
     if (this.hot?.key === key && this.hot.subtree === subtree) return this.hot.links
-    const links = new Uint8Array(level.links.length)
+    let links: Uint8Array | undefined
     this.edges.forEach(([from, to], e) => {
       const link = level.linkOfEdge[e] as number
-      if (link >= 0 && subtree.has(from) !== subtree.has(to)) links[link] = 1
+      if (link < 0 || subtree.has(from) === subtree.has(to)) return
+      links ??= new Uint8Array(level.links.length)
+      links[link] = 1
     })
     this.hot = { key, subtree, links }
     return links

@@ -19,6 +19,8 @@ export interface Drawn {
   w: number
   h: number
   alpha: number
+  // How far it is open, 0 to 1: its children are drawn at alpha * open.
+  open: number
 }
 
 export interface RenderState {
@@ -89,7 +91,7 @@ export function render(
     if (node.kind !== 'world' && side < MIN_VISIBLE_PX) return
     const kids = scene.children.get(node.id)
     const open = kids ? openness(node.kind, side) : 0
-    const item = { node, x, y, w, h, alpha }
+    const item = { node, x, y, w, h, alpha, open }
     if (node.kind !== 'world') {
       drawBody(ctx, item, open, labels, camera.scale)
       drawn.push(item)
@@ -506,11 +508,14 @@ function drawLanes(
   ctx.globalAlpha = 1
 }
 
+// Blocks fainter than this cannot be pointed at.
+export const MIN_HIT_ALPHA = 0.25
+
 // The deepest drawn node under a screen point.
 export function hitTest(drawn: Drawn[], sx: number, sy: number): Drawn | undefined {
   for (let i = drawn.length - 1; i >= 0; i--) {
     const item = drawn[i]
-    if (!item || item.alpha < 0.25) continue
+    if (!item || item.alpha < MIN_HIT_ALPHA) continue
     if (sx >= item.x && sx <= item.x + item.w && sy >= item.y && sy <= item.y + item.h) return item
   }
   return undefined

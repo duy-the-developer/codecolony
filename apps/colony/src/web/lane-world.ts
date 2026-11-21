@@ -25,11 +25,6 @@ export interface LaneRoutes {
   // points[offsets[i]] up to points[offsets[i + 1]]; empty when it has no path.
   points: Float64Array
   offsets: Int32Array
-  // Links that shared a lane with another, summed over channels.
-  merged: number
-  // Lanes that did not fit on whole units, so sit closer than one apart.
-  crowded: number
-  routeMs: number
 }
 
 // Levels kept in memory.
@@ -62,7 +57,6 @@ export class LaneWorld {
 
   // Routes the level's links, or only some of them.
   route(key: string, open: readonly string[], only?: readonly number[]): LaneRoutes {
-    const started = performance.now()
     const { graph, level } = this.resolveLevel(key, open)
     const picked = only ? [...only] : level.links.map((_, i) => i)
     const links = picked.map((i) => level.links[i] as Link)
@@ -84,9 +78,6 @@ export class LaneWorld {
       links: Int32Array.from(picked),
       points,
       offsets,
-      merged: routing.merged,
-      crowded: routing.crowded,
-      routeMs: performance.now() - started,
     }
   }
 

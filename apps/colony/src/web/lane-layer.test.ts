@@ -101,6 +101,14 @@ describe('LaneLayer', () => {
     ).toEqual(['dim', 'hot', 'hot'])
   })
 
+  it('keeps every link undimmed when the focus has no link in or out', async () => {
+    const scene = makeScene()
+    const layer = new LaneLayer(scene, createLaneRouter(), () => {})
+    const focus = new Set(['r', 'r/a', 'r/a/f.ts', 'r/b', 'r/b/f.ts', 'r/c', 'r/c/f.ts'])
+    const frame = await settle(() => layer.frame(SCALE, [], 'r', focus, true))
+    expect(listLanes(frame).map((lane) => lane.emphasis)).toEqual(['normal', 'normal', 'normal'])
+  })
+
   it('ends each lane with an arrow into the imported block', async () => {
     const scene = makeScene()
     const layer = new LaneLayer(scene, createLaneRouter(), () => {})

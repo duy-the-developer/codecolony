@@ -140,9 +140,8 @@ export function App() {
     }
   }
 
-  // Page-wide keys: ⌘K search, [ and ] toggle the panels, D the Dependency
-  // overlay. Ctrl+K opens the search too, except in a text field or the
-  // terminal, where it edits text.
+  // Page-wide keys: ⌘K search, [ and ] toggle the panels. Ctrl+K opens the
+  // search too, except in a text field or the terminal, where it edits text.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const isTyping = isTypingTarget(event.target)
@@ -154,13 +153,12 @@ export function App() {
       if (event.metaKey || event.ctrlKey || event.altKey || isTyping) return
       if (event.key === '[') togglePanel('left')
       else if (event.key === ']') togglePanel('right')
-      else if (event.key.toLowerCase() === 'd') toggleOverlay('dependency')
       else return
       event.preventDefault()
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [togglePanel, toggleOverlay])
+  }, [togglePanel])
 
   return (
     <div className="flex h-full flex-col">

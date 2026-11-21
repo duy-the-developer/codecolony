@@ -77,7 +77,6 @@ The page has a header (project picker, search, map controls), the map, and a sid
 | `Esc`                    | Clear the selection                                                                                                                  |
 | `⌘K` / `Ctrl+K`          | Search files and symbols by name; Enter flies to the result and selects it, Shift+Enter opens its file                               |
 | `[` / `]`                | Collapse or expand the left / right panel                                                                                            |
-| `D`                      | Turn the Dependency overlay on or off                                                                                                |
 
 By default the map shows only module blocks and file squares. Overlays draw connections over it, switched on from Overlays in the header; Dependency, the first, draws imports as arrows from the importing module to the imported one. The arrows run through the gutters between blocks, never across them, in lanes on the grid one unit apart, so they never overlap and only cross at right angles. Gutters widen, up to 8 units, to fit their lanes; in a gutter that is still full, arrows to the same module share a lane. Zoomed out, arrows join at the folders, packages and repositories you can see.
 
