@@ -6,7 +6,7 @@ import type { ColonyConfig, ProjectConfig } from '../config/load-config.ts'
 import type { LanguageAdapter } from '../core/language-adapter.ts'
 import { LspSession } from '../core/lsp.ts'
 import { type Edge, qualifiedName } from '../core/model.ts'
-import { layoutWorld, loadLayout, saveLayout } from '../layout/world-layout.ts'
+import { emptyLayout, layoutWorld, loadLayout, saveLayout } from '../layout/world-layout.ts'
 import { logError } from '../shared/log.ts'
 import type { World } from '../shared/world-types.ts'
 import { buildWorld, type ProjectIndex, repoId } from './build-world.ts'
@@ -30,6 +30,12 @@ export interface RefreshResult {
   stats: IndexStats[]
 }
 
+export interface ColonyOptions {
+  // Lay the map out afresh on the first refresh instead of keeping the saved
+  // order of modules and files.
+  relayout?: boolean
+}
+
 export class Colony extends EventEmitter<{ update: [World] }> {
   private readonly cache: FactCache
   private readonly layoutPath: string
@@ -39,9 +45,14 @@ export class Colony extends EventEmitter<{ update: [World] }> {
   private current: World = { version: 0, indexedAt: '', languages: {}, nodes: [], edges: [] }
   private refreshing: Promise<RefreshResult> | undefined
   private timer: NodeJS.Timeout | undefined
+  private relayout: boolean
 
-  constructor(private readonly config: ColonyConfig) {
+  constructor(
+    private readonly config: ColonyConfig,
+    { relayout = false }: ColonyOptions = {},
+  ) {
     super()
+    this.relayout = relayout
     this.cache = new FactCache(config.cacheDir, RULES_VERSION)
     this.layoutPath = join(config.cacheDir, 'layout.json')
   }
@@ -85,8 +96,9 @@ export class Colony extends EventEmitter<{ update: [World] }> {
     if (!changed) return { changed, stats }
 
     const { nodes, edges } = buildWorld(projects)
-    const store = loadLayout(this.layoutPath)
-    layoutWorld(nodes, store)
+    const store = this.relayout ? emptyLayout() : loadLayout(this.layoutPath)
+    this.relayout = false
+    layoutWorld(nodes, edges, store)
     saveLayout(this.layoutPath, store)
     this.deep.clear()
     this.current = {
