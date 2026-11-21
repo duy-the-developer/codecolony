@@ -60,7 +60,7 @@ export function MapView({ scene, handleRef, onSelect, children }: MapViewProps) 
       <div
         ref={hudRef}
         aria-live="polite"
-        className="pointer-events-none absolute bottom-3 left-3 rounded-md border bg-card/85 px-2 py-1 text-muted-foreground text-xs"
+        className="pointer-events-none absolute bottom-3 left-3 max-w-[calc(100%-4.5rem)] rounded-md border bg-card/85 px-2 py-1 text-muted-foreground text-xs"
       />
       {children}
     </div>

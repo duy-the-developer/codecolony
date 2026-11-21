@@ -14,7 +14,7 @@ export function WorkerPawns({ workers, onFocus }: WorkerPawnsProps) {
   return (
     <ul
       aria-label="Workers on the map"
-      className="absolute top-3 right-3 flex max-w-1/2 flex-wrap justify-end gap-1.5"
+      className="pointer-events-auto ml-auto flex max-w-1/2 shrink-0 flex-wrap justify-end gap-1.5"
     >
       {workers.map((worker) => (
         <li key={worker.paneId}>

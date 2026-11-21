@@ -16,7 +16,7 @@ export function MapBreadcrumb({ scene, selected, onPick }: MapBreadcrumbProps) {
   return (
     <nav
       aria-label="Selection path"
-      className="absolute top-3 left-3 flex max-w-[calc(100%-24px)] items-center gap-0.5 overflow-hidden rounded-md border bg-card/90 px-1.5 py-1 text-xs"
+      className="pointer-events-auto flex min-w-0 items-center gap-0.5 overflow-hidden rounded-md border bg-card/90 px-1.5 py-1 text-xs"
     >
       {chain.map((node, i) => (
         <Fragment key={node.id}>

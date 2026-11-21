@@ -190,8 +190,11 @@ export function App() {
         <ResizableHandle aria-label="Resize left panel" />
         <ResizablePanel id="map" minSize="25%">
           <MapView scene={scene} handleRef={mapRef} onSelect={setSelectedId}>
-            <MapBreadcrumb scene={scene} selected={selected} onPick={pick} />
-            <WorkerPawns workers={workers} onFocus={focusWorker} />
+            {/* One top row so the breadcrumb shrinks before it reaches the pawns. */}
+            <div className="pointer-events-none absolute inset-x-3 top-3 flex items-start gap-2">
+              <MapBreadcrumb scene={scene} selected={selected} onPick={pick} />
+              <WorkerPawns workers={workers} onFocus={focusWorker} />
+            </div>
             <ZoomControls
               onZoomIn={() => mapRef.current?.zoomBy(ZOOM_STEP)}
               onZoomOut={() => mapRef.current?.zoomBy(1 / ZOOM_STEP)}
