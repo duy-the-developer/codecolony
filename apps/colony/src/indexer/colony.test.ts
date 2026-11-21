@@ -1,3 +1,4 @@
+import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { ColonyConfig } from '../config/load-config.ts'
@@ -72,6 +73,39 @@ describe('Colony', () => {
     if (!src || !file) throw new Error('missing nodes')
     expect(file.rect.x).toBeGreaterThanOrEqual(src.rect.x)
     expect(file.rect.x + file.rect.w).toBeLessThanOrEqual(src.rect.x + src.rect.w)
+  })
+
+  it('reads a file on the map as committed, and nothing off the map', async () => {
+    const root = makeRepo(
+      { 'src/a.ts': 'export const a = 1\n', 'logo.png': '\u0000\u0001PNG' },
+      join(makeTempDir(), 'demo'),
+    )
+    writeFileSync(join(root, 'src/a.ts'), 'uncommitted edit\n')
+    writeFileSync(join(root, 'secret.txt'), 'not tracked\n')
+    const colony = colonyFor([{ name: 'p', root, kind: 'repo' }])
+    await colony.refresh()
+    const head = git(root, 'rev-parse', 'HEAD')
+
+    expect(await colony.readFile('project:p/demo/src/a.ts')).toEqual({
+      id: 'project:p/demo/src/a.ts',
+      path: 'src/a.ts',
+      commit: head,
+      isBinary: false,
+      text: 'export const a = 1\n',
+    })
+    expect(await colony.readFile('project:p/demo/logo.png')).toMatchObject({
+      isBinary: true,
+      text: '',
+    })
+    for (const id of [
+      'project:p/demo/secret.txt',
+      'project:p/demo/src/../secret.txt',
+      'project:p/demo/../../etc/passwd',
+      'project:p/demo/src/a.ts#a',
+      'project:p/demo/src',
+    ]) {
+      expect(await colony.readFile(id)).toBeUndefined()
+    }
   })
 
   it('keeps loose files directly in their repository or package', async () => {

@@ -36,6 +36,9 @@ export interface Dock {
   handle(req: IncomingMessage, res: ServerResponse): boolean
   // Takes WebSocket upgrades for the terminal and returns true, or returns false.
   upgrade(req: IncomingMessage, socket: Duplex, head: Buffer): boolean
+  // Guards another HTTP route as the dock guards its own: Host, Origin and
+  // bearer token. Returns the status to refuse the request with, or null.
+  deny(req: IncomingMessage): 401 | 403 | null
   close(): void
 }
 
@@ -63,7 +66,7 @@ export function createDock(options: DockOptions, deps: DockDeps = {}): Dock {
   let ptys = 0
 
   // Host on every request; Origin whenever the browser sends one; the token always.
-  function deny(req: IncomingMessage, bearer: string | undefined): number | null {
+  function deny(req: IncomingMessage, bearer: string | undefined): 401 | 403 | null {
     const port = req.socket.localPort ?? 0
     if (!isAllowedHost(req.headers.host, port)) return 403
     const { origin } = req.headers
@@ -115,6 +118,7 @@ export function createDock(options: DockOptions, deps: DockDeps = {}): Dock {
 
   return {
     token,
+    deny: (req) => deny(req, tokenFromAuthorization(req.headers.authorization)),
     handle(req, res) {
       const { pathname } = new URL(req.url ?? '/', 'http://localhost')
       if (!pathname.startsWith('/api/dock/')) return false

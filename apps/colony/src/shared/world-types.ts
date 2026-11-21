@@ -3,7 +3,7 @@ import type { Edge, LineRange, SymbolKind, TransportFact } from '../core/model.t
 // The map the server sends to the page: a tree of nodes with absolute
 // rectangles, plus edges between node ids.
 
-export type { Edge, EdgeKind, Provenance, SymbolKind } from '../core/model.ts'
+export type { Edge, EdgeKind, LineRange, Provenance, SymbolKind } from '../core/model.ts'
 
 export const WORLD_ID = 'world'
 

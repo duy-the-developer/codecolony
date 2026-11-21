@@ -5,11 +5,12 @@ import { findAdapter, LANGUAGE_ADAPTERS, RULES_VERSION } from '../adapters/regis
 import type { ColonyConfig, ProjectConfig } from '../config/load-config.ts'
 import { type Edge, qualifiedName } from '../core/model.ts'
 import { emptyLayout, layoutWorld, loadLayout, saveLayout } from '../layout/world-layout.ts'
+import type { FileResponse } from '../shared/api-types.ts'
 import { logError } from '../shared/log.ts'
 import type { World } from '../shared/world-types.ts'
 import { buildWorld, type ProjectIndex, repoId } from './build-world.ts'
 import { FactCache } from './cache.ts'
-import { isGitRepo, readHeadCommits } from './git.ts'
+import { isGitRepo, readBlobs, readHeadCommits } from './git.ts'
 import { createHeadWatcher, type HeadWatcherHandle } from './head-watcher.ts'
 import { LspPool } from './lsp-pool.ts'
 import { buildTextFacts } from './parse-facts.ts'
@@ -256,6 +257,20 @@ export class Colony extends EventEmitter<{ update: [World] }> {
     })
     if (this.current.version === version) this.deep.set(fileId, edges)
     return edges
+  }
+
+  // A file on the map, as committed at the indexed commit. Ids name files in
+  // the index only, so no path from the page ever reaches the filesystem.
+  async readFile(fileId: string): Promise<FileResponse | undefined> {
+    const file = this.current.nodes.find((node) => node.id === fileId && node.kind === 'file')
+    const repo = this.repoOf(fileId)
+    const indexed = repo?.index.files.find((f) => f.path === file?.path)
+    if (!file?.path || !repo || !indexed) return undefined
+    const base = { id: fileId, path: file.path, commit: repo.index.commit }
+    if (file.language === 'binary') return { ...base, isBinary: true, text: '' }
+    const blob = (await readBlobs(repo.index.root, [indexed.sha])).get(indexed.sha)
+    if (!blob) return undefined
+    return { ...base, isBinary: false, text: blob.toString('utf8') }
   }
 
   async close(): Promise<void> {

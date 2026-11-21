@@ -11,6 +11,8 @@ export interface MapControllerOptions {
   onSelect(id: string | undefined): void
   // After each frame, for the zoom readout.
   onDraw(camera: Camera): void
+  // A file or symbol was double-clicked: show its file.
+  onOpen(id: string): void
 }
 
 export interface MapHandle {
@@ -104,7 +106,8 @@ export function createMapController(
   }
 
   // Input: wheel and pinch zoom at the cursor, drag pans, click selects,
-  // double-click flies in, +/- and arrows work from the keyboard.
+  // double-click flies in (and opens a file), +/- and arrows work from the
+  // keyboard.
   const onWheel = (event: WheelEvent) => {
     event.preventDefault()
     const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? view.height : 1
@@ -155,7 +158,9 @@ export function createMapController(
   }
   const onDoubleClick = (event: MouseEvent) => {
     const hit = hitTest(drawn, event.offsetX, event.offsetY)
-    if (hit) select(hit.node.id, true)
+    if (!hit) return
+    select(hit.node.id, true)
+    if (hit.node.kind === 'file' || hit.node.kind === 'symbol') options.onOpen(hit.node.id)
   }
 
   // Map keys work while nothing else on the page has the focus, so arrows
