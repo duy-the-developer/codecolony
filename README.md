@@ -25,7 +25,7 @@ The server listens on loopback only and answers 403 to any request whose host is
 
 ## Terminal dock
 
-The bottom panel runs the real [Herdr](https://herdr.dev) client in the page (xterm.js over node-pty and a WebSocket), with a list of the agents Herdr knows about. Clicking a worker, in the dock or on the map, focuses its pane. The dock needs `herdr` on your `PATH`; without it the terminal shows the client's exit (for example `[herdr exited with code 1]`), the worker list says it cannot reach the Herdr socket, and the rest of the app keeps working.
+The right panel's Terminal tab runs the real [Herdr](https://herdr.dev) client in the page (xterm.js over node-pty and a WebSocket), with a chip for each agent Herdr knows about. A chip is labelled by its Herdr workspace (the task name, such as `firstmate` or `alphagal-mockup`), falling back to its tab label without an `fm-` prefix, then to the agent's name; hovering shows the agent program, pane and status. Clicking a worker, in the dock or on the map, focuses its pane. The dock needs `herdr` on your `PATH`; without it the terminal shows the client's exit (for example `[herdr exited with code 1]`), the worker list says it cannot reach the Herdr socket, and the rest of the app keeps working.
 
 | Flag                     | Environment                | Default                                            |
 | ------------------------ | -------------------------- | -------------------------------------------------- |
@@ -64,16 +64,20 @@ See `codecolony.config.example.json`.
 
 ## Using the map
 
-| Input                    | Action                                                           |
-| ------------------------ | ---------------------------------------------------------------- |
-| Scroll, pinch, `+` / `-` | Zoom smoothly at the cursor; detail fades in and out as you zoom |
-| Drag, arrow keys         | Pan                                                              |
-| Click                    | Inspect: facts, and every road in or out with how it was proven  |
-| Double-click             | Fly into a block or file                                         |
-| `Home`                   | See everything                                                   |
-| `Esc`                    | Clear the selection                                              |
+The page has a header (project picker, search, map controls), the map, and a side panel on each side. The left panel holds the Build queue, the Legend and a Files tree; the right panel holds the Terminal, the File tab and the Inspector. Drag a panel's edge to resize it; widths, collapsed panels and the open tabs are remembered in the browser.
 
-Roads: blue imports, teal calls, amber HTTP. Solid roads are proven by a language server or the syntax tree; dashed ones are matched on text. In the inspector, "Trace calls with the language server" proves the calls of a file's functions, including method calls the parser cannot resolve.
+| Input                    | Action                                                                                     |
+| ------------------------ | ------------------------------------------------------------------------------------------ |
+| Scroll, pinch, `+` / `-` | Zoom smoothly at the cursor; detail fades in and out as you zoom                           |
+| Drag, arrow keys         | Pan                                                                                        |
+| Click                    | Inspect: facts, then imports, calls and HTTP requests in and out, with how each was proven |
+| Double-click             | Fly into a block or file                                                                   |
+| `Home`                   | See everything                                                                             |
+| `Esc`                    | Clear the selection                                                                        |
+| `⌘K` / `Ctrl+K`          | Search files and symbols by name; Enter flies to the result and selects it                 |
+| `[` / `]`                | Collapse or expand the left / right panel                                                  |
+
+Dependencies: blue imports, teal calls, amber HTTP requests. Solid lines are proven by a language server or the syntax tree; dashed ones are matched on text. The Inspector lists them as Imports / Imported by, Calls / Called by, and HTTP requests / HTTP routes served, by route. "Trace calls with the language server" proves the calls of a file's functions, including method calls the parser cannot resolve.
 
 The map updates live: commit to a mapped repository and it redraws within a few seconds.
 
@@ -83,7 +87,7 @@ TypeScript and JavaScript are supported today, through tree-sitter and `typescri
 
 ## Layout
 
-- `apps/colony`: the app. A Vite-built canvas page (`src/web`), a Node server (`src/server`), the indexer (`src/indexer`), the language-agnostic core (`src/core`) and the language adapters (`src/adapters`). See [ARCHITECTURE.md](ARCHITECTURE.md).
+- `apps/colony`: the app. A Vite-built page (`src/web`: React, Tailwind and shadcn/ui panels around a canvas map), a Node server (`src/server`), the indexer (`src/indexer`), the language-agnostic core (`src/core`) and the language adapters (`src/adapters`). See [ARCHITECTURE.md](ARCHITECTURE.md).
 - `packages/dock`: the terminal dock. A Herdr socket client, the pty bridge and its HTTP and WebSocket routes (`src/server`), and `mountDock` for the page (`src/web`).
 
 ## Develop

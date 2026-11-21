@@ -10,8 +10,8 @@
   align-items: center;
   gap: 12px;
   padding: 4px 8px;
-  background: var(--panel, #102235);
-  border-bottom: 1px solid var(--line, #24425f);
+  background: var(--card, #102235);
+  border-bottom: 1px solid var(--border, #24425f);
   font-size: 12px;
 }
 
@@ -31,17 +31,17 @@
   align-items: center;
   gap: 6px;
   padding: 2px 8px;
-  border: 1px solid var(--line, #24425f);
+  border: 1px solid var(--border, #24425f);
   border-radius: 4px;
   background: transparent;
-  color: var(--text, #dce7f2);
+  color: var(--foreground, #dce7f2);
   font: inherit;
   white-space: nowrap;
   cursor: pointer;
 }
 
 .cc-dock-worker:hover {
-  border-color: var(--muted, #7d93a8);
+  border-color: var(--muted-foreground, #7d93a8);
 }
 
 .cc-dock-worker[aria-pressed="true"] {
@@ -74,16 +74,16 @@
 
 .cc-dock-note,
 .cc-dock-state {
-  color: var(--muted, #7d93a8);
+  color: var(--muted-foreground, #7d93a8);
   white-space: nowrap;
 }
 
 .cc-dock-bar button:not(.cc-dock-worker) {
   padding: 2px 8px;
-  border: 1px solid var(--line, #24425f);
+  border: 1px solid var(--border, #24425f);
   border-radius: 4px;
-  background: var(--bg, #0d1b2a);
-  color: var(--text, #dce7f2);
+  background: var(--background, #0d1b2a);
+  color: var(--foreground, #dce7f2);
   font: inherit;
   cursor: pointer;
 }

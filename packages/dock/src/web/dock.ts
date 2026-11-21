@@ -40,6 +40,12 @@ const STALE_TOKEN = 'Token not accepted: the server restarted, open the URL it p
 const HERDR_DISABLED =
   'Herdr is disabled for this run (--no-herdr, CODECOLONY_HERDR=off or CI), so the dock does not attach to any session.'
 
+// The hover text for a worker: agent program, pane and status, such as
+// `claude · pane w4:p1 · working`.
+export function workerTitle(worker: DockWorker): string {
+  return `${worker.agent ?? 'agent'} · pane ${worker.paneId} · ${worker.status}`
+}
+
 // Reads the token from `#token=...` once, keeps it for this tab in
 // sessionStorage and strips it from the address bar.
 export function readToken(): string | null {
@@ -228,8 +234,8 @@ export function mountDock(el: HTMLElement, { token, pollMs = 3000 }: DockMountOp
         button.type = 'button'
         button.className = `cc-dock-worker cc-status-${worker.status}`
         button.setAttribute('aria-pressed', String(worker.focused))
-        button.title = `${worker.agent ?? 'agent'} in pane ${worker.paneId} (${worker.status})`
-        button.textContent = worker.name ?? worker.agent ?? worker.paneId
+        button.title = workerTitle(worker)
+        button.textContent = worker.label
         button.addEventListener('click', () => {
           focusPane(worker.paneId).catch(showError)
         })

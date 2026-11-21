@@ -1,5 +1,6 @@
 import { createConnection } from 'node:net'
 import { type DockWorker, WORKER_STATUSES, type WorkerStatus } from '../shared/protocol.ts'
+import { resolveWorkerLabel } from './worker-label.ts'
 
 // A client for the Herdr API socket. Each request opens the unix socket, writes
 // one JSON line `{id, method, params}` and reads one JSON line back:
@@ -73,11 +74,21 @@ export function createHerdrApi(socketPath: string, timeoutMs = TIMEOUT_MS): Herd
   return {
     request,
     async listWorkers() {
-      const result = await request('agent.list')
+      // Workspace and tab labels only name the workers, so a failed lookup
+      // falls back to agent names instead of hiding the list.
+      const [result, workspaces, tabs] = await Promise.all([
+        request('agent.list'),
+        request('workspace.list').catch(() => null),
+        request('tab.list').catch(() => null),
+      ])
       if (!isRecord(result) || result.type !== 'agent_list' || !Array.isArray(result.agents)) {
         throw new HerdrError('protocol', 'agent.list returned an unexpected shape')
       }
-      return result.agents.flatMap(toWorker)
+      const labels = {
+        workspaces: labelsById(workspaces, 'workspace_list', 'workspaces', 'workspace_id'),
+        tabs: labelsById(tabs, 'tab_list', 'tabs', 'tab_id'),
+      }
+      return result.agents.flatMap((agent) => toWorker(agent, labels))
     },
     async focusPane(paneId) {
       await request('pane.focus', { pane_id: paneId })
@@ -108,21 +119,55 @@ function readReply(line: string, id: string, method: string): unknown {
   return reply.result
 }
 
+interface HerdrLabels {
+  workspaces: ReadonlyMap<string, string>
+  tabs: ReadonlyMap<string, string>
+}
+
 // Keeps only what the map needs; working directories and titles stay on the server.
-function toWorker(agent: unknown): DockWorker[] {
+function toWorker(agent: unknown, labels: HerdrLabels): DockWorker[] {
   if (!isRecord(agent)) return []
-  const { pane_id, workspace_id, agent: kind, name, agent_status, focused } = agent
+  const { pane_id, workspace_id, tab_id, agent: kind, name, agent_status, focused } = agent
   if (typeof pane_id !== 'string' || typeof workspace_id !== 'string') return []
+  const worker = {
+    paneId: pane_id,
+    workspaceId: workspace_id,
+    agent: typeof kind === 'string' ? kind : null,
+    name: typeof name === 'string' ? name : null,
+  }
   return [
     {
-      paneId: pane_id,
-      workspaceId: workspace_id,
-      agent: typeof kind === 'string' ? kind : null,
-      name: typeof name === 'string' ? name : null,
+      ...worker,
+      label: resolveWorkerLabel({
+        ...worker,
+        workspaceLabel: labels.workspaces.get(workspace_id) ?? null,
+        tabLabel: typeof tab_id === 'string' ? (labels.tabs.get(tab_id) ?? null) : null,
+      }),
       status: isWorkerStatus(agent_status) ? agent_status : 'unknown',
       focused: focused === true,
     },
   ]
+}
+
+// Maps ids to labels from a `workspace.list` or `tab.list` result; anything
+// unexpected yields an empty map.
+function labelsById(
+  result: unknown,
+  type: string,
+  listKey: string,
+  idKey: string,
+): Map<string, string> {
+  const labels = new Map<string, string>()
+  if (!isRecord(result) || result.type !== type) return labels
+  const items = result[listKey]
+  if (!Array.isArray(items)) return labels
+  for (const item of items) {
+    if (!isRecord(item)) continue
+    const id = item[idKey]
+    const label = item.label
+    if (typeof id === 'string' && typeof label === 'string') labels.set(id, label)
+  }
+  return labels
 }
 
 function isWorkerStatus(value: unknown): value is WorkerStatus {

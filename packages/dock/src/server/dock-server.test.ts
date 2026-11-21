@@ -13,7 +13,7 @@ import {
   SUBPROTOCOL,
   WORKERS_PATH,
 } from '../shared/protocol.ts'
-import { FAKE_AGENTS, type FakeHerdr, ok, startFakeHerdr } from '../testing/fake-herdr.ts'
+import { answerWorkerList, type FakeHerdr, startFakeHerdr } from '../testing/fake-herdr.ts'
 import { createDock, type Dock, securityHeaders } from './dock-server.ts'
 import type { DockOptions } from './options.ts'
 
@@ -55,11 +55,7 @@ describe('dock server', () => {
   const auth = { authorization: `Bearer ${TOKEN}` }
 
   beforeAll(async () => {
-    fake = await startFakeHerdr((req) => {
-      if (req.method === 'agent.list') return ok(req, { type: 'agent_list', agents: FAKE_AGENTS })
-      if (req.method === 'pane.focus') return ok(req, { type: 'ok' })
-      return null
-    })
+    fake = await startFakeHerdr(answerWorkerList)
     const options: DockOptions = {
       enabled: true,
       session: 'fm-lab-test',
@@ -94,8 +90,13 @@ describe('dock server', () => {
     it('lists workers with the token', async () => {
       const response = await send(port, WORKERS_PATH, { headers: auth })
       expect(response.status).toBe(200)
-      const { workers } = JSON.parse(response.body) as { workers: { paneId: string }[] }
-      expect(workers.map((worker) => worker.paneId)).toEqual(['w1:p1', 'w2:p4'])
+      const { workers } = JSON.parse(response.body) as {
+        workers: { paneId: string; label: string }[]
+      }
+      expect(workers.map((worker) => [worker.paneId, worker.label])).toEqual([
+        ['w1:p1', 'codecolony-dock'],
+        ['w2:p4', 'mystery-task'],
+      ])
       expect(response.body).not.toContain('/private/path')
     })
 
@@ -296,7 +297,7 @@ describe('dock server with herdr disabled', () => {
   const auth = { authorization: `Bearer ${TOKEN}` }
 
   beforeAll(async () => {
-    fake = await startFakeHerdr((req) => ok(req, { type: 'agent_list', agents: FAKE_AGENTS }))
+    fake = await startFakeHerdr(answerWorkerList)
     spawned = join(await mkdtemp(join(tmpdir(), 'dock-off-')), 'spawned')
     dock = createDock(
       {
