@@ -132,8 +132,8 @@ export function createDock(options: DockOptions, deps: DockDeps = {}): Dock {
       const offered = protocols?.split(',').map((value) => value.trim()) ?? []
       if (!offered.includes(SUBPROTOCOL)) return reject(socket, 400)
       if (ptys >= MAX_PTYS) return reject(socket, 503)
-      ptys += 1
       wss.handleUpgrade(req, socket, head, (ws) => {
+        ptys += 1
         bridgePty(ws, command, () => {
           ptys -= 1
         })

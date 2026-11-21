@@ -223,6 +223,10 @@ export function mountDock(el: HTMLElement, { token, pollMs = 3000 }: DockMountOp
     } catch (error) {
       if (disposed) return
       shownKey = ''
+      if (current?.length) {
+        current = []
+        for (const listener of listeners) listener(current)
+      }
       const item = document.createElement('li')
       item.className = 'cc-dock-note'
       item.textContent = `Workers unavailable: ${error instanceof Error ? error.message : error}`

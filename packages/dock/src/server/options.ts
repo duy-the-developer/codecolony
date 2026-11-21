@@ -50,6 +50,7 @@ export function resolveDockOptions(
   if (rawSession !== undefined && !SESSION_NAME.test(rawSession)) {
     throw new DockOptionsError(`Herdr session name is not valid: ${JSON.stringify(rawSession)}`)
   }
+  // Herdr names its default session "default" (herdr session list --json).
   const session = rawSession === undefined || rawSession === 'default' ? null : rawSession
   if (lab) {
     // Lab mode never reaches the default session or any session outside the lab.
