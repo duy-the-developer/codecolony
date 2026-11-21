@@ -23,18 +23,18 @@ Everything left of "facts" is per language. Everything right of it is language-a
 
 ## The model
 
-A world is a tree: `world > project > repo > dir > file > symbol`. Ids are paths: `project/repo/dir/file.ts#Class.method`.
+A world is a tree: `world > project > repo > dir > file > symbol`. Ids are paths: `project:<name>/repo/dir/file.ts#Class.method`.
 
 Each file carries `FileFacts`: lines, branch count, symbols (name, kind, line range, container, exported), imports (specifier, bound names, type-only), calls (callee, caller) and transports (HTTP client and route, queue produce and consume, data read and write).
 
 Edges connect node ids and have a **kind** (`import`, `call`, `http`, `queue`, `data`) and a **provenance**, strongest first:
 
-| Provenance    | Meaning                                                                 | Drawn  |
-| ------------- | ----------------------------------------------------------------------- | ------ |
-| `lsp`         | Answered by a language server (call hierarchy, definitions, references) | solid  |
-| `tree-sitter` | Read from the syntax tree (imports, calls to names bound in the file)   | solid  |
-| `text`        | Matched on literals (URL paths, topic names)                            | dashed |
-| `inferred`    | Guessed from a naming rule                                              | dashed |
+| Provenance    | Meaning                                                               | Drawn  |
+| ------------- | --------------------------------------------------------------------- | ------ |
+| `lsp`         | Answered by a language server (call hierarchy)                        | solid  |
+| `tree-sitter` | Read from the syntax tree (imports, calls to names bound in the file) | solid  |
+| `text`        | Matched on literals (URL paths, topic names)                          | dashed |
+| `inferred`    | Guessed from a naming rule                                            | dashed |
 
 The inspector shows the provenance of every edge, so a viewer can tell proven links from guesses.
 
