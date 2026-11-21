@@ -20,8 +20,8 @@ export function AppHeader({
   ...controls
 }: AppHeaderProps) {
   return (
-    <header className="grid h-12 shrink-0 grid-cols-[1fr_minmax(0,460px)_1fr] items-center gap-4 border-b bg-card px-3">
-      <div className="flex min-w-0 items-center gap-3">
+    <header className="flex h-12 shrink-0 items-center gap-4 border-b bg-card px-3">
+      <div className="flex shrink-0 items-center gap-3">
         <div className="flex items-center gap-2 font-semibold">
           <ColonyMark />
           <span className="whitespace-nowrap">Code Colony</span>
@@ -31,13 +31,13 @@ export function AppHeader({
       <button
         type="button"
         onClick={onOpenSearch}
-        className="flex h-8 w-full cursor-text items-center gap-2 rounded-md border border-input bg-background px-2.5 text-left text-muted-foreground text-sm transition-colors hover:border-ring/60"
+        className="mx-auto flex h-8 min-w-0 max-w-[460px] flex-1 cursor-text items-center gap-2 rounded-md border border-input bg-background px-2.5 text-left text-muted-foreground text-sm transition-colors hover:border-ring/60"
       >
         <SearchIcon className="size-4 shrink-0" />
         <span className="flex-1 truncate">Search files and symbols</span>
         <Kbd>⌘K</Kbd>
       </button>
-      <div className="flex justify-end">
+      <div className="flex shrink-0 justify-end">
         <MapControls {...controls} />
       </div>
     </header>
