@@ -1,9 +1,9 @@
 import type { ReactNode } from 'react'
-import type { EdgeKind, SymbolKind } from '../../../shared/world-types.ts'
+import type { EdgeKind, SymbolKind, WorldNode } from '../../../shared/world-types.ts'
 import { cn } from '../../class-names.ts'
 import { EDGE_COLORS, hueOf, SYMBOL_COLORS } from '../../render.ts'
 import type { Scene } from '../../scene.ts'
-import { listTreeRoots } from '../../tree-entries.ts'
+import { listTreeChildren, listTreeRoots } from '../../tree-entries.ts'
 import { WORKER_STATUS_DOTS } from '../../worker-status-dots.ts'
 import { Kbd } from '../ui/kbd.tsx'
 
@@ -30,6 +30,8 @@ const SYMBOL_NAMES: Record<SymbolKind, string> = {
   namespace: 'Namespace',
 }
 
+const MAX_MODULES = 10
+
 const KEYS: [string, string][] = [
   ['⌘K', 'Search files and symbols'],
   ['[', 'Toggle the left panel'],
@@ -42,17 +44,15 @@ const KEYS: [string, string][] = [
 
 // What the map's colours, lines and keys mean.
 export function Legend({ scene }: LegendProps) {
-  const folders = scene
-    ? listTreeRoots(scene).filter((node) => node.kind === 'package' || node.kind === 'module')
-    : []
+  const modules = scene ? listColourGroups(scene) : []
   return (
     <div className="space-y-5 px-3 py-3">
-      <LegendSection title="Folders" note="each package and module has its own colour">
-        {folders.slice(0, 10).map((folder) => (
+      <LegendSection title="Modules" note="the files of each module share a colour">
+        {modules.map((module) => (
           <LegendRow
-            key={folder.id}
-            mark={<Swatch color={`hsl(${hueOf(folder)}, 42%, 40%)`} />}
-            label={folder.name}
+            key={module.id}
+            mark={<Swatch color={`hsl(${hueOf(module)}, 42%, 40%)`} />}
+            label={module.path ?? module.name}
           />
         ))}
         <LegendRow mark={<Swatch color="hsl(210, 12%, 34%)" />} label="Tests (greyed out)" />
@@ -118,6 +118,23 @@ export function Legend({ scene }: LegendProps) {
       </LegendSection>
     </div>
   )
+}
+
+// The packages and modules that hold files directly, in tree order: render.ts
+// colours each file by the hue of its parent.
+function listColourGroups(scene: Scene): WorldNode[] {
+  const groups: WorldNode[] = []
+  const visit = (nodes: WorldNode[]) => {
+    for (const node of nodes) {
+      if (groups.length >= MAX_MODULES) return
+      if (node.kind !== 'package' && node.kind !== 'module') continue
+      const children = listTreeChildren(scene, node.id)
+      if (children.some((child) => child.kind === 'file')) groups.push(node)
+      visit(children)
+    }
+  }
+  visit(listTreeRoots(scene))
+  return groups
 }
 
 interface LegendSectionProps {
