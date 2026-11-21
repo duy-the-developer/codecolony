@@ -1,12 +1,10 @@
 import type { LanguageServerSpec } from '../core/language-adapter.ts'
-import { LspSession, type LspSessionOptions } from '../core/lsp.ts'
+import { LspSession, type LspSessionOptions, resolveLspMemoryBudget } from '../core/lsp.ts'
 import { log, logError } from '../shared/log.ts'
 
 // The language servers the colony keeps running, one per language and
 // repository. A server that exits is started again on next use, and only the
 // most recently used ones stay open: each can hold gigabytes.
-
-export const MAX_LSP_SESSIONS = 4
 
 export interface LspPoolOptions {
   maxSessions?: number
@@ -27,7 +25,7 @@ export class LspPool {
   private readonly maxSessions: number
 
   constructor(private readonly options: LspPoolOptions = {}) {
-    this.maxSessions = Math.max(1, options.maxSessions ?? MAX_LSP_SESSIONS)
+    this.maxSessions = Math.max(1, options.maxSessions ?? resolveLspMemoryBudget().sessions)
   }
 
   get size(): number {

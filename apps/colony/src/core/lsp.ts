@@ -1,5 +1,6 @@
 import { type ChildProcess, spawn } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
+import { totalmem } from 'node:os'
 import { createInterface } from 'node:readline'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import {
@@ -66,6 +67,25 @@ export class LspError extends Error {
 
 const LOAD_TIMEOUT_MS = 180_000
 const REQUEST_TIMEOUT_MS = 20_000
+
+// The most language servers open at once.
+const MAX_LSP_SESSIONS = 4
+
+// Language servers share half the machine's memory. Each gets an equal share
+// of it but never less than this, so on a small machine fewer stay open.
+const MIN_SERVER_MEMORY_MB = 3072
+
+export interface LspMemoryBudget {
+  sessions: number
+  serverMemoryMb: number
+}
+
+export function resolveLspMemoryBudget(totalBytes = totalmem()): LspMemoryBudget {
+  const budgetMb = Math.floor(totalBytes / 2 / 1024 / 1024)
+  const serverMemoryMb = Math.max(MIN_SERVER_MEMORY_MB, Math.floor(budgetMb / MAX_LSP_SESSIONS))
+  const sessions = Math.max(1, Math.min(MAX_LSP_SESSIONS, Math.floor(budgetMb / serverMemoryMb)))
+  return { sessions, serverMemoryMb }
+}
 
 export class LspSession {
   private readonly opened = new Map<string, { version: number; text: string }>()
@@ -184,7 +204,11 @@ export class LspSession {
     this.closing = true
     if (this.alive) {
       try {
-        await this.request(this.connection.sendRequest(ShutdownRequest.type), 'shutdown')
+        await this.request(
+          this.connection.sendRequest(ShutdownRequest.type),
+          'shutdown',
+          this.requestTimeoutMs,
+        )
         await this.connection.sendNotification(ExitNotification.type)
       } catch {
         // The process is killed below either way.
@@ -192,6 +216,10 @@ export class LspSession {
     }
     this.connection.dispose()
     this.process.kill()
+  }
+
+  private get requestTimeoutMs(): number {
+    return this.options.requestTimeoutMs ?? REQUEST_TIMEOUT_MS
   }
 
   // Sends the file's current text, so positions read from it now match.
@@ -216,10 +244,11 @@ export class LspSession {
   }
 
   // Settles with the answer, a timeout, or the server's exit, whichever is first.
-  private async request<T>(pending: Promise<T>, what: string): Promise<T> {
-    const ms = this.loaded
-      ? (this.options.requestTimeoutMs ?? REQUEST_TIMEOUT_MS)
-      : (this.options.loadTimeoutMs ?? LOAD_TIMEOUT_MS)
+  private async request<T>(
+    pending: Promise<T>,
+    what: string,
+    ms = this.loaded ? this.requestTimeoutMs : (this.options.loadTimeoutMs ?? LOAD_TIMEOUT_MS),
+  ): Promise<T> {
     let timer: NodeJS.Timeout | undefined
     const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(

@@ -10,6 +10,8 @@ export interface FakeLspBehavior {
   crashOnPrepare?: number
   // How long each call-hierarchy request waits before it answers, in order.
   prepareDelaysMs?: number[]
+  // Never answers the shutdown request.
+  hangOnShutdown?: boolean
 }
 
 const SERVER = fileURLToPath(new URL('./fake-lsp-server/main.ts', import.meta.url))

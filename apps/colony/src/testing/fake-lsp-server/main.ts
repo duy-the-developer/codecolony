@@ -60,7 +60,9 @@ connection.onRequest(CallHierarchyOutgoingCallsRequest.type, ({ item }) => [
   },
 ])
 
-connection.onRequest(ShutdownRequest.type, () => undefined)
+connection.onRequest(ShutdownRequest.type, () =>
+  behavior.hangOnShutdown ? new Promise<undefined>(() => {}) : undefined,
+)
 connection.onNotification(ExitNotification.type, () => process.exit(0))
 connection.onClose(() => process.exit(0))
 connection.listen()

@@ -91,6 +91,20 @@ describe('LspPool', () => {
     expect((late as LspError).code).toBe('Timeout')
   })
 
+  it('kills a server that hangs on shutdown after the request timeout, even before it loaded', async () => {
+    silenceLogs()
+    const pool = makePool({ session: { loadTimeoutMs: 60_000, requestTimeoutMs: 300 } })
+    const spec = createFakeLsp({ hangOnShutdown: true })
+    let session: LspSession | undefined
+    await pool.use('fake', spec, makeRoot(), async (s) => {
+      session = s
+    })
+    const started = Date.now()
+    await pool.close()
+    expect(Date.now() - started).toBeLessThan(5_000)
+    await vi.waitFor(() => expect(session?.isAlive).toBe(false))
+  })
+
   it('closes the least recently used idle session beyond its cap', async () => {
     silenceLogs()
     const pool = makePool({ maxSessions: 2 })
