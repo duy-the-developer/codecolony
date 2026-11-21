@@ -98,7 +98,11 @@ export function SearchPalette({ isOpen, index, onOpenChange, onPick }: SearchPal
             <span className="flex items-center gap-1">
               <Kbd>esc</Kbd> close
             </span>
-            {count > 0 && <span className="ml-auto">{count} {count === 1 ? 'result' : 'results'}</span>}
+            {count > 0 && (
+              <span className="ml-auto">
+                {count} {count === 1 ? 'result' : 'results'}
+              </span>
+            )}
           </div>
         </Command>
       </DialogContent>

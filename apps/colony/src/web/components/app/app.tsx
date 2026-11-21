@@ -247,11 +247,7 @@ export function App() {
 // so nothing inside it, neither the terminal's input nor the library's scroll
 // wrapper, can take focus and swallow the page's keys.
 function PanelContent({ isCollapsed, children }: { isCollapsed: boolean; children: ReactNode }) {
-  return (
-    <div className={isCollapsed ? 'invisible h-full' : 'h-full'}>
-      {children}
-    </div>
-  )
+  return <div className={isCollapsed ? 'invisible h-full' : 'h-full'}>{children}</div>
 }
 
 function buildDefaultLayout(preferences: ShellPreferences, windowPx: number): Layout {

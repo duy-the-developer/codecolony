@@ -32,7 +32,10 @@ export function MapBreadcrumb({ scene, selected, onPick }: MapBreadcrumbProps) {
           <Fragment key={node.id}>
             {i === 1 && hidden.length > 0 && (
               <>
-                <span className="shrink-0 px-1 text-muted-foreground" title={hidden.map((n) => n.name).join(' › ')}>
+                <span
+                  className="shrink-0 px-1 text-muted-foreground"
+                  title={hidden.map((n) => n.name).join(' › ')}
+                >
                   …
                 </span>
                 <ChevronRightIcon className="size-3 shrink-0 text-muted-foreground" />
