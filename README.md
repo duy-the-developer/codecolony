@@ -41,7 +41,7 @@ With Herdr off, the dock never starts the Herdr client or opens its socket: the 
 
 Herdr shares its panes between all attached clients and sizes them to the client that most recently attached or sent input, so the last one wins. When the dock and another Herdr client (another tab, or a terminal) are both attached, the panes take the other client's size until the dock is used again. This is accepted for v1: there is no single-client limit or deferred sizing.
 
-The terminal WebSocket and the dock's `/api/dock/*` routes need the token, a loopback `Host` and, when the browser sends one, a matching `Origin`. Every response carries a strict Content-Security-Policy, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer` and `Cache-Control: no-store`. Terminal data is never logged.
+The terminal WebSocket, the dock's `/api/dock/*` routes and the source text at `/api/file` need the token, a loopback `Host` and, when the browser sends one, a matching `Origin`. Every response carries a strict Content-Security-Policy, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer` and `Cache-Control: no-store`. Terminal data is never logged.
 
 ## Configuration
 
@@ -64,17 +64,17 @@ See `codecolony.config.example.json`.
 
 ## Using the map
 
-The page has a header (project picker, search, map controls), the map, and a side panel on each side. The left panel holds the Build queue, the Legend and a Files tree; the right panel holds the Terminal, the File tab and the Inspector. Drag a panel's edge to resize it; widths, collapsed panels and the open tabs are remembered in the browser.
+The page has a header (project picker, search, map controls), the map, and a side panel on each side. The left panel holds the Build queue, the Legend and a Files tree; the right panel holds the Terminal, the File tab (the selected file, read only, as committed at the indexed commit) and the Inspector. Drag a panel's edge to resize it; widths, collapsed panels and the open tabs are remembered in the browser.
 
 | Input                    | Action                                                                                     |
 | ------------------------ | ------------------------------------------------------------------------------------------ |
 | Scroll, pinch, `+` / `-` | Zoom smoothly at the cursor; detail fades in and out as you zoom                           |
 | Drag, arrow keys         | Pan                                                                                        |
 | Click                    | Inspect: facts, then imports, calls and HTTP requests in and out, with how each was proven |
-| Double-click             | Fly into a block or file                                                                   |
+| Double-click             | Fly into a block or file; on a file or symbol, also show it in the File tab                |
 | `Home`                   | See everything                                                                             |
 | `Esc`                    | Clear the selection                                                                        |
-| `⌘K` / `Ctrl+K`          | Search files and symbols by name; Enter flies to the result and selects it                 |
+| `⌘K` / `Ctrl+K`          | Search files and symbols by name; Enter flies to the result, Shift+Enter opens its file    |
 | `[` / `]`                | Collapse or expand the left / right panel                                                  |
 
 Dependencies: blue imports, teal calls, amber HTTP requests. Solid lines are proven by a language server or the syntax tree; dashed ones are matched on text. The Inspector lists them as Imports / Imported by, Calls / Called by, and HTTP requests / HTTP routes served, by route. "Trace calls with the language server" proves the calls of a file's functions, including method calls the parser cannot resolve.
