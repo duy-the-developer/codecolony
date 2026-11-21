@@ -1,5 +1,12 @@
 import { createServer } from 'node:http'
 import { fileURLToPath } from 'node:url'
+import { parseArgs } from 'node:util'
+import {
+  createDock,
+  DOCK_CLI_OPTIONS,
+  resolveDockOptions,
+  securityHeaders,
+} from '@codecolony/dock/server'
 import { createApi } from './api.ts'
 import { loadConfig } from './config.ts'
 import { isLoopbackHost } from './host.ts'
@@ -10,11 +17,14 @@ const DEFAULT_PORT = 4320
 
 const appRoot = fileURLToPath(new URL('../../', import.meta.url))
 const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url))
-const dev = process.argv.includes('--dev')
+const { values: args } = parseArgs({ options: { dev: { type: 'boolean' }, ...DOCK_CLI_OPTIONS } })
+const dev = args.dev ?? false
 const port = Number(process.env.PORT ?? DEFAULT_PORT)
 
 const config = loadConfig({ repoRoot })
 const api = createApi(config)
+const dock = createDock(resolveDockOptions(args))
+const headers = securityHeaders({ dev })
 
 let web: Handler
 if (dev) {
@@ -30,16 +40,23 @@ if (dev) {
 }
 
 const server = createServer((req, res) => {
+  for (const [name, value] of Object.entries(headers)) res.setHeader(name, value)
   if (!isLoopbackHost(req.headers.host)) {
     res.writeHead(403, { 'content-type': 'text/plain' }).end('Forbidden host')
     return
   }
-  if (!api(req, res)) web(req, res)
+  if (!dock.handle(req, res) && !api(req, res)) web(req, res)
+})
+
+// The terminal dock's WebSocket; the dock checks host, origin and token itself.
+server.on('upgrade', (req, socket, head) => {
+  if (!dock.upgrade(req, socket, head)) socket.destroy()
 })
 
 // Loopback only: the page shows local source code and, later, agent terminals.
+// The token sits in the URL fragment, which browsers never send to the server.
 server.listen(port, HOST, () => {
   console.log(
-    `Code Colony on http://${HOST}:${port} (${dev ? 'dev' : 'built'}; config: ${config.source})`,
+    `Code Colony on http://${HOST}:${port}/#token=${dock.token} (${dev ? 'dev' : 'built'}; config: ${config.source})`,
   )
 })

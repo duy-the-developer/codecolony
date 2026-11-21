@@ -67,3 +67,47 @@ body {
 .muted {
   color: var(--muted);
 }
+
+.pawns {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pawn {
+  padding: 4px 10px 4px 22px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel)
+    radial-gradient(circle at 11px 50%, var(--pawn, var(--muted)) 4px, transparent 5px);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.pawn:hover,
+.pawn[aria-pressed="true"] {
+  border-color: #ffb347;
+}
+
+.pawn.status-working {
+  --pawn: #50c878;
+}
+
+.pawn.status-blocked {
+  --pawn: #e05050;
+}
+
+.pawn.status-done {
+  --pawn: #50a0e0;
+}
+
+.pawn.status-idle {
+  --pawn: #e0a040;
+}

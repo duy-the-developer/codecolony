@@ -1,10 +1,16 @@
+import { mountDock, readToken } from '@codecolony/dock/web'
 import type { ProjectsResponse } from '../shared/api.ts'
+import { mountWorkers } from './workers.ts'
 
 const GRID = 24
 
+const map = document.querySelector<HTMLElement>('#map')
 const canvas = document.querySelector<HTMLCanvasElement>('#canvas')
 const projectList = document.querySelector<HTMLUListElement>('#projects')
-if (!canvas || !projectList) throw new Error('index.html is missing #canvas or #projects')
+const dockPanel = document.querySelector<HTMLElement>('#dock')
+if (!map || !canvas || !projectList || !dockPanel) {
+  throw new Error('index.html is missing #map, #canvas, #projects or #dock')
+}
 const ctx = canvas.getContext('2d')
 if (!ctx) throw new Error('2D canvas is not available')
 
@@ -46,3 +52,4 @@ async function loadProjects(): Promise<void> {
 
 new ResizeObserver(draw).observe(canvas)
 loadProjects().catch((error: unknown) => console.error('Could not load projects', error))
+mountWorkers(map, mountDock(dockPanel, { token: readToken() }))
