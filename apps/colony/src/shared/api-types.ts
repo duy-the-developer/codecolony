@@ -1,3 +1,5 @@
+import type { SymbolKind } from './world-types.ts'
+
 // Shapes shared by the server's /api routes and the page.
 
 // repo: one git repository; repos: a folder whose children are repositories;
@@ -22,4 +24,22 @@ export interface FileResponse {
   commit: string | undefined
   isBinary: boolean
   text: string
+}
+
+// GET /api/search?q=<text>&limit=<n>: files and symbols by name, best first.
+export interface SearchEntry {
+  id: string
+  kind: 'file' | 'symbol'
+  name: string
+  // Repository-relative path of the file (for a symbol, the file it is in).
+  path: string
+  symbolKind?: SymbolKind
+  // Symbols: first line of the definition. Files: line count.
+  line?: number
+  lines: number
+}
+
+export interface SearchMatches {
+  symbols: SearchEntry[]
+  files: SearchEntry[]
 }

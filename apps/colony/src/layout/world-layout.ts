@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { writeAtomic } from '../core/atomic-write.ts'
 import { looseId } from '../shared/route-boxes.ts'
+import { symbolBand } from '../shared/symbol-band.ts'
 import {
   type Edge,
   HEADER_UNITS,
@@ -340,8 +341,7 @@ function buildGraphs(
   return graphs
 }
 
-// Symbols are drawn as bands over their file: the vertical position and
-// height follow their line range, so the band shows where the code sits.
+// Symbols are drawn as bands over their file (shared/symbol-band.ts).
 function placeSymbol(
   symbol: WorldNode,
   holder: WorldNode,
@@ -350,14 +350,6 @@ function placeSymbol(
 ): void {
   const range = symbol.range
   if (!range) return
-  const inset = 0.08 * Math.min(file.rect.w, file.rect.h)
-  const top = file.rect.y + inset
-  const height = file.rect.h - 2 * inset
-  const lines = Math.max(file.lines, 1)
-  const y = top + ((range.start - 1) / lines) * height
-  const h = Math.max(((range.end - range.start + 1) / lines) * height, height / Math.max(lines, 40))
-  const x = holder === file ? file.rect.x + inset : holder.rect.x + 0.08 * holder.rect.w
-  const w = holder === file ? file.rect.w - 2 * inset : 0.88 * holder.rect.w
-  symbol.rect = { x, y, w, h }
+  symbol.rect = symbolBand(range, file.rect, file.lines, holder === file ? undefined : holder.rect)
   for (const kid of children.get(symbol.id) ?? []) placeSymbol(kid, symbol, children, file)
 }

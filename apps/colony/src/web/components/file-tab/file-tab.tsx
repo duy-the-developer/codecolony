@@ -55,9 +55,12 @@ function FileView({ scene, file, symbol, onPick }: FileViewProps) {
   const state = useFileText(file.id, commit)
   const path = file.path ?? file.name
   const folder = path.slice(0, -file.name.length)
-  const symbols = scene.world.nodes
-    .filter((node) => node.kind === 'symbol' && node.id.startsWith(`${file.id}#`))
-    .sort((a, b) => (a.range?.start ?? 0) - (b.range?.start ?? 0))
+  useEffect(() => {
+    void scene.loadSymbols([file])
+  }, [scene, file])
+  const symbols = [...scene.listSymbols(file)].sort(
+    (a, b) => (a.range?.start ?? 0) - (b.range?.start ?? 0),
+  )
   const meta = [
     languageName(file),
     `${file.lines.toLocaleString()} lines`,

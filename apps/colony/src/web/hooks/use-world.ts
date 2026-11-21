@@ -1,23 +1,33 @@
 import { useEffect, useState } from 'react'
 import { logError } from '../../shared/log.ts'
-import type { World } from '../../shared/world-types.ts'
+import type { WorldState } from '../../shared/world-decoder.ts'
 import { Scene } from '../scene.ts'
+import { fetchSymbols, fetchWorld } from '../world-client.ts'
 
-// The live world: loaded whenever the server announces a new version.
+// The live world: loaded whenever the server announces a new version, as a
+// patch on the version the page holds.
 export function useWorld(): Scene | undefined {
   const [scene, setScene] = useState<Scene>()
   useEffect(() => {
     let current: Scene | undefined
+    let state: WorldState | undefined
     let isDisposed = false
+    // One load at a time, so each patch applies to the version before it.
+    let queue: Promise<void> = Promise.resolve()
     async function loadWorld(): Promise<void> {
-      const world = (await (await fetch('/api/world')).json()) as World
-      if (isDisposed || (current && world.version <= current.world.version)) return
-      current = new Scene(world)
+      const next = await fetchWorld(state)
+      if (isDisposed) return
+      // Versions restart with each server session.
+      if (state?.session === next.session && next.world.version <= state.world.version) return
+      state = next
+      current = new Scene(next.world, { state: next, fetchSymbols }, current)
       setScene(current)
     }
     const events = new EventSource('/api/events')
     events.addEventListener('world', () => {
-      loadWorld().catch((error: unknown) => logError('Could not load the world', { error }))
+      queue = queue
+        .then(loadWorld)
+        .catch((error: unknown) => logError('Could not load the world', { error }))
     })
     return () => {
       isDisposed = true

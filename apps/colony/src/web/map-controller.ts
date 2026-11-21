@@ -2,6 +2,7 @@ import type { WorldNode } from '../shared/world-types.ts'
 import { Camera, type Viewport } from './camera.ts'
 import { LaneLayer } from './lane-layer.ts'
 import { createLaneRouter } from './lane-router.ts'
+import { FILE_OPEN } from './lod.ts'
 import type { OverlayId } from './overlays.ts'
 import { type Drawn, hitTest, hoverTarget, render } from './render.ts'
 import type { Scene } from './scene.ts'
@@ -34,6 +35,9 @@ export interface MapHandle {
 export const ZOOM_STEP = 1.25
 const PAN_STEP = 80
 const CLICK_SLOP = 4
+// Symbols are fetched when a file is this big on screen, half way to where
+// they start to fade in, so they are there when they show.
+const SYMBOL_PREFETCH_PX = FILE_OPEN[0] / 2
 
 export function createMapController(
   canvas: HTMLCanvasElement,
@@ -59,6 +63,7 @@ export function createMapController(
   let frame: number | undefined
   // The first world waits for the canvas to have a size before it is framed.
   let pendingFit: Scene | undefined
+  let unsubscribe: (() => void) | undefined
   const centre = () => [view.width / 2, view.height / 2] as const
 
   function requestDraw(): void {
@@ -73,8 +78,19 @@ export function createMapController(
         overlays,
         ...(lanes ? { lanes } : {}),
       })
+      prefetchSymbols(scene)
       options.onDraw(camera)
     })
+  }
+
+  // Loads the symbols of files about to open; the scene redraws when they come.
+  function prefetchSymbols(current: Scene): void {
+    const files: WorldNode[] = []
+    for (const item of drawn) {
+      if (item.node.kind !== 'file' || Math.min(item.w, item.h) < SYMBOL_PREFETCH_PX) continue
+      if (current.needsSymbols(item.node)) files.push(item.node)
+    }
+    if (files.length > 0) void current.loadSymbols(files)
   }
 
   function resize(): void {
@@ -92,9 +108,13 @@ export function createMapController(
     pendingFit = undefined
     if (!first.root) return
     const go = new URLSearchParams(location.search).get('go')
-    const target = (go && first.byId.get(go)) || first.root
-    camera.fit(target.rect, view)
-    if (go && target !== first.root) select(target.id)
+    camera.fit(first.root.rect, view)
+    if (!go) return
+    void first.ensureNode(go).then((target) => {
+      if (!target || scene !== first) return
+      camera.fit(target.rect, view)
+      select(target.id)
+    })
   }
 
   // Points the focus at the hovered node, else the selected one.
@@ -102,15 +122,7 @@ export function createMapController(
     const id = hovered ?? selected
     const node = id ? scene?.byId.get(id) : undefined
     if (node?.id === focus.id) return
-    const subtree = new Set<string>()
-    if (node && scene) {
-      const stack: WorldNode[] = [node]
-      for (let n = stack.pop(); n; n = stack.pop()) {
-        subtree.add(n.id)
-        stack.push(...(scene.children.get(n.id) ?? []))
-      }
-    }
-    focus = { id: node?.id, subtree }
+    focus = { id: node?.id, subtree: node && scene ? scene.listSubtree(node) : new Set() }
     requestDraw()
   }
 
@@ -122,6 +134,16 @@ export function createMapController(
 
   function select(id: string | undefined, fly = false): void {
     const node = id ? scene?.byId.get(id) : undefined
+    // A symbol whose file's symbols are not loaded yet: load, then select.
+    if (id && !node && scene?.fileIdOf(id)) {
+      const current = scene
+      void current.ensureNode(id).then((loaded) => {
+        if (scene !== current) return
+        if (loaded) select(id, fly)
+        else if (selected === id) select(undefined)
+      })
+      return
+    }
     const changed = node?.id !== selected
     selected = node?.id
     if (node && fly) camera.flyTo(node.rect, view, requestDraw)
@@ -136,6 +158,13 @@ export function createMapController(
     lanes = new LaneLayer(next, router, requestDraw)
     // Node ids may be gone or reused: work the focus out afresh.
     focus = { id: undefined, subtree: new Set() }
+    unsubscribe?.()
+    unsubscribe = next.subscribe(() => {
+      // New symbols can be the focus, or hold its edges.
+      focus = { id: undefined, subtree: new Set() }
+      updateFocus()
+      requestDraw()
+    })
     if (hovered && !next.byId.has(hovered)) hovered = undefined
     // Keep the selection across world versions while its node still exists.
     select(selected)
@@ -273,6 +302,7 @@ export function createMapController(
     redraw: requestDraw,
     dispose() {
       if (frame !== undefined) cancelAnimationFrame(frame)
+      unsubscribe?.()
       resizer.disconnect()
       window.removeEventListener('keydown', onKeyDown)
       canvas.removeEventListener('wheel', onWheel)

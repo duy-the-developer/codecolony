@@ -1,23 +1,8 @@
-import type { SymbolKind, World } from '../shared/world-types.ts'
+import type { SearchEntry, SearchMatches } from '../shared/api-types.ts'
+import type { World } from '../shared/world-types.ts'
 
-// File and symbol names from the world, for the ⌘K search.
-
-export interface SearchEntry {
-  id: string
-  kind: 'file' | 'symbol'
-  name: string
-  // Repository-relative path of the file (for a symbol, the file it is in).
-  path: string
-  symbolKind?: SymbolKind
-  // Symbols: first line of the definition. Files: line count.
-  line?: number
-  lines: number
-}
-
-export interface SearchMatches {
-  symbols: SearchEntry[]
-  files: SearchEntry[]
-}
+// File and symbol names from the world, for the ⌘K search (/api/search). The
+// page does not hold every symbol, so it searches here.
 
 interface IndexedEntry {
   entry: SearchEntry
