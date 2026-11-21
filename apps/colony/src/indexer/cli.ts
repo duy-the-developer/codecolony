@@ -4,10 +4,12 @@ import { log } from '../shared/log.ts'
 import { Colony } from './colony.ts'
 
 // `pnpm index`: indexes every configured project once and prints a summary.
+// `pnpm index --relayout` also lays the map out afresh, dropping the saved
+// order of modules and files.
 
 const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url))
 const config = loadConfig({ repoRoot })
-const colony = new Colony(config)
+const colony = new Colony(config, { relayout: process.argv.includes('--relayout') })
 const started = performance.now()
 const { stats } = await colony.refresh()
 const { nodes, edges } = colony.world

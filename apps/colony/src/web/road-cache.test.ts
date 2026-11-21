@@ -18,17 +18,17 @@ function edge(from: string, to: string, kind: Edge['kind'] = 'import'): Edge {
   return { from, to, kind, provenance: 'tree-sitter' }
 }
 
-// world > repo > two dirs of two files, each file with two symbols.
+// world > repo > two modules of two files, each file with two symbols.
 function makeWorld(edges: Edge[]): World {
   const nodes = [
-    node('world', 'world', undefined, { x: 0, y: 0, w: 100, h: 50 }),
-    node('r', 'repo', 'world', { x: 0, y: 0, w: 100, h: 50 }),
+    node('world', 'world', undefined, { x: 0, y: 0, w: 200, h: 200 }),
+    node('r', 'repo', 'world', { x: 0, y: 0, w: 200, h: 200 }),
   ]
   for (const [d, dx] of [
     ['r/a', 0],
     ['r/b', 50],
   ] as const) {
-    nodes.push(node(d, 'dir', 'r', { x: dx, y: 0, w: 50, h: 50 }))
+    nodes.push(node(d, 'module', 'r', { x: dx, y: 0, w: 50, h: 50 }))
     for (const [f, fy] of [
       [`${d}/1.ts`, 0],
       [`${d}/2.ts`, 25],
@@ -122,9 +122,9 @@ const EDGES = [
 describe('RoadCache', () => {
   it('merges roads into the holders visible when zoomed out', () => {
     const scene = new Scene(makeWorld(EDGES))
-    // Dirs are 50 units: at scale 2 they are 100 px, so the repo is open but
-    // the dirs are still closed.
-    expect(listRoads(new RoadCache(scene), scene, 2)).toEqual([
+    // Modules are 50 units: at scale 0.3 they are 15 px, so the repo is open
+    // but the modules are still closed.
+    expect(listRoads(new RoadCache(scene), scene, 0.3)).toEqual([
       'import|r/a|r/b|true|2',
       'call|r/a|r/b|true|1',
       'call|r/a|r/b|false|1',
@@ -172,15 +172,15 @@ describe('RoadCache', () => {
   it('rebuilds after edges are merged in', () => {
     const scene = new Scene(makeWorld(EDGES))
     const cache = new RoadCache(scene)
-    expect(listRoads(cache, scene, 2)).not.toContain('call|r/b|r/a|true|1')
+    expect(listRoads(cache, scene, 0.3)).not.toContain('call|r/b|r/a|true|1')
     scene.mergeEdges([{ ...edge('r/b/1.ts#x', 'r/a/1.ts#x', 'call'), provenance: 'lsp' }])
-    expect(listRoads(cache, scene, 2)).toContain('call|r/b|r/a|true|1')
+    expect(listRoads(cache, scene, 0.3)).toContain('call|r/b|r/a|true|1')
   })
 
   it('marks the roads that carry an edge touching the selection', () => {
     const scene = new Scene(makeWorld(EDGES))
     const cache = new RoadCache(scene)
-    expect(listRoads(cache, scene, 2, WHOLE_WORLD, new Set(['r/b/2.ts', 'r/b/2.ts#y']))).toEqual([
+    expect(listRoads(cache, scene, 0.3, WHOLE_WORLD, new Set(['r/b/2.ts', 'r/b/2.ts#y']))).toEqual([
       'import|r/a|r/b|true|2|hot',
       'call|r/a|r/b|true|1',
       'call|r/a|r/b|false|1',

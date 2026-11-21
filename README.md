@@ -1,6 +1,6 @@
 # Code Colony
 
-A live, game-like top-down map of your codebases. Repositories become districts, modules become blocks and files become buildings; zoom in continuously, like a web map, down to individual functions. Overlay lenses show the network, change heat, external systems and data access, and the coding agents working on the code appear on the map next to the build queue.
+A live, game-like top-down map of your codebases. Packages become bands, modules become blocks and files become squares on one grid; zoom in continuously, like a web map, down to individual functions. Overlay lenses show the network, change heat, external systems and data access, and the coding agents working on the code appear on the map next to the build queue.
 
 Inspired by Oxygen Not Included and Factorio. Early work in progress.
 
@@ -14,7 +14,7 @@ pnpm dev      # http://127.0.0.1:4320, with hot reload
 pnpm start    # builds the page, then serves it
 ```
 
-Out of the box it maps its own checkout. `pnpm index` indexes the configured projects once and prints a summary.
+Out of the box it maps its own checkout. `pnpm index` indexes the configured projects once and prints a summary; `pnpm index --relayout` also lays the map out afresh instead of keeping the saved order of modules and files.
 
 The server prints the page's URL with a fresh token for this run, `http://127.0.0.1:4320/#token=...`; open that exact URL. The token sits in the URL fragment, so it is never sent to the server or logged, and the page keeps it for the tab and strips it from the address bar.
 

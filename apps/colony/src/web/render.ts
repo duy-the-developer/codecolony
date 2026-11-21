@@ -1,11 +1,13 @@
-import type { Edge, SymbolKind, WorldNode } from '../shared/world-types.ts'
+import { type Edge, HEADER_UNITS, type SymbolKind, type WorldNode } from '../shared/world-types.ts'
 import type { Camera, Viewport } from './camera.ts'
-import { fade, LABEL_FONT, MIN_VISIBLE_PX, openness } from './lod.ts'
+import { fade, GRID_FADE, LABEL_FONT, MIN_VISIBLE_PX, openness } from './lod.ts'
 import { MIN_ROAD_ALPHA, RoadCache } from './road-cache.ts'
 import type { Scene } from './scene.ts'
 
-// Draws one frame: blueprint grid, buildings (with complexity shadows),
-// roads between whatever is visible at this zoom, then labels.
+// Draws one frame: the unit grid, flat blocks (fill plus a 1px border), roads
+// between whatever is visible at this zoom, then labels. World coordinates are
+// grid units, and block edges are rounded to pixels the same way as grid
+// lines, so every edge sits on a grid line.
 
 export interface Drawn {
   node: WorldNode
@@ -23,7 +25,7 @@ export interface RenderState {
 }
 
 const BACKGROUND = '#0d1b2a'
-const GRID = '#16293d'
+const GRID = '#1b3149'
 const FONT = 'system-ui, -apple-system, Segoe UI, sans-serif'
 
 export const SYMBOL_COLORS: Record<SymbolKind, string> = {
@@ -81,7 +83,7 @@ export function render(
     const open = kids ? openness(node.kind, side) : 0
     const item = { node, x, y, w, h, alpha }
     if (node.kind !== 'world') {
-      drawBody(ctx, item, open, labels)
+      drawBody(ctx, item, open, labels, camera.scale)
       drawn.push(item)
     }
     if (open > 0.01 && kids) for (const kid of kids) visit(kid, alpha * open)
@@ -96,47 +98,70 @@ export function render(
     ctx.strokeStyle = '#ffd166'
     ctx.lineWidth = 2
     ctx.setLineDash([])
-    ctx.strokeRect(selected.x - 1, selected.y - 1, selected.w + 2, selected.h + 2)
+    const { x0, y0, x1, y1 } = snap(selected)
+    ctx.strokeRect(x0 - 0.5, y0 - 0.5, x1 - x0 + 2, y1 - y0 + 2)
   }
   return drawn
 }
 
+// One line per grid unit, the unit every layout size is a whole number of.
+// The lines fade out when they get too dense to read.
 function drawGrid(ctx: CanvasRenderingContext2D, camera: Camera, view: Viewport): void {
-  // A power-of-ten grid whose spacing stays between 12 and 120 px.
-  let step = 10 ** Math.floor(Math.log10(12 / camera.scale))
-  if (step * camera.scale < 12) step *= 10
-  for (const [spacing, alpha] of [
-    [step, fade(step * camera.scale, [12, 40]) * 0.6],
-    [step * 10, 1],
-  ] as const) {
-    if (alpha <= 0) continue
-    ctx.globalAlpha = alpha
-    ctx.strokeStyle = GRID
-    ctx.lineWidth = 1
-    ctx.beginPath()
-    const [wx, wy] = camera.toWorld(0, 0)
-    for (let gx = Math.floor(wx / spacing) * spacing; ; gx += spacing) {
-      const [sx] = camera.toScreen(gx, 0)
-      if (sx > view.width) break
-      ctx.moveTo(Math.round(sx) + 0.5, 0)
-      ctx.lineTo(Math.round(sx) + 0.5, view.height)
-    }
-    for (let gy = Math.floor(wy / spacing) * spacing; ; gy += spacing) {
-      const [, sy] = camera.toScreen(0, gy)
-      if (sy > view.height) break
-      ctx.moveTo(0, Math.round(sy) + 0.5)
-      ctx.lineTo(view.width, Math.round(sy) + 0.5)
-    }
-    ctx.stroke()
+  const alpha = fade(camera.scale, GRID_FADE)
+  if (alpha <= 0) return
+  ctx.globalAlpha = alpha
+  ctx.strokeStyle = GRID
+  ctx.lineWidth = 1
+  ctx.beginPath()
+  const [wx, wy] = camera.toWorld(0, 0)
+  for (let gx = Math.floor(wx); ; gx++) {
+    const [sx] = camera.toScreen(gx, 0)
+    if (sx > view.width) break
+    ctx.moveTo(Math.round(sx) + 0.5, 0)
+    ctx.lineTo(Math.round(sx) + 0.5, view.height)
   }
+  for (let gy = Math.floor(wy); ; gy++) {
+    const [, sy] = camera.toScreen(0, gy)
+    if (sy > view.height) break
+    ctx.moveTo(0, Math.round(sy) + 0.5)
+    ctx.lineTo(view.width, Math.round(sy) + 0.5)
+  }
+  ctx.stroke()
   ctx.globalAlpha = 1
 }
 
+// A drawn rectangle's edges, rounded to pixels like the grid lines.
+function snap({ x, y, w, h }: { x: number; y: number; w: number; h: number }) {
+  return {
+    x0: Math.round(x),
+    y0: Math.round(y),
+    x1: Math.round(x + w),
+    y1: Math.round(y + h),
+  }
+}
+
+// Fills the snapped rectangle and strokes its border on the pixel rows and
+// columns of its edges, where the grid lines are.
+function drawBlock(
+  ctx: CanvasRenderingContext2D,
+  item: Drawn,
+  fill: string,
+  border: string | undefined,
+): void {
+  const { x0, y0, x1, y1 } = snap(item)
+  ctx.fillStyle = fill
+  ctx.fillRect(x0, y0, x1 - x0, y1 - y0)
+  if (!border) return
+  ctx.strokeStyle = border
+  ctx.strokeRect(x0 + 0.5, y0 + 0.5, x1 - x0, y1 - y0)
+}
+
 const hues = new Map<string, number>()
-// A stable hue per top-level folder of a repository, so a district keeps its
-// colour at every zoom.
+// A stable hue per module, so a module's files share a colour and
+// neighbouring modules tell apart at every zoom.
 export function hueOf(node: WorldNode): number {
-  const key = node.path ? (node.path.split('/')[0] ?? '') : node.name
+  const path = node.path ?? ''
+  const key = node.kind === 'file' ? path.slice(0, path.lastIndexOf('/') + 1) : path || node.name
   let hue = hues.get(key)
   if (hue === undefined) {
     let hash = 2166136261
@@ -151,15 +176,13 @@ function isTest(node: WorldNode): boolean {
   return /(^|\/)(__tests__|tests?|spec)(\/|$)|\.(test|spec)\.[^/]+$/.test(node.path ?? '')
 }
 
-// Complexity shows as a drop shadow: longer for denser branching.
-function shadowLength(node: WorldNode, w: number, h: number): number {
-  const side = Math.min(w, h)
-  const density =
-    node.kind === 'file' ? node.complexity : (node.complexity * 40) / Math.max(node.lines, 1)
-  return Math.min(Math.log2(1 + density) * 0.025 * side, 0.15 * side)
-}
-
-function drawBody(ctx: CanvasRenderingContext2D, item: Drawn, open: number, labels: Label[]): void {
+function drawBody(
+  ctx: CanvasRenderingContext2D,
+  item: Drawn,
+  open: number,
+  labels: Label[],
+  unit: number,
+): void {
   const { node, x, y, w, h, alpha } = item
   ctx.setLineDash([])
   ctx.lineWidth = 1
@@ -188,47 +211,32 @@ function drawBody(ctx: CanvasRenderingContext2D, item: Drawn, open: number, labe
 
   const hue = hueOf(node)
   const sat = isTest(node) ? 12 : 42
-  if (node.kind === 'file' || closed > 0.01) {
-    const d = shadowLength(node, w, h)
-    if (d > 0.5) {
-      ctx.globalAlpha = alpha * (node.kind === 'file' ? 1 : closed) * 0.3
-      ctx.fillStyle = '#000'
-      ctx.fillRect(x + d, y + d, w, h)
-    }
-  }
-
+  ctx.globalAlpha = alpha
   if (node.kind === 'project') {
-    ctx.globalAlpha = alpha
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.02)'
-    ctx.fillRect(x, y, w, h)
-    ctx.setLineDash([8, 6])
-    ctx.strokeStyle = '#6d8fb3'
-    ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1)
+    // Only a label: the repositories inside carry the outlines.
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.015)'
+    const { x0, y0, x1, y1 } = snap(item)
+    ctx.fillRect(x0, y0, x1 - x0, y1 - y0)
   } else if (node.kind === 'repo') {
-    ctx.globalAlpha = alpha
-    ctx.fillStyle = `rgba(16, 34, 53, ${0.6 + 0.4 * closed})`
-    ctx.fillRect(x, y, w, h)
-    ctx.lineWidth = 1.5
-    ctx.strokeStyle = '#7fa9d6'
-    ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1)
-  } else if (node.kind === 'dir') {
-    ctx.globalAlpha = alpha
-    ctx.fillStyle = `hsla(${hue}, ${sat}%, ${18 + 8 * closed}%, ${0.55 + 0.45 * closed})`
-    ctx.fillRect(x, y, w, h)
-    ctx.lineWidth = node.package ? 2 : 1
-    ctx.strokeStyle = `hsl(${hue}, ${sat + 15}%, 50%)`
-    ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1)
+    drawBlock(ctx, item, `rgba(16, 34, 53, ${0.6 + 0.4 * closed})`, '#3e6289')
+  } else if (node.kind === 'package') {
+    // A tinted band with no outline, so roads can cross its edge cleanly.
+    drawBlock(ctx, item, `hsla(${hue}, 30%, 45%, ${0.08 + 0.3 * closed})`, undefined)
+  } else if (node.kind === 'module') {
+    drawBlock(ctx, item, `hsl(212, 38%, ${14 + 6 * closed}%)`, `hsl(${hue}, 25%, 36%)`)
   } else if (node.kind === 'file') {
-    ctx.globalAlpha = alpha
-    const light = node.language === 'text' || node.language === 'binary' ? 24 : 34
-    ctx.fillStyle = `hsl(${hue}, ${node.language === 'text' ? 8 : sat}%, ${light - 12 * open}%)`
-    ctx.fillRect(x, y, w, h)
-    ctx.strokeStyle = `hsl(${hue}, ${sat + 20}%, 62%)`
-    ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1)
+    const light = node.language === 'text' || node.language === 'binary' ? 30 : 44
+    drawBlock(
+      ctx,
+      item,
+      `hsl(${hue}, ${node.language === 'text' ? 8 : sat + 10}%, ${light - 16 * open}%)`,
+      'rgba(13, 27, 42, 0.9)',
+    )
   }
 
   // Closed: name in the middle. Open: name in the header strip.
-  const name = node.kind === 'project' ? node.name.toUpperCase() : node.name
+  const name =
+    node.kind === 'project' || node.kind === 'package' ? node.name.toUpperCase() : node.name
   const centred = Math.min(16, w / Math.max(name.length * 0.62, 1), h * 0.4)
   if (closed > 0.01) {
     labels.push({
@@ -244,20 +252,33 @@ function drawBody(ctx: CanvasRenderingContext2D, item: Drawn, open: number, labe
     })
   }
   if (open > 0.01) {
-    const size =
-      node.kind === 'file'
-        ? Math.min(12, 0.08 * Math.min(w, h) * 0.8)
-        : Math.min(14, 0.035 * Math.max(w, h))
-    const inset = node.kind === 'file' ? 0.08 * Math.min(w, h) : size * 0.6
+    let size: number
+    let inset: number
+    let middle: number
+    if (node.kind === 'file') {
+      size = Math.min(12, 0.08 * Math.min(w, h) * 0.8)
+      inset = 0.08 * Math.min(w, h)
+      middle = y + inset / 2
+    } else {
+      const header = HEADER_UNITS[node.kind] * unit
+      size = Math.min(13, (node.kind === 'module' ? 0.85 : 0.6) * header)
+      inset = Math.min(unit * 0.5, 10)
+      middle = y + header / 2
+    }
     labels.push({
       text: name,
       x: x + inset,
-      y: y + (node.kind === 'file' ? inset / 2 : size * 1.1),
+      y: middle,
       size,
       alpha: alpha * open * fade(size, LABEL_FONT),
       maxWidth: w - 2 * inset,
       align: 'left',
-      color: node.kind === 'project' ? '#9db8d6' : '#dbe7f3',
+      color:
+        node.kind === 'package'
+          ? `hsl(${hue}, 30%, 72%)`
+          : node.kind === 'project'
+            ? '#9db8d6'
+            : '#dbe7f3',
       weight: 600,
     })
   }
