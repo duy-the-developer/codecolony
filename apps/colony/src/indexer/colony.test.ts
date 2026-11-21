@@ -204,7 +204,7 @@ describe('Colony', () => {
     expect(colony.world.nodes.filter((n) => n.id === 'world')).toHaveLength(1)
   })
 
-  it('draws no HTTP road from a client whose path has no literal segment', async () => {
+  it('draws no HTTP edge from a client whose path has no literal segment', async () => {
     const org = makeTempDir()
     makeRepo(
       // biome-ignore lint/suspicious/noTemplateCurlyInString: a URL template as written in source

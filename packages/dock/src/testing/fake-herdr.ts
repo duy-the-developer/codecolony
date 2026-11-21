@@ -73,3 +73,27 @@ export const FAKE_AGENTS = [
     revision: 1,
   },
 ]
+
+export const FAKE_WORKSPACES = [
+  { workspace_id: 'w1', number: 1, label: '└ codecolony-dock · p:w9', focused: true },
+  { workspace_id: 'w2', number: 2, label: '', focused: false },
+]
+
+export const FAKE_TABS = [
+  { tab_id: 'w1:t1', workspace_id: 'w1', number: 1, label: '1', focused: true },
+  { tab_id: 'w2:t1', workspace_id: 'w2', number: 1, label: 'fm-mystery-task', focused: false },
+]
+
+// Answers the read-only calls the dock makes when it lists workers.
+export function answerWorkerList(request: FakeRequest): string {
+  switch (request.method) {
+    case 'agent.list':
+      return ok(request, { type: 'agent_list', agents: FAKE_AGENTS })
+    case 'workspace.list':
+      return ok(request, { type: 'workspace_list', workspaces: FAKE_WORKSPACES })
+    case 'tab.list':
+      return ok(request, { type: 'tab_list', tabs: FAKE_TABS })
+    default:
+      return ok(request, { type: 'ok' })
+  }
+}

@@ -31,6 +31,15 @@ export class Scene {
     return false
   }
 
+  // The node and its ancestors below the world, outermost first.
+  listAncestry(node: WorldNode): WorldNode[] {
+    const chain: WorldNode[] = []
+    for (let n: WorldNode | undefined = node; n && n.kind !== 'world'; n = this.parentOf(n)) {
+      chain.unshift(n)
+    }
+    return chain
+  }
+
   // The repository a node belongs to.
   repoOf(node: WorldNode): WorldNode | undefined {
     for (let n: WorldNode | undefined = node; n; n = this.parentOf(n)) {
