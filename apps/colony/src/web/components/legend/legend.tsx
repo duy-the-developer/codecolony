@@ -42,10 +42,12 @@ const KEYS: [string, string][] = [
 
 // What the map's colours, lines and keys mean.
 export function Legend({ scene }: LegendProps) {
-  const folders = scene ? listTreeRoots(scene).filter((node) => node.kind === 'dir') : []
+  const folders = scene
+    ? listTreeRoots(scene).filter((node) => node.kind === 'package' || node.kind === 'module')
+    : []
   return (
     <div className="space-y-5 px-3 py-3">
-      <LegendSection title="Folders" note="each top-level folder has its own colour">
+      <LegendSection title="Folders" note="each package and module has its own colour">
         {folders.slice(0, 10).map((folder) => (
           <LegendRow
             key={folder.id}
@@ -60,7 +62,7 @@ export function Legend({ scene }: LegendProps) {
         <LegendRow
           mark={<Swatch color="hsl(210, 42%, 34%)" />}
           label="File"
-          detail="area follows its line count; its shadow, its branch count"
+          detail="area follows its line count"
         />
         <LegendRow
           mark={<span className="size-3 rounded-sm border border-[#7fa9d6]" />}

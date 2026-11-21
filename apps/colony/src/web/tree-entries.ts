@@ -7,7 +7,11 @@ import type { Scene } from './scene.ts'
 
 export function listTreeRoots(scene: Scene): WorldNode[] {
   let roots = scene.root ? listTreeChildren(scene, scene.root.id) : []
-  while (roots.length === 1 && roots[0] && roots[0].kind !== 'dir' && roots[0].kind !== 'file') {
+  while (
+    roots.length === 1 &&
+    roots[0] &&
+    (roots[0].kind === 'project' || roots[0].kind === 'repo')
+  ) {
     roots = listTreeChildren(scene, roots[0].id)
   }
   return roots

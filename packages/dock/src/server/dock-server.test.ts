@@ -297,7 +297,7 @@ describe('dock server with herdr disabled', () => {
   const auth = { authorization: `Bearer ${TOKEN}` }
 
   beforeAll(async () => {
-    fake = await startFakeHerdr((req) => ok(req, { type: 'agent_list', agents: FAKE_AGENTS }))
+    fake = await startFakeHerdr(answerWorkerList)
     spawned = join(await mkdtemp(join(tmpdir(), 'dock-off-')), 'spawned')
     dock = createDock(
       {

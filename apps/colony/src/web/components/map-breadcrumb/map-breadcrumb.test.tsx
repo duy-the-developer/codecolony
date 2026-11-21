@@ -18,9 +18,9 @@ const SCENE = new Scene({
   nodes: [
     { id: 'world', kind: 'world', name: 'world', lines: 1, complexity: 1, rect: RECT },
     node('codecolony', 'world', 'project'),
-    node('packages', 'codecolony', 'dir'),
-    node('dock', 'packages', 'dir'),
-    node('src', 'dock', 'dir'),
+    node('packages', 'codecolony', 'module'),
+    node('dock', 'packages', 'module'),
+    node('src', 'dock', 'module'),
     node('herdr.ts', 'src', 'file'),
     node('workspaceName', 'herdr.ts', 'symbol'),
   ],

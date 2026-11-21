@@ -31,11 +31,11 @@ const SCENE = new Scene({
   languages: {},
   nodes: [
     node('world', 'world'),
-    node('web', 'dir', 'world'),
+    node('web', 'module', 'world'),
     node('web/main.ts', 'file', 'web'),
-    node('server', 'dir', 'world'),
+    node('server', 'module', 'world'),
     node('server/api.ts', 'file', 'server'),
-    node('core', 'dir', 'world'),
+    node('core', 'module', 'world'),
     node('core/model.ts', 'file', 'core'),
   ],
   edges: [

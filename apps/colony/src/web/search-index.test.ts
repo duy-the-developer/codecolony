@@ -17,7 +17,7 @@ const WORLD: World = {
   edges: [],
   nodes: [
     node('world', 'world', 'world'),
-    node('r/src', 'dir', 'src', 'src'),
+    node('r/src', 'module', 'src', 'src'),
     node('r/src/pack.ts', 'file', 'pack.ts', 'src/pack.ts'),
     node('r/src/pack.test.ts', 'file', 'pack.test.ts', 'src/pack.test.ts'),
     node('r/src/packer/index.ts', 'file', 'index.ts', 'src/packer/index.ts'),
