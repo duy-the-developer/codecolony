@@ -30,8 +30,12 @@ const MANIFESTS = new Set([
 
 const ZERO = { x: 0, y: 0, w: 0, h: 0 }
 
+export function projectId(project: string): string {
+  return `project:${project}`
+}
+
 export function repoId(project: string, repo: string): string {
-  return `${project}/${repo}`
+  return `${projectId(project)}/${repo}`
 }
 
 export function buildWorld(projects: ProjectIndex[]): { nodes: WorldNode[]; edges: Edge[] } {
@@ -43,9 +47,9 @@ export function buildWorld(projects: ProjectIndex[]): { nodes: WorldNode[]; edge
   const routes: { file: string; fact: TransportFact }[] = []
 
   for (const project of projects) {
-    const projectId = project.name
+    const id = projectId(project.name)
     nodes.push({
-      id: projectId,
+      id,
       parent: WORLD_ID,
       kind: 'project',
       name: project.name,
@@ -54,10 +58,10 @@ export function buildWorld(projects: ProjectIndex[]): { nodes: WorldNode[]; edge
       rect: ZERO,
     })
     for (const repo of project.repos) {
-      const id = repoId(project.name, repo.name)
+      const rid = repoId(project.name, repo.name)
       const repoNode: WorldNode = {
-        id,
-        parent: projectId,
+        id: rid,
+        parent: id,
         kind: 'repo',
         name: repo.name,
         lines: 0,
@@ -66,11 +70,11 @@ export function buildWorld(projects: ProjectIndex[]): { nodes: WorldNode[]; edge
       }
       if (repo.commit) repoNode.commit = repo.commit
       nodes.push(repoNode)
-      addRepo(repo, id, nodes, edges)
+      addRepo(repo, rid, nodes, edges)
       for (const file of repo.files) {
         for (const fact of file.facts.transports) {
-          if (fact.kind === 'http-client') clients.push({ file: `${id}/${file.path}`, fact })
-          if (fact.kind === 'http-route') routes.push({ file: `${id}/${file.path}`, fact })
+          if (fact.kind === 'http-client') clients.push({ file: `${rid}/${file.path}`, fact })
+          if (fact.kind === 'http-route') routes.push({ file: `${rid}/${file.path}`, fact })
         }
       }
     }

@@ -5,15 +5,12 @@ import {
   CallHierarchyOutgoingCallsRequest,
   CallHierarchyPrepareRequest,
   createProtocolConnection,
-  DefinitionRequest,
+  DidChangeTextDocumentNotification,
   DidOpenTextDocumentNotification,
   ExitNotification,
   InitializedNotification,
   InitializeRequest,
-  type Location,
-  type LocationLink,
   type ProtocolConnection,
-  ReferencesRequest,
   ShutdownRequest,
   StreamMessageReader,
   StreamMessageWriter,
@@ -40,7 +37,7 @@ export interface OutgoingCall {
 const REQUEST_TIMEOUT_MS = 20_000
 
 export class LspSession {
-  private readonly opened = new Set<string>()
+  private readonly opened = new Map<string, { version: number; text: string }>()
 
   private constructor(
     private readonly spec: LanguageServerSpec,
@@ -68,8 +65,6 @@ export class LspSession {
         capabilities: {
           textDocument: {
             callHierarchy: { dynamicRegistration: false },
-            definition: { linkSupport: true },
-            references: {},
           },
         },
         initializationOptions: spec.initializationOptions?.(),
@@ -80,7 +75,9 @@ export class LspSession {
     return session
   }
 
-  async outgoingCalls(at: SourcePoint): Promise<OutgoingCall[]> {
+  // The outgoing calls of the function or method named `name` declared at
+  // `at`; none when the server resolves a different symbol there.
+  async outgoingCalls(at: SourcePoint, name: string): Promise<OutgoingCall[]> {
     const uri = await this.open(at.path)
     const items = await this.request(
       this.connection.sendRequest(CallHierarchyPrepareRequest.type, {
@@ -90,7 +87,7 @@ export class LspSession {
       'prepareCallHierarchy',
     )
     const item = items?.[0]
-    if (!item) return []
+    if (item?.name !== name) return []
     const calls = await this.request(
       this.connection.sendRequest(CallHierarchyOutgoingCallsRequest.type, { item }),
       'outgoingCalls',
@@ -106,37 +103,6 @@ export class LspSession {
     }))
   }
 
-  async definition(at: SourcePoint): Promise<SourcePoint[]> {
-    const uri = await this.open(at.path)
-    const result = await this.request(
-      this.connection.sendRequest(DefinitionRequest.type, {
-        textDocument: { uri },
-        position: { line: at.line - 1, character: at.column },
-      }),
-      'definition',
-    )
-    if (!result) return []
-    const list: (Location | LocationLink)[] = Array.isArray(result) ? result : [result]
-    return list.map((entry) =>
-      'targetUri' in entry
-        ? toPoint(entry.targetUri, entry.targetSelectionRange.start)
-        : toPoint(entry.uri, entry.range.start),
-    )
-  }
-
-  async references(at: SourcePoint): Promise<SourcePoint[]> {
-    const uri = await this.open(at.path)
-    const result = await this.request(
-      this.connection.sendRequest(ReferencesRequest.type, {
-        textDocument: { uri },
-        position: { line: at.line - 1, character: at.column },
-        context: { includeDeclaration: false },
-      }),
-      'references',
-    )
-    return (result ?? []).map((location) => toPoint(location.uri, location.range.start))
-  }
-
   async close(): Promise<void> {
     try {
       await this.request(this.connection.sendRequest(ShutdownRequest.type), 'shutdown')
@@ -148,17 +114,22 @@ export class LspSession {
     this.process.kill()
   }
 
+  // Sends the file's current text, so positions read from it now match.
   private async open(path: string): Promise<string> {
     const uri = pathToFileURL(path).href
-    if (!this.opened.has(uri)) {
-      this.opened.add(uri)
+    const text = await readFile(path, 'utf8')
+    const document = this.opened.get(uri)
+    if (!document) {
+      this.opened.set(uri, { version: 1, text })
       await this.connection.sendNotification(DidOpenTextDocumentNotification.type, {
-        textDocument: {
-          uri,
-          languageId: this.spec.languageId(path),
-          version: 1,
-          text: await readFile(path, 'utf8'),
-        },
+        textDocument: { uri, languageId: this.spec.languageId(path), version: 1, text },
+      })
+    } else if (document.text !== text) {
+      document.version += 1
+      document.text = text
+      await this.connection.sendNotification(DidChangeTextDocumentNotification.type, {
+        textDocument: { uri, version: document.version },
+        contentChanges: [{ text }],
       })
     }
     return uri
@@ -178,8 +149,4 @@ export class LspSession {
       clearTimeout(timer)
     }
   }
-}
-
-function toPoint(uri: string, position: { line: number; character: number }): SourcePoint {
-  return { path: fileURLToPath(uri), line: position.line + 1, column: position.character }
 }

@@ -37,22 +37,26 @@ describe('Colony', () => {
     expect(ids).toEqual(
       expect.arrayContaining([
         'world',
-        'p',
-        'p/demo',
-        'p/demo/src',
-        'p/demo/src/a.ts',
-        'p/demo/src/b.ts#b',
-        'p/demo/README.md',
+        'project:p',
+        'project:p/demo',
+        'project:p/demo/src',
+        'project:p/demo/src/a.ts',
+        'project:p/demo/src/b.ts#b',
+        'project:p/demo/README.md',
       ]),
     )
-    const repo = colony.world.nodes.find((n) => n.id === 'p/demo')
+    const repo = colony.world.nodes.find((n) => n.id === 'project:p/demo')
     expect(repo?.lines).toBe(7)
     expect(colony.world.edges).toContainEqual(
-      expect.objectContaining({ from: 'p/demo/src/a.ts', to: 'p/demo/src/b.ts', kind: 'import' }),
+      expect.objectContaining({
+        from: 'project:p/demo/src/a.ts',
+        to: 'project:p/demo/src/b.ts',
+        kind: 'import',
+      }),
     )
     // Containers hold their children.
-    const src = colony.world.nodes.find((n) => n.id === 'p/demo/src')
-    const file = colony.world.nodes.find((n) => n.id === 'p/demo/src/a.ts')
+    const src = colony.world.nodes.find((n) => n.id === 'project:p/demo/src')
+    const file = colony.world.nodes.find((n) => n.id === 'project:p/demo/src/a.ts')
     if (!src || !file) throw new Error('missing nodes')
     expect(file.rect.x).toBeGreaterThanOrEqual(src.rect.x)
     expect(file.rect.x + file.rect.w).toBeLessThanOrEqual(src.rect.x + src.rect.w)
@@ -97,7 +101,7 @@ describe('Colony', () => {
     expect(colony.world.version).toBe(version + 1)
     const after = rects(colony.world)
     for (let i = 0; i < 12; i++) {
-      const id = `p/${colony.world.nodes.find((n) => n.kind === 'repo')?.name}/src/f${i}.ts`
+      const id = `project:p/${colony.world.nodes.find((n) => n.kind === 'repo')?.name}/src/f${i}.ts`
       expect(after.get(id), id).toBe(before.get(id))
     }
 
@@ -126,7 +130,7 @@ describe('Colony', () => {
     const colony = colonyFor([{ name: 'org', root: org, kind: 'repos' }])
     await colony.refresh()
     const repos = colony.world.nodes.filter((n) => n.kind === 'repo').map((n) => n.id)
-    expect(repos).toEqual(['org/alpha', 'org/beta'])
+    expect(repos).toEqual(['project:org/alpha', 'project:org/beta'])
   })
 
   it('links an HTTP client in one repository to the route in another', async () => {
@@ -140,12 +144,52 @@ describe('Colony', () => {
     await colony.refresh()
     expect(colony.world.edges).toContainEqual(
       expect.objectContaining({
-        from: 'org/web/client.ts',
-        to: 'org/api/routes.ts',
+        from: 'project:org/web/client.ts',
+        to: 'project:org/api/routes.ts',
         kind: 'http',
         provenance: 'text',
         label: 'GET /v1/users/:id',
       }),
     )
+  })
+
+  it('maps a project named like the world', async () => {
+    const root = makeRepo({ 'a.ts': 'export const a = 1\n' })
+    const colony = colonyFor([{ name: 'world', root, kind: 'repo' }])
+    await colony.refresh()
+    const project = colony.world.nodes.find((n) => n.kind === 'project')
+    expect(project?.id).toBe('project:world')
+    expect(project?.parent).toBe('world')
+    expect(colony.world.nodes.filter((n) => n.id === 'world')).toHaveLength(1)
+  })
+
+  it('draws no HTTP road from a client whose path has no literal segment', async () => {
+    const org = tempDir()
+    makeRepo(
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: a URL template as written in source
+      { 'client.ts': 'export const get = (base: string, p: string) => fetch(`${base}/${p}`)\n' },
+      join(org, 'web'),
+    )
+    makeRepo({ 'routes.ts': "app.get('/health', handler)\n" }, join(org, 'api'))
+    const colony = colonyFor([{ name: 'org', root: org, kind: 'repos' }])
+    await colony.refresh()
+    expect(colony.world.edges.filter((e) => e.kind === 'http')).toEqual([])
+  })
+
+  it('reads HTTP client instances named api or server as clients, not routes', async () => {
+    const org = tempDir()
+    makeRepo(
+      {
+        'client.ts':
+          "const api = axios.create()\nconst server = ky.create()\nexport const list = () => api.get('/users')\nexport const ping = () => server.get('/ping')\n",
+      },
+      join(org, 'web'),
+    )
+    makeRepo({ 'other.ts': "export const users = () => fetch('/users')\n" }, join(org, 'svc'))
+    const colony = colonyFor([{ name: 'org', root: org, kind: 'repos' }])
+    await colony.refresh()
+    const client = colony.world.nodes.find((n) => n.id === 'project:org/web/client.ts')
+    expect(client?.transports?.filter((t) => t.kind === 'http-route') ?? []).toEqual([])
+    expect(colony.world.edges.filter((e) => e.kind === 'http')).toEqual([])
   })
 })

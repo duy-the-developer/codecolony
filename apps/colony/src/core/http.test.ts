@@ -11,6 +11,8 @@ describe('HTTP path matching', () => {
     ['/api/users', '/api/users/:id', false],
     ['/api/projects', '/api/world', false],
     ['relative/path', '/relative/path', false],
+    [':param/:param', '/health', false],
+    ['/:id/*', '/api/users', false],
   ])('%s vs %s -> %s', (client, route, expected) => {
     expect(pathsMatch(client, route)).toBe(expected)
   })

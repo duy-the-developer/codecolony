@@ -12,7 +12,7 @@ describe.each(LANGUAGE_ADAPTERS.map((adapter) => [adapter.id, adapter] as const)
   '%s adapter contract',
   (id, adapter) => {
     const sample = CONTRACT_SAMPLES[id]
-    const repo = 'p/sample'
+    const repo = 'project:p/sample'
     const node = (ref: string) => `${repo}/${ref}`
     let colony: Colony
 

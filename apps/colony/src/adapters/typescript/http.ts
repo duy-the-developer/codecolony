@@ -21,7 +21,7 @@ const ROUTE = `
 ((call_expression
   function: (member_expression object: (identifier) @router property: (property_identifier) @method)
   arguments: (arguments . (string) @url))
-  (#match? @router "^(app|router|server|api|routes|fastify)$")
+  (#match? @router "^(app|router|routes|fastify)$")
   (#match? @method "^(get|post|put|patch|delete|all)$"))
 ((binary_expression left: (identifier) @var right: (string) @url) @cmp
   (#match? @var "^(pathname|path|url|route)$"))

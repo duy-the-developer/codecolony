@@ -22,6 +22,6 @@ export function pathSegments(target: string): string[] | undefined {
 export function pathsMatch(client: string, route: string): boolean {
   const a = pathSegments(client)
   const b = pathSegments(route)
-  if (!a || !b || a.length !== b.length) return false
+  if (!a || !b || a.length !== b.length || a.every((segment) => segment === '*')) return false
   return a.every((segment, i) => segment === '*' || b[i] === '*' || segment === b[i])
 }

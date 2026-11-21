@@ -115,6 +115,7 @@ export class Colony extends EventEmitter<{ update: [World] }> {
   async deepIndex(fileId: string): Promise<Edge[]> {
     const cached = this.deep.get(fileId)
     if (cached) return cached
+    const version = this.current.version
     const file = this.current.nodes.find((node) => node.id === fileId && node.kind === 'file')
     const repo = this.repoOf(fileId)
     const adapter = file?.path ? adapterFor(file.path) : undefined
@@ -132,16 +133,16 @@ export class Colony extends EventEmitter<{ update: [World] }> {
     for (const symbol of symbols) {
       const fact = facts.find((f) => `${fileId}#${qualifiedName(f)}` === symbol.id)
       if (!fact) continue
-      const calls = await session.outgoingCalls({
-        path: join(repo.index.root, file.path),
-        line: fact.at.line,
-        column: fact.at.column,
-      })
+      const calls = await session.outgoingCalls(
+        { path: join(repo.index.root, file.path), line: fact.at.line, column: fact.at.column },
+        fact.name,
+      )
       for (const call of calls) {
         const target = this.symbolAt(
           repo,
           relative(repo.index.root, call.target.path),
           call.target.line,
+          call.name,
         )
         if (!target || target === symbol.id) continue
         edges.push({
@@ -154,7 +155,7 @@ export class Colony extends EventEmitter<{ update: [World] }> {
         })
       }
     }
-    this.deep.set(fileId, edges)
+    if (this.current.version === version) this.deep.set(fileId, edges)
     return edges
   }
 
@@ -177,10 +178,11 @@ export class Colony extends EventEmitter<{ update: [World] }> {
     repo: { id: string; index: RepoIndex },
     path: string,
     line: number,
+    name: string,
   ): string | undefined {
     const file = repo.index.files.find((f) => f.path === path)
     if (!file) return undefined
-    const symbol = file.facts.symbols.find((s) => s.at.line === line)
+    const symbol = file.facts.symbols.find((s) => s.at.line === line && s.name === name)
     return symbol ? `${repo.id}/${path}#${qualifiedName(symbol)}` : undefined
   }
 
