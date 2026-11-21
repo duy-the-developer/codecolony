@@ -20,7 +20,7 @@ import { type IndexStats, indexRepo, type ParseBlob, type RepoIndex } from './re
 // world out, and re-indexes when a repository's HEAD moves.
 
 // Full HEAD check of every repository, for anything the git watcher missed.
-const FALLBACK_MS = 30_000
+const FALLBACK_MS = 60_000
 // Quiet time after a git write before checking, so one commit checks once.
 const SETTLE_MS = 150
 const UNCHANGED: IndexStats = { parsed: 0, reused: 0, skipped: 0, unchanged: true }
