@@ -1,9 +1,9 @@
 import { basename } from 'node:path'
-import { findAdapter, TRANSPORT_DETECTORS } from '../adapters/registry.ts'
+import { findAdapter } from '../adapters/registry.ts'
 import type { FileFacts } from '../core/model.ts'
-import { parseFile, textFacts } from '../core/parse.ts'
 import { type FactCache, factKey } from './cache.ts'
-import { listTree, readBlobs, readHeadCommit, type TreeEntry } from './git.ts'
+import { listTree, readBlobs, type TreeEntry } from './git.ts'
+import { parseFacts } from './parse-facts.ts'
 
 // Indexes one repository at its HEAD commit, incrementally: an unchanged HEAD
 // is skipped, and only blobs missing from the fact cache are read and parsed.
@@ -12,6 +12,9 @@ export interface IndexedFile {
   path: string
   sha: string
   facts: FileFacts
+  // Size-only stand-in for a parse that failed for a reason outside the blob
+  // (a parse worker died): kept on the map, never cached or reused.
+  provisional?: boolean
 }
 
 export interface RepoIndex {
@@ -67,17 +70,26 @@ export function isVendored(entry: TreeEntry): boolean {
   return entry.path.split('/').some((segment) => VENDORED.has(segment))
 }
 
-function isBinary(bytes: Buffer): boolean {
-  return bytes.subarray(0, 8000).includes(0)
-}
+// Turns a blob into facts: parseFacts itself, or a parse pool running it.
+export type ParseBlob = (
+  path: string,
+  bytes: Uint8Array,
+) => Promise<{ facts: FileFacts; provisional: boolean }>
 
+const parseOnMainThread: ParseBlob = async (path, bytes) => ({
+  facts: await parseFacts(path, bytes),
+  provisional: false,
+})
+
+// `commit` is the repository's HEAD, read by the caller (`readHeadCommits`).
 export async function indexRepo(
   root: string,
+  commit: string | undefined,
   cache: FactCache,
   previous?: RepoIndex,
+  parse: ParseBlob = parseOnMainThread,
 ): Promise<{ index: RepoIndex; stats: IndexStats }> {
   const name = basename(root)
-  const commit = await readHeadCommit(root)
   const stats: IndexStats = { parsed: 0, reused: 0, skipped: 0, unchanged: false }
   if (previous && previous.commit === commit) {
     return { index: previous, stats: { ...stats, unchanged: true } }
@@ -93,7 +105,8 @@ export async function indexRepo(
       continue
     }
     const before = known.get(entry.path)
-    const facts = before?.sha === entry.sha ? before.facts : cache.get(keyOf(entry))
+    const facts =
+      before?.sha === entry.sha && !before.provisional ? before.facts : cache.get(keyOf(entry))
     if (facts) {
       stats.reused++
       files.push({ path: entry.path, sha: entry.sha, facts })
@@ -106,31 +119,22 @@ export async function indexRepo(
     root,
     missing.map((entry) => entry.sha),
   )
-  for (const entry of missing) {
-    const bytes = blobs.get(entry.sha)
-    if (!bytes) continue
-    const facts = await factsFor(entry.path, bytes)
-    cache.set(keyOf(entry), facts)
-    stats.parsed++
-    files.push({ path: entry.path, sha: entry.sha, facts })
-  }
+  // Every missing blob is handed to the parser at once, so a pool keeps all
+  // its workers busy; each result is cached as soon as it arrives.
+  await Promise.all(
+    missing.map(async (entry) => {
+      const bytes = blobs.get(entry.sha)
+      if (!bytes) return
+      const { facts, provisional } = await parse(entry.path, bytes)
+      if (!provisional) cache.set(keyOf(entry), facts)
+      stats.parsed++
+      files.push({ path: entry.path, sha: entry.sha, facts, provisional })
+    }),
+  )
   files.sort((a, b) => (a.path < b.path ? -1 : 1))
   return { index: { name, root, commit, files }, stats }
 }
 
 function keyOf(entry: TreeEntry): string {
   return factKey(entry.sha, findAdapter(entry.path)?.id ?? 'text')
-}
-
-async function factsFor(path: string, bytes: Buffer): Promise<FileFacts> {
-  if (isBinary(bytes)) return { ...textFacts(''), language: 'binary' }
-  const source = bytes.toString('utf8')
-  const adapter = findAdapter(path)
-  if (!adapter) return textFacts(source)
-  try {
-    return await parseFile(adapter, TRANSPORT_DETECTORS, path, source)
-  } catch {
-    // A grammar that cannot read the file still leaves its size on the map.
-    return textFacts(source)
-  }
 }

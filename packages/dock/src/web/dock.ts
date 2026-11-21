@@ -8,6 +8,8 @@ import {
   FOCUS_PATH,
   type FocusRequest,
   PTY_PATH,
+  STATUS_PATH,
+  type StatusResponse,
   SUBPROTOCOL,
   TOKEN_PROTOCOL_PREFIX,
   WORKERS_PATH,
@@ -35,6 +37,8 @@ export interface DockMountOptions {
 
 const TOKEN_KEY = 'codecolony.dock.token'
 const STALE_TOKEN = 'Token not accepted: the server restarted, open the URL it printed'
+const HERDR_DISABLED =
+  'Herdr is disabled for this run (--no-herdr, CODECOLONY_HERDR=off or CI), so the dock does not attach to any session.'
 
 // Reads the token from `#token=...` once, keeps it for this tab in
 // sessionStorage and strips it from the address bar.
@@ -48,20 +52,21 @@ export function readToken(): string | null {
   return sessionStorage.getItem(TOKEN_KEY)
 }
 
+// The Herdr client fills the element. Herdr's own sidebar lists and switches
+// the workers; a bar above it shows only while there is something to say,
+// such as connecting, a disconnect or an unreachable worker list.
 export function mountDock(el: HTMLElement, { token, pollMs = 3000 }: DockMountOptions): DockHandle {
   el.classList.add('cc-dock')
   const bar = document.createElement('div')
   bar.className = 'cc-dock-bar'
-  const workerList = document.createElement('ul')
-  workerList.className = 'cc-dock-workers'
-  workerList.setAttribute('aria-label', 'Workers')
+  bar.hidden = true
   const state = document.createElement('span')
   state.className = 'cc-dock-state'
   const reconnect = document.createElement('button')
   reconnect.type = 'button'
   reconnect.textContent = 'Reconnect'
   reconnect.hidden = true
-  bar.append(workerList, state, reconnect)
+  bar.append(state, reconnect)
   const screen = document.createElement('div')
   screen.className = 'cc-dock-screen'
   el.replaceChildren(bar, screen)
@@ -70,6 +75,23 @@ export function mountDock(el: HTMLElement, { token, pollMs = 3000 }: DockMountOp
   let current: DockWorker[] | null = null
   let shownKey = ''
   let disposed = false
+  // The state line and the worker list each report here; the list's message
+  // shows only while the terminal itself has nothing to report.
+  let terminalNote = ''
+  let workersNote = ''
+
+  function showNotes(): void {
+    state.textContent = terminalNote || workersNote
+    bar.hidden = state.textContent === '' && reconnect.hidden
+  }
+  function setTerminalNote(text: string): void {
+    terminalNote = text
+    showNotes()
+  }
+  function setWorkersNote(text: string): void {
+    workersNote = text
+    showNotes()
+  }
 
   // Opening a token URL in a tab already on this page only changes the hash,
   // which reloads nothing; a server restart prints a new token, so take it.
@@ -80,7 +102,7 @@ export function mountDock(el: HTMLElement, { token, pollMs = 3000 }: DockMountOp
   window.addEventListener('hashchange', onHash)
 
   if (!token) {
-    state.textContent = 'No token: open the URL the server printed, with #token=...'
+    setTerminalNote('No token: open the URL the server printed, with #token=...')
     return {
       focusPane: () => Promise.reject(new Error('dock has no token')),
       listWorkers: () => Promise.reject(new Error('dock has no token')),
@@ -117,7 +139,7 @@ export function mountDock(el: HTMLElement, { token, pollMs = 3000 }: DockMountOp
 
   function connect(): void {
     reconnect.hidden = true
-    state.textContent = 'Connecting...'
+    setTerminalNote('Connecting...')
     sentSize = ''
     term.reset()
     const socket = new WebSocket(`ws://${location.host}${PTY_PATH}`, [
@@ -126,7 +148,7 @@ export function mountDock(el: HTMLElement, { token, pollMs = 3000 }: DockMountOp
     ])
     socket.binaryType = 'arraybuffer'
     socket.onopen = () => {
-      state.textContent = ''
+      setTerminalNote('')
       sendSize()
       term.focus()
     }
@@ -136,8 +158,8 @@ export function mountDock(el: HTMLElement, { token, pollMs = 3000 }: DockMountOp
     socket.onclose = () => {
       if (ws !== socket || disposed) return
       ws = null
-      state.textContent = 'Disconnected'
       reconnect.hidden = false
+      setTerminalNote('Disconnected')
     }
     ws = socket
   }
@@ -170,6 +192,25 @@ export function mountDock(el: HTMLElement, { token, pollMs = 3000 }: DockMountOp
 
   const headers = { authorization: `Bearer ${token}` }
 
+  // Any failure counts as enabled: the terminal and the bar then show it.
+  async function readStatus(): Promise<StatusResponse['herdr']> {
+    try {
+      const response = await fetch(STATUS_PATH, { headers, cache: 'no-store' })
+      if (!response.ok) return 'enabled'
+      return ((await response.json()) as StatusResponse).herdr
+    } catch {
+      return 'enabled'
+    }
+  }
+
+  function showDisabled(): void {
+    screen.hidden = true
+    const note = document.createElement('p')
+    note.className = 'cc-dock-off'
+    note.textContent = HERDR_DISABLED
+    el.append(note)
+  }
+
   async function listWorkers(): Promise<DockWorker[]> {
     const response = await fetch(WORKERS_PATH, { headers, cache: 'no-store' })
     if (response.status === 401) throw new Error(STALE_TOKEN)
@@ -196,39 +237,16 @@ export function mountDock(el: HTMLElement, { token, pollMs = 3000 }: DockMountOp
     void refresh()
   }
 
-  function renderWorkers(workers: DockWorker[]): void {
-    workerList.replaceChildren(
-      ...workers.map((worker) => {
-        const item = document.createElement('li')
-        const button = document.createElement('button')
-        button.type = 'button'
-        button.className = `cc-dock-worker cc-status-${worker.status}`
-        button.setAttribute('aria-pressed', String(worker.focused))
-        button.title = `${worker.agent ?? 'agent'} in pane ${worker.paneId} (${worker.status})`
-        button.textContent = worker.name ?? worker.agent ?? worker.paneId
-        button.addEventListener('click', () => {
-          focusPane(worker.paneId).catch(showError)
-        })
-        item.append(button)
-        return item
-      }),
-    )
-  }
-
-  function showError(error: unknown): void {
-    state.textContent = error instanceof Error ? error.message : String(error)
-  }
-
   async function refresh(): Promise<void> {
     try {
       const workers = await listWorkers()
       if (disposed) return
-      // Rebuilding the buttons on every poll would drop a click that lands mid-rebuild.
+      setWorkersNote('')
+      // Listeners hear only about changes, not every poll.
       const key = JSON.stringify(workers)
       if (key === shownKey) return
       shownKey = key
       current = workers
-      renderWorkers(workers)
       for (const listener of listeners) listener(workers)
     } catch (error) {
       if (disposed) return
@@ -237,16 +255,21 @@ export function mountDock(el: HTMLElement, { token, pollMs = 3000 }: DockMountOp
         current = []
         for (const listener of listeners) listener(current)
       }
-      const item = document.createElement('li')
-      item.className = 'cc-dock-note'
-      item.textContent = `Workers unavailable: ${error instanceof Error ? error.message : error}`
-      workerList.replaceChildren(item)
+      setWorkersNote(`Workers unavailable: ${error instanceof Error ? error.message : error}`)
     }
   }
 
-  connect()
-  void refresh()
-  const poll = window.setInterval(() => void refresh(), pollMs)
+  let poll = 0
+  void readStatus().then((status) => {
+    if (disposed) return
+    if (status === 'disabled') {
+      showDisabled()
+      return
+    }
+    connect()
+    void refresh()
+    poll = window.setInterval(() => void refresh(), pollMs)
+  })
 
   return {
     focusPane,

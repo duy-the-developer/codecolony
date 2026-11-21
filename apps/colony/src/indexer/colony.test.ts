@@ -1,8 +1,9 @@
+import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { ColonyConfig } from '../config/load-config.ts'
 import type { World } from '../shared/world-types.ts'
-import { commit, makeRepo, makeTempDir } from '../testing/git-fixture.ts'
+import { commit, git, makeRepo, makeTempDir } from '../testing/git-fixture.ts'
 import { Colony } from './colony.ts'
 
 const colonies: Colony[] = []
@@ -14,6 +15,18 @@ function colonyFor(projects: ColonyConfig['projects'], cacheDir = makeTempDir())
   const colony = new Colony({ projects, cacheDir, source: 'test', port: 0 })
   colonies.push(colony)
   return colony
+}
+
+// Indexed and watched, with the fallback check too slow to fire in a test.
+async function watchedColony(projects: ColonyConfig['projects']): Promise<Colony> {
+  const colony = colonyFor(projects)
+  await colony.refresh()
+  await colony.watch({ fallbackMs: 60_000, settleMs: 20 })
+  return colony
+}
+
+function nextWorld(colony: Colony): Promise<World> {
+  return new Promise((resolve) => colony.once('update', resolve))
 }
 
 function rects(world: World): Map<string, string> {
@@ -60,6 +73,129 @@ describe('Colony', () => {
     if (!src || !file) throw new Error('missing nodes')
     expect(file.rect.x).toBeGreaterThanOrEqual(src.rect.x)
     expect(file.rect.x + file.rect.w).toBeLessThanOrEqual(src.rect.x + src.rect.w)
+  })
+
+  it('reads a file on the map as committed, and nothing off the map', async () => {
+    const root = makeRepo(
+      { 'src/a.ts': 'export const a = 1\n', 'logo.png': '\u0000\u0001PNG' },
+      join(makeTempDir(), 'demo'),
+    )
+    writeFileSync(join(root, 'src/a.ts'), 'uncommitted edit\n')
+    writeFileSync(join(root, 'secret.txt'), 'not tracked\n')
+    const colony = colonyFor([{ name: 'p', root, kind: 'repo' }])
+    await colony.refresh()
+    const head = git(root, 'rev-parse', 'HEAD')
+
+    expect(await colony.readFile('project:p/demo/src/a.ts')).toEqual({
+      id: 'project:p/demo/src/a.ts',
+      path: 'src/a.ts',
+      commit: head,
+      isBinary: false,
+      text: 'export const a = 1\n',
+    })
+    expect(await colony.readFile('project:p/demo/logo.png')).toMatchObject({
+      isBinary: true,
+      text: '',
+    })
+    for (const id of [
+      'project:p/demo/secret.txt',
+      'project:p/demo/src/../secret.txt',
+      'project:p/demo/../../etc/passwd',
+      'project:p/demo/src/a.ts#a',
+      'project:p/demo/src',
+    ]) {
+      expect(await colony.readFile(id)).toBeUndefined()
+    }
+  })
+
+  it('keeps loose files directly in their repository or package', async () => {
+    const root = makeRepo(
+      {
+        'package.json': '{}\n',
+        'README.md': '# demo\n',
+        'scripts/build.ts': 'export const build = 1\n',
+        'packages/lib/package.json': '{}\n',
+        'packages/lib/index.ts': 'export const lib = 1\n',
+        'packages/lib/src/util.ts': 'export const util = 1\n',
+      },
+      join(makeTempDir(), 'demo'),
+    )
+    const colony = colonyFor([{ name: 'p', root, kind: 'repo' }])
+    await colony.refresh()
+    const byId = new Map(colony.world.nodes.map((n) => [n.id, n]))
+    const parentOf = (id: string) => byId.get(id)?.parent
+    const repo = 'project:p/demo'
+    const lib = `${repo}/package:packages/lib`
+    expect(parentOf(`${repo}/README.md`)).toBe(repo)
+    expect(parentOf(`${repo}/package.json`)).toBe(repo)
+    expect(parentOf(`${repo}/scripts`)).toBe(repo)
+    expect(parentOf(`${repo}/scripts/build.ts`)).toBe(`${repo}/scripts`)
+    expect(parentOf(lib)).toBe(repo)
+    expect(parentOf(`${lib.replace('package:', '')}/index.ts`)).toBe(lib)
+    expect(parentOf(`${repo}/packages/lib/src`)).toBe(lib)
+    expect(byId.get(`${repo}/packages/lib/src`)?.name).toBe('src')
+    expect(byId.get(repo)?.package).toBe(true)
+    // No folder becomes a module of its own repository or package root.
+    for (const id of [`${repo}/.`, `${repo}/package:.`, `${repo}/packages/lib`]) {
+      expect(byId.has(id), id).toBe(false)
+    }
+    for (const n of colony.world.nodes) {
+      const parent = n.parent ? byId.get(n.parent) : undefined
+      if (!parent || n.kind === 'symbol') continue
+      expect(n.rect.x, n.id).toBeGreaterThanOrEqual(parent.rect.x)
+      expect(n.rect.y, n.id).toBeGreaterThanOrEqual(parent.rect.y)
+      expect(n.rect.x + n.rect.w, n.id).toBeLessThanOrEqual(parent.rect.x + parent.rect.w)
+      expect(n.rect.y + n.rect.h, n.id).toBeLessThanOrEqual(parent.rect.y + parent.rect.h)
+    }
+  })
+
+  it('nests subfolder modules inside their parent folder', async () => {
+    const root = makeRepo(
+      {
+        'package.json': '{}\n',
+        'src/web/main.ts': 'export const main = 1\n',
+        'src/web/components/app/app.tsx': 'export const App = 1\n',
+        'src/web/components/ui/button.tsx': 'export const Button = 1\n',
+        'src/web/components/ui/forms/input.tsx': 'export const Input = 1\n',
+        'src/web/hooks/use-world.ts': 'export const useWorld = 1\n',
+        'src/server/api.ts': 'export const api = 1\n',
+        '.github/workflows/ci.yml': 'on: push\n',
+      },
+      join(makeTempDir(), 'demo'),
+    )
+    const colony = colonyFor([{ name: 'p', root, kind: 'repo' }])
+    await colony.refresh()
+    const byId = new Map(colony.world.nodes.map((n) => [n.id, n]))
+    const repo = 'project:p/demo'
+    const modules = colony.world.nodes
+      .filter((n) => n.kind === 'module')
+      .map((n) => [n.path, n.name, n.parent?.slice(repo.length + 1) || '.'])
+    expect(modules).toEqual([
+      // A folder with no files and one subfolder merges into it.
+      ['.github/workflows', '.github/workflows', '.'],
+      // A folder with no files but several subfolders still holds them.
+      ['src', 'src', '.'],
+      ['src/server', 'server', 'src'],
+      ['src/web', 'web', 'src'],
+      ['src/web/components', 'components', 'src/web'],
+      ['src/web/components/app', 'app', 'src/web/components'],
+      ['src/web/components/ui', 'ui', 'src/web/components'],
+      ['src/web/components/ui/forms', 'forms', 'src/web/components/ui'],
+      ['src/web/hooks', 'hooks', 'src/web'],
+    ])
+    expect(byId.get(`${repo}/src/web/main.ts`)?.parent).toBe(`${repo}/src/web`)
+    expect(byId.get(`${repo}/src/web/components/ui/button.tsx`)?.parent).toBe(
+      `${repo}/src/web/components/ui`,
+    )
+    expect(byId.get(`${repo}/src/web`)?.lines).toBe(5)
+    for (const n of colony.world.nodes) {
+      const parent = n.parent ? byId.get(n.parent) : undefined
+      if (!parent || n.kind === 'symbol') continue
+      expect(n.rect.x, n.id).toBeGreaterThanOrEqual(parent.rect.x)
+      expect(n.rect.y, n.id).toBeGreaterThanOrEqual(parent.rect.y)
+      expect(n.rect.x + n.rect.w, n.id).toBeLessThanOrEqual(parent.rect.x + parent.rect.w)
+      expect(n.rect.y + n.rect.h, n.id).toBeLessThanOrEqual(parent.rect.y + parent.rect.h)
+    }
   })
 
   it('skips vendored and generated files', async () => {
@@ -114,11 +250,53 @@ describe('Colony', () => {
 
   it('announces a new world when HEAD moves', async () => {
     const root = makeRepo({ 'a.ts': 'export const a = 1\n' })
+    const colony = await watchedColony([{ name: 'p', root, kind: 'repo' }])
+    const updated = nextWorld(colony)
+    commit(root, { 'b.ts': 'export const b = 2\n' })
+    const world = await updated
+    expect(world.nodes.some((n) => n.path === 'b.ts')).toBe(true)
+  })
+
+  it('sees a checkout that moves only HEAD', async () => {
+    const root = makeRepo({ 'a.ts': 'export const a = 1\n' })
+    commit(root, { 'b.ts': 'export const b = 2\n' })
+    const colony = await watchedColony([{ name: 'p', root, kind: 'repo' }])
+    const updated = nextWorld(colony)
+    git(root, 'checkout', '-q', '--detach', 'HEAD~1')
+    const world = await updated
+    expect(world.nodes.some((n) => n.path === 'b.ts')).toBe(false)
+  })
+
+  it('sees a commit in a linked worktree', async () => {
+    const main = makeRepo({ 'a.ts': 'export const a = 1\n' })
+    const root = join(makeTempDir(), 'side')
+    git(main, 'worktree', 'add', '-q', '-b', 'side', root)
+    const colony = await watchedColony([{ name: 'p', root, kind: 'repo' }])
+    const updated = nextWorld(colony)
+    commit(root, { 'b.ts': 'export const b = 2\n' })
+    const world = await updated
+    expect(world.nodes.some((n) => n.path === 'b.ts')).toBe(true)
+  })
+
+  it('maps a repository that appears in a watched folder', async () => {
+    const org = makeTempDir()
+    makeRepo({ 'a.ts': 'export const a = 1\n' }, join(org, 'alpha'))
+    const colony = await watchedColony([{ name: 'org', root: org, kind: 'repos' }])
+    const updated = nextWorld(colony)
+    makeRepo({ 'b.ts': 'export const b = 1\n' }, join(org, 'beta'))
+    const world = await updated
+    const repos = world.nodes.filter((n) => n.kind === 'repo').map((n) => n.id)
+    expect(repos).toEqual(['project:org/alpha', 'project:org/beta'])
+  })
+
+  it('falls back to a full check on a timer', async () => {
+    const root = makeRepo({ 'a.ts': 'export const a = 1\n' })
     const colony = colonyFor([{ name: 'p', root, kind: 'repo' }])
     await colony.refresh()
-    const updated = new Promise<World>((resolve) => colony.once('update', resolve))
+    const updated = nextWorld(colony)
+    // Moved before anything watches it, so only the timer can see it.
     commit(root, { 'b.ts': 'export const b = 2\n' })
-    colony.watch(50)
+    await colony.watch({ fallbackMs: 50, settleMs: 60_000 })
     const world = await updated
     expect(world.nodes.some((n) => n.path === 'b.ts')).toBe(true)
   })
@@ -163,7 +341,7 @@ describe('Colony', () => {
     expect(colony.world.nodes.filter((n) => n.id === 'world')).toHaveLength(1)
   })
 
-  it('draws no HTTP road from a client whose path has no literal segment', async () => {
+  it('draws no HTTP edge from a client whose path has no literal segment', async () => {
     const org = makeTempDir()
     makeRepo(
       // biome-ignore lint/suspicious/noTemplateCurlyInString: a URL template as written in source

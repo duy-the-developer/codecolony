@@ -5,9 +5,18 @@ import type { NodeKind } from '../shared/world-types.ts'
 // one key press per level.
 
 // A container opens (its children fade in) as its shorter side grows over
-// this band; a file opens to show its symbols over the second band.
-export const CONTAINER_OPEN: Band = [70, 150]
+// its band: a module as soon as its file squares are a few pixels wide. A
+// file opens to show its symbols over FILE_OPEN.
+export const CONTAINER_OPEN: Record<'project' | 'repo' | 'package' | 'module', Band> = {
+  project: [40, 90],
+  repo: [40, 90],
+  package: [24, 48],
+  module: [12, 24],
+}
 export const FILE_OPEN: Band = [150, 300]
+// The background grid, one line per layout unit, fades in as the unit grows
+// over this band; below it the lines would be too dense to read.
+export const GRID_FADE: Band = [5, 12]
 // Labels fade in over these font sizes.
 export const LABEL_FONT: Band = [7, 10]
 // Nodes smaller than this are not drawn at all.
@@ -27,5 +36,5 @@ export function fade(px: number, [from, to]: Band): number {
 export function openness(kind: NodeKind, px: number): number {
   if (kind === 'world') return 1
   if (kind === 'symbol') return fade(px, FILE_OPEN)
-  return fade(px, kind === 'file' ? FILE_OPEN : CONTAINER_OPEN)
+  return fade(px, kind === 'file' ? FILE_OPEN : CONTAINER_OPEN[kind])
 }

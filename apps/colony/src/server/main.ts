@@ -15,7 +15,6 @@ import { isLoopbackHost } from './host.ts'
 import { createStaticHandler, type Handler } from './static.ts'
 
 const HOST = '127.0.0.1'
-const WATCH_MS = 2000
 
 const appRoot = fileURLToPath(new URL('../../', import.meta.url))
 const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url))
@@ -25,9 +24,10 @@ const dev = args.dev ?? false
 const config = loadConfig({ repoRoot })
 const colony = new Colony(config)
 await colony.refresh()
-colony.watch(WATCH_MS)
-const api = createApi(config, colony)
-const dock = createDock(resolveDockOptions(args))
+await colony.watch()
+const dockOptions = resolveDockOptions(args)
+const dock = createDock(dockOptions)
+const api = createApi(config, colony, dock.deny)
 const headers = securityHeaders({ dev })
 
 let web: Handler
@@ -63,6 +63,7 @@ server.listen(config.port, HOST, () => {
   log('Code Colony is running', {
     url: `http://${HOST}:${config.port}/#token=${dock.token}`,
     mode: dev ? 'dev' : 'built',
+    herdr: dockOptions.enabled ? 'on' : 'off',
     config: config.source,
   })
 })

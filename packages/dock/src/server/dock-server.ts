@@ -6,6 +6,8 @@ import {
   FOCUS_PATH,
   isValidPaneId,
   PTY_PATH,
+  STATUS_PATH,
+  type StatusResponse,
   SUBPROTOCOL,
   WORKERS_PATH,
   type WorkersResponse,
@@ -25,6 +27,7 @@ import { bridgePty, type PtyCommand } from './pty-bridge.ts'
 const MAX_PTYS = 4
 const MAX_FRAME_BYTES = 1024 * 1024
 const MAX_BODY_BYTES = 4096
+const HERDR_DISABLED = 'Herdr is disabled'
 
 export interface Dock {
   // Per-run secret the page must present; print it only in the URL fragment.
@@ -33,6 +36,9 @@ export interface Dock {
   handle(req: IncomingMessage, res: ServerResponse): boolean
   // Takes WebSocket upgrades for the terminal and returns true, or returns false.
   upgrade(req: IncomingMessage, socket: Duplex, head: Buffer): boolean
+  // Guards another HTTP route as the dock guards its own: Host, Origin and
+  // bearer token. Returns the status to refuse the request with, or null.
+  deny(req: IncomingMessage): 401 | 403 | null
   close(): void
 }
 
@@ -45,7 +51,8 @@ export interface DockDeps {
 
 export function createDock(options: DockOptions, deps: DockDeps = {}): Dock {
   const token = deps.token ?? createToken()
-  const herdr = deps.herdr ?? createHerdrApi(options.socketPath)
+  // Disabled, the dock holds no Herdr client at all, so nothing can reach the socket.
+  const herdr = options.enabled ? (deps.herdr ?? createHerdrApi(options.socketPath)) : null
   const command: PtyCommand = deps.command ?? {
     ...options.client,
     cwd: options.cwd,
@@ -59,7 +66,7 @@ export function createDock(options: DockOptions, deps: DockDeps = {}): Dock {
   let ptys = 0
 
   // Host on every request; Origin whenever the browser sends one; the token always.
-  function deny(req: IncomingMessage, bearer: string | undefined): number | null {
+  function deny(req: IncomingMessage, bearer: string | undefined): 401 | 403 | null {
     const port = req.socket.localPort ?? 0
     if (!isAllowedHost(req.headers.host, port)) return 403
     const { origin } = req.headers
@@ -69,6 +76,10 @@ export function createDock(options: DockOptions, deps: DockDeps = {}): Dock {
   }
 
   async function workers(res: ServerResponse): Promise<void> {
+    if (!herdr) {
+      json(res, 503, { error: HERDR_DISABLED })
+      return
+    }
     try {
       const body: WorkersResponse = { workers: await herdr.listWorkers() }
       json(res, 200, body)
@@ -78,6 +89,10 @@ export function createDock(options: DockOptions, deps: DockDeps = {}): Dock {
   }
 
   async function focus(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    if (!herdr) {
+      json(res, 503, { error: HERDR_DISABLED })
+      return
+    }
     if (!req.headers['content-type']?.startsWith('application/json')) {
       json(res, 415, { error: 'expected application/json' })
       return
@@ -103,12 +118,15 @@ export function createDock(options: DockOptions, deps: DockDeps = {}): Dock {
 
   return {
     token,
+    deny: (req) => deny(req, tokenFromAuthorization(req.headers.authorization)),
     handle(req, res) {
       const { pathname } = new URL(req.url ?? '/', 'http://localhost')
       if (!pathname.startsWith('/api/dock/')) return false
       const denied = deny(req, tokenFromAuthorization(req.headers.authorization))
       if (denied) {
         json(res, denied, { error: denied === 401 ? 'missing or wrong token' : 'forbidden' })
+      } else if (req.method === 'GET' && pathname === STATUS_PATH) {
+        json(res, 200, { herdr: herdr ? 'enabled' : 'disabled' })
       } else if (req.method === 'GET' && pathname === WORKERS_PATH) {
         void workers(res)
       } else if (req.method === 'POST' && pathname === FOCUS_PATH) {
@@ -131,6 +149,7 @@ export function createDock(options: DockOptions, deps: DockDeps = {}): Dock {
       if (denied) return reject(socket, denied)
       const offered = protocols?.split(',').map((value) => value.trim()) ?? []
       if (!offered.includes(SUBPROTOCOL)) return reject(socket, 400)
+      if (!herdr) return reject(socket, 503)
       if (ptys >= MAX_PTYS) return reject(socket, 503)
       wss.handleUpgrade(req, socket, head, (ws) => {
         ptys += 1
@@ -159,7 +178,11 @@ function reject(socket: Duplex, status: number): true {
   return true
 }
 
-function json(res: ServerResponse, status: number, body: WorkersResponse | ErrorResponse): void {
+function json(
+  res: ServerResponse,
+  status: number,
+  body: StatusResponse | WorkersResponse | ErrorResponse,
+): void {
   res.writeHead(status, { 'content-type': 'application/json' }).end(JSON.stringify(body))
 }
 

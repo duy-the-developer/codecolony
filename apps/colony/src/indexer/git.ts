@@ -1,5 +1,6 @@
 import { execFile, spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
+import { availableParallelism } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 
@@ -8,6 +9,8 @@ import { promisify } from 'node:util'
 
 const run = promisify(execFile)
 const MAX_BUFFER = 256 * 1024 * 1024
+// Concurrent `git rev-parse` processes when checking many repositories.
+export const HEAD_LANES = Math.min(8, availableParallelism())
 
 export interface TreeEntry {
   path: string
@@ -25,6 +28,55 @@ export async function readHeadCommit(repo: string): Promise<string | undefined> 
     return stdout.trim() || undefined
   } catch {
     // An empty repository has no HEAD yet.
+    return undefined
+  }
+}
+
+// HEAD of many repositories, a few git processes at a time.
+export async function readHeadCommits(
+  repos: readonly string[],
+): Promise<Map<string, string | undefined>> {
+  const heads = new Map<string, string | undefined>()
+  await forEachLimited(repos, HEAD_LANES, async (repo) => {
+    heads.set(repo, await readHeadCommit(repo))
+  })
+  return heads
+}
+
+// Runs `task` on every item, at most `lanes` at a time.
+export async function forEachLimited<T>(
+  items: readonly T[],
+  lanes: number,
+  task: (item: T) => Promise<void>,
+): Promise<void> {
+  let next = 0
+  const workers = Array.from({ length: Math.min(lanes, items.length) }, async () => {
+    while (next < items.length) await task(items[next++] as T)
+  })
+  await Promise.all(workers)
+}
+
+export interface GitDirs {
+  // Holds this checkout's HEAD: `.git`, or `.git/worktrees/<name>` for a
+  // linked worktree.
+  gitDir: string
+  // Holds the refs every worktree shares.
+  commonDir: string
+}
+
+export async function readGitDirs(repo: string): Promise<GitDirs | undefined> {
+  try {
+    const { stdout } = await run('git', [
+      '-C',
+      repo,
+      'rev-parse',
+      '--path-format=absolute',
+      '--git-dir',
+      '--git-common-dir',
+    ])
+    const [gitDir, commonDir] = stdout.trim().split('\n')
+    return gitDir && commonDir ? { gitDir, commonDir } : undefined
+  } catch {
     return undefined
   }
 }

@@ -2,6 +2,7 @@ import { createRequire } from 'node:module'
 import { extname, posix } from 'node:path'
 import type { Node } from 'web-tree-sitter'
 import type { LanguageAdapter } from '../../core/language-adapter.ts'
+import { resolveLspMemoryBudget } from '../../core/lsp.ts'
 import type { SymbolKind } from '../../core/model.ts'
 
 // TypeScript and JavaScript: tree-sitter-typescript for the parser side,
@@ -108,10 +109,10 @@ export const typescriptAdapter: LanguageAdapter = {
     return require.resolve(`tree-sitter-typescript/tree-sitter-${name}.wasm`)
   },
   queries: { symbols: SYMBOLS, imports: IMPORTS, calls: CALLS },
-  isBranch(node) {
-    if (BRANCHES.has(node.type)) return true
-    if (node.type !== 'binary_expression') return false
-    return LOGICAL.has(node.childForFieldName('operator')?.type ?? '')
+  isBranch(type, node) {
+    if (BRANCHES.has(type)) return true
+    if (type !== 'binary_expression') return false
+    return LOGICAL.has(node().childForFieldName('operator')?.type ?? '')
   },
   symbolKind,
   isExported,
@@ -134,6 +135,7 @@ export const typescriptAdapter: LanguageAdapter = {
     },
     initializationOptions: () => ({
       tsserver: { path: require.resolve('typescript/lib/tsserver.js') },
+      maxTsServerMemory: resolveLspMemoryBudget().serverMemoryMb,
       preferences: { includeCompletionsForModuleExports: false },
     }),
   },

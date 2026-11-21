@@ -1,20 +1,27 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { ColonyConfig } from '../config/load-config.ts'
-import type { ProjectsResponse } from '../shared/api-types.ts'
+import type { FileResponse, ProjectsResponse } from '../shared/api-types.ts'
 import type { DeepResponse, Edge, World } from '../shared/world-types.ts'
 
 // The part of the Colony the API reads; tests pass a stub.
 export interface WorldSource {
   readonly world: World
   deepIndex(fileId: string): Promise<Edge[]>
+  readFile(fileId: string): Promise<FileResponse | undefined>
   on(event: 'update', listener: (world: World) => void): unknown
   off(event: 'update', listener: (world: World) => void): unknown
 }
 
+// Refuses a request to a token-guarded route with a status, or lets it
+// through with null; the dock's own guard in the app.
+export type DenyRequest = (req: IncomingMessage) => number | null
+
 const HEARTBEAT_MS = 25_000
 
 // Answers /api/* and returns true, or returns false to let the page handle it.
-export function createApi(config: ColonyConfig, source: WorldSource) {
+// Source text is token-guarded; the map's shape is guarded by the loopback
+// Host check alone.
+export function createApi(config: ColonyConfig, source: WorldSource, deny: DenyRequest) {
   return (req: IncomingMessage, res: ServerResponse): boolean => {
     const url = new URL(req.url ?? '/', 'http://localhost')
     const { pathname } = url
@@ -38,10 +45,35 @@ export function createApi(config: ColonyConfig, source: WorldSource) {
           (edges) => json(res, 200, { edges } satisfies DeepResponse),
           (error: unknown) => json(res, 502, { error: (error as Error).message }),
         )
+    } else if (pathname === '/api/file') {
+      file(req, res, url.searchParams.get('id'), source, deny)
     } else {
       json(res, 404, { error: 'not found' })
     }
     return true
+  }
+}
+
+function file(
+  req: IncomingMessage,
+  res: ServerResponse,
+  id: string | null,
+  source: WorldSource,
+  deny: DenyRequest,
+): void {
+  const denied = deny(req)
+  if (denied) {
+    json(res, denied, { error: denied === 401 ? 'missing or wrong token' : 'forbidden' })
+  } else if (!id) {
+    json(res, 400, { error: 'id is required' })
+  } else {
+    source.readFile(id).then(
+      (body) => {
+        if (body) json(res, 200, body satisfies FileResponse)
+        else json(res, 404, { error: 'no such file on the map' })
+      },
+      (error: unknown) => json(res, 502, { error: (error as Error).message }),
+    )
   }
 }
 

@@ -6,7 +6,7 @@ How files, symbols and folders are named and how folders depend on each other. `
 
 - kebab-case, ASCII only (`useFilenamingConvention`).
 - Folders are singular nouns that name an area: `indexer/`, `layout/`, `config/`. `adapters/` is the one plural exception.
-- Name a file after its main export: `buildWorld` lives in `build-world.ts`, `class RoadPlanner` in `road-planner.ts`.
+- Name a file after its main export: `buildWorld` lives in `build-world.ts`, `class Scene` in `scene.ts`.
 - When a file plays a role inside a set, the role comes last: `http-detector.ts`, `grpc-detector.ts`.
 - Reuse a base name only for files with the same role in sibling folders: `adapters/<language>/adapter.ts`, `adapters/<language>/sample.ts`.
 - Shared wire types: `shared/<topic>-types.ts`.
@@ -83,11 +83,12 @@ Glossary of type suffixes:
 - A folder per component: `components/project-picker/` holds `project-picker.tsx` (exports `ProjectPicker`), `project-picker.test.tsx` and optionally `project-picker.css`.
 - Hooks go in `use-camera.ts`, which exports `useCamera`.
 - Props type `ProjectPickerProps`. Boolean props are `isOpen`, `hasError`, `canEdit`; event props are `onSelect`, and their handlers `handleSelect`.
-- One component per file, named exports only.
+- One exported component per file, named exports only. Small helper components used only by that file may sit below it.
+- shadcn/ui primitives live in `web/components/ui/<name>.tsx` as shadcn shapes them: several exported parts per file (`Tabs`, `TabsList`, `TabsTrigger`). Edit them in place.
 
 ## Environment variables and flags
 
-- Env vars start with `CODECOLONY_`; `PORT` is the one standard exception. Each matches a flag: `--herdr-socket` and `CODECOLONY_HERDR_SOCKET`.
+- Env vars start with `CODECOLONY_`; `PORT` and `CI` are the standard exceptions. Each matches a flag: `--herdr-socket` and `CODECOLONY_HERDR_SOCKET`.
 - The app reads them in `config/load-config.ts` and the dock in `packages/dock/src/server/options.ts`; the README lists them all.
 
 ## Folder dependency direction

@@ -6,6 +6,7 @@ const env = { HOME: '/home/me' }
 describe('resolveDockOptions', () => {
   it('attaches to the default session by default', () => {
     expect(resolveDockOptions({}, env)).toEqual({
+      enabled: true,
       session: null,
       socketPath: '/home/me/.config/herdr/herdr.sock',
       client: { file: 'herdr', args: [] },
@@ -51,6 +52,42 @@ describe('resolveDockOptions', () => {
     expect(() => resolveDockOptions({ 'herdr-socket': 'h.sock' }, env)).toThrow(
       expect.objectContaining({ code: 'RelativeSocket' }),
     )
+  })
+
+  describe('switching Herdr off', () => {
+    it('turns Herdr off with --no-herdr', () => {
+      expect(resolveDockOptions({ 'no-herdr': true }, env).enabled).toBe(false)
+    })
+
+    it('turns Herdr off with CODECOLONY_HERDR=off', () => {
+      expect(resolveDockOptions({}, { ...env, CODECOLONY_HERDR: 'off' }).enabled).toBe(false)
+    })
+
+    it.each(['true', '1', 'woodpecker'])('turns Herdr off when CI is %j', (ci) => {
+      expect(resolveDockOptions({}, { ...env, CI: ci }).enabled).toBe(false)
+    })
+
+    it.each(['', 'false', '0'])('keeps Herdr on when CI is %j', (ci) => {
+      expect(resolveDockOptions({}, { ...env, CI: ci }).enabled).toBe(true)
+    })
+
+    it('lets CODECOLONY_HERDR=on turn Herdr back on under CI', () => {
+      expect(resolveDockOptions({}, { ...env, CI: 'true', CODECOLONY_HERDR: 'on' }).enabled).toBe(
+        true,
+      )
+    })
+
+    it('lets --no-herdr win over CODECOLONY_HERDR=on', () => {
+      expect(
+        resolveDockOptions({ 'no-herdr': true }, { ...env, CODECOLONY_HERDR: 'on' }).enabled,
+      ).toBe(false)
+    })
+
+    it('rejects any other CODECOLONY_HERDR value', () => {
+      expect(() => resolveDockOptions({}, { ...env, CODECOLONY_HERDR: 'no' })).toThrow(
+        expect.objectContaining({ code: 'InvalidHerdrSwitch' }),
+      )
+    })
   })
 
   describe('lab mode', () => {

@@ -3,11 +3,28 @@ import type { Edge, LineRange, SymbolKind, TransportFact } from '../core/model.t
 // The map the server sends to the page: a tree of nodes with absolute
 // rectangles, plus edges between node ids.
 
-export type { Edge, EdgeKind, Provenance, SymbolKind } from '../core/model.ts'
+export type { Edge, EdgeKind, LineRange, Provenance, SymbolKind } from '../core/model.ts'
 
 export const WORLD_ID = 'world'
 
-export type NodeKind = 'world' | 'project' | 'repo' | 'dir' | 'file' | 'symbol'
+// A package is a band of modules: a folder below its repository's root with a
+// package manifest. A module is a folder that holds files, or subfolders'
+// modules, inside its package or repository. Files in a repository's or
+// package's own folder sit directly in it, outside any module.
+export type NodeKind = 'world' | 'project' | 'repo' | 'package' | 'module' | 'file' | 'symbol'
+
+// Rectangles are measured in grid squares: the page draws its background grid
+// one unit apart, and every block edge falls on a grid line. Each container
+// keeps a label strip this many units tall at its top.
+export const HEADER_UNITS: Record<NodeKind, number> = {
+  world: 0,
+  project: 2,
+  repo: 2,
+  package: 2,
+  module: 1,
+  file: 0,
+  symbol: 0,
+}
 
 export interface Rect {
   x: number
@@ -21,14 +38,14 @@ export interface WorldNode {
   parent?: string
   kind: NodeKind
   name: string
-  // Repository-relative path for dirs, files and symbols.
+  // Repository-relative path for packages, modules, files and symbols.
   path?: string
   lines: number
   complexity: number
   rect: Rect
   // file: adapter id, 'text' or 'binary'.
   language?: string
-  // dir: holds a package manifest (package.json, go.mod, Cargo.toml, ...).
+  // repo, package: holds a package manifest (package.json, go.mod, Cargo.toml, ...).
   package?: boolean
   // repo: the indexed commit.
   commit?: string
