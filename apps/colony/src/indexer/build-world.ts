@@ -7,10 +7,12 @@ import type { RepoIndex } from './repo.ts'
 
 // Turns repository indexes into the world tree (world > project > repo >
 // package > module > file > symbol) and the edges between its nodes. A module
-// is one folder's own files; its subfolders are modules of their own, in the
-// same package unless they hold a manifest. Files directly in a repository's
-// or a package's own folder belong to that repository or package, with no
-// module around them. Rectangles are filled in by the layout.
+// is a folder: it holds its own files and its subfolders' modules, in the
+// same package unless they hold a manifest. A folder with no files of its own
+// and a single subfolder merges into it, so "src/web" is one module rather
+// than an empty "src" around "web". Files directly in a repository's or a
+// package's own folder belong to that repository or package, with no module
+// around them. Rectangles are filled in by the layout.
 
 export interface ProjectIndex {
   name: string
@@ -149,14 +151,32 @@ function addRepo(repo: RepoIndex, repoNode: WorldNode, nodes: WorldNode[], edges
       package: true,
     })
   }
-  for (const dir of [...dirs].sort()) {
+  // Every folder between a module's files and its repository or package root,
+  // with the subfolders below each.
+  const baseOf = (dir: string): string => packageOf(dir) ?? '.'
+  const folders = new Set<string>()
+  const subfolders = new Map<string, number>()
+  for (const dir of dirs) {
     if (holderOf(dir) !== moduleId(id, dir)) continue
-    const pkg = packageOf(dir)
+    const base = baseOf(dir)
+    for (let at = dir; at !== base && !folders.has(at); at = posix.dirname(at)) {
+      folders.add(at)
+      const up = posix.dirname(at)
+      subfolders.set(up, (subfolders.get(up) ?? 0) + 1)
+    }
+  }
+  const isModule = (dir: string) => dirs.has(dir) || (subfolders.get(dir) ?? 0) > 1
+  for (const dir of [...folders].sort()) {
+    if (!isModule(dir)) continue
+    const base = baseOf(dir)
+    let up = posix.dirname(dir)
+    while (up !== base && !isModule(up)) up = posix.dirname(up)
+    const parent = up === base ? (base === '.' ? id : packageId(id, base)) : moduleId(id, up)
     nodes.push({
       id: moduleId(id, dir),
-      parent: pkg ? packageId(id, pkg) : id,
+      parent,
       kind: 'module',
-      name: pkg ? posix.relative(pkg, dir) : dir,
+      name: up === '.' ? dir : posix.relative(up, dir),
       path: dir,
       lines: 0,
       complexity: 0,

@@ -27,7 +27,7 @@ Folders depend on each other in one direction, lowest first: `core` and `shared`
 
 ## The model
 
-A world is a tree: `world > project > repo > package > module > file > symbol`. A module is one folder's own files; its subfolders are modules of their own. A package is a folder below the repository root with a manifest (`package.json`, `go.mod`, ...) and holds the modules below it; modules outside any package sit directly in the repository. Files directly in the repository's or a package's own folder are loose files of that repository or package, not a module. Ids are paths: `project:<name>/repo/dir/file.ts#Class.method`; a module's id is its folder and a package's is `<repo>/package:<path>`.
+A world is a tree: `world > project > repo > package > module > file > symbol`. A module is a folder: it holds its own files and its subfolders' modules, so modules nest like the folders they map. A folder with no files of its own and a single subfolder merges into it (`.github/workflows` is one module). A package is a folder below the repository root with a manifest (`package.json`, `go.mod`, ...) and holds the modules below it; modules outside any package sit directly in the repository. Files directly in the repository's or a package's own folder are loose files of that repository or package, not a module. Ids are paths: `project:<name>/repo/dir/file.ts#Class.method`; a module's id is its folder and a package's is `<repo>/package:<path>`.
 
 Each file carries `FileFacts`: lines, branch count, symbols (name, kind, line range, container, exported), imports (specifier, bound names, type-only), calls (callee, caller) and transports (HTTP client and route, queue produce and consume, data read and write).
 
@@ -88,7 +88,7 @@ Everything is measured in grid units, the spacing of the page's background grid,
 
 - a file is a square 1 to 4 units wide: up to 36, 144, 324 or more lines (`layout/pack-cells.ts`);
 - a module packs its files into columns from the top down, largest first, inside a 1-unit padding and under a 1-unit label strip; its height starts about square, so its width grows with its code;
-- packages, repositories and projects lay their children out in rows (`layout/pack-rows.ts`), a gutter apart (`LayoutOptions.gutter`, 2 units by default). Each row is a line of slots; a slot holds one module, stretched to the row height when it is nearly that tall, or a stack of small ones. A repository's or package's loose files pack like a module's, as one more item in its rows, with no border, padding or label;
+- a module with subfolders, like packages, repositories and projects, lays its children out in rows (`layout/pack-rows.ts`), a gutter apart (`LayoutOptions.gutter`, 2 units by default). Each row is a line of slots; a slot holds one module, stretched to the row height when it is nearly that tall, or a stack of small ones. The own files of a repository, a package or a module with subfolders pack like a module's, as one more item in its rows, with no border, padding or label;
 - on first placement, rows go from importers to what they import (`layout/rank-items.ts`), so most imports point down.
 
 The layout is stable. The order of rows, slots, stacks and files is saved in `cacheDir/layout.json`, so the map keeps its shape across commits and restarts:

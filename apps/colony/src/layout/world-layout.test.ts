@@ -162,6 +162,60 @@ describe('layoutWorld', () => {
     expect(y('p/r/app/index.ts')).toBeLessThan(y('p/r/app/core'))
   })
 
+  it('nests subfolder modules inside their folder, beside its own files', () => {
+    // lib/b holds files and a subfolder, which holds files and a subfolder of its own.
+    const nodes = makeNodes([
+      node('p/r/lib/b/deep', 'module', 'p/r/lib/b'),
+      node('p/r/lib/b/deep/x.ts', 'file', 'p/r/lib/b/deep', 100),
+      node('p/r/lib/b/deep/deeper', 'module', 'p/r/lib/b/deep'),
+      node('p/r/lib/b/deep/deeper/y.ts', 'file', 'p/r/lib/b/deep/deeper', 10),
+      node('p/r/lib/b/deep/deeper/z.ts', 'file', 'p/r/lib/b/deep/deeper', 300),
+    ])
+    layoutWorld(nodes, EDGES, emptyLayout(), { gutter: 3 })
+    const byId = new Map(nodes.map((n) => [n.id, n]))
+    const rect = (id: string) => byId.get(id)?.rect ?? ZERO
+    for (const n of nodes) {
+      if (n.kind === 'symbol') continue
+      const { x, y, w, h } = n.rect
+      expect([x, y, w, h].every(Number.isInteger), n.id).toBe(true)
+      const parent = n.parent ? byId.get(n.parent) : undefined
+      if (!parent) continue
+      expect(inside(n.rect, parent.rect), n.id).toBe(true)
+      // Below the parent's label strip and inside its padding.
+      if (parent.kind === 'module') {
+        expect(n.rect.y, n.id).toBeGreaterThanOrEqual(parent.rect.y + 1)
+        expect(n.rect.x, n.id).toBeGreaterThanOrEqual(parent.rect.x + 1)
+        expect(n.rect.x + n.rect.w, n.id).toBeLessThanOrEqual(parent.rect.x + parent.rect.w - 1)
+        expect(n.rect.y + n.rect.h, n.id).toBeLessThanOrEqual(parent.rect.y + parent.rect.h - 1)
+      }
+    }
+    for (const [module, sub] of [
+      ['p/r/lib/b', 'p/r/lib/b/deep'],
+      ['p/r/lib/b/deep', 'p/r/lib/b/deep/deeper'],
+    ] as const) {
+      for (const file of nodes.filter((n) => n.parent === module && n.kind === 'file')) {
+        expect(apart(file.rect, rect(sub), 3), `${file.id} / ${sub}`).toBe(true)
+      }
+    }
+  })
+
+  it('keeps a folder and its files in place when a subfolder arrives', () => {
+    const store = emptyLayout()
+    const first = makeNodes()
+    layoutWorld(first, EDGES, store)
+    const before = rects(first)
+    const nested = makeNodes([
+      node('p/r/app/web/hooks', 'module', 'p/r/app/web'),
+      node('p/r/app/web/hooks/use.ts', 'file', 'p/r/app/web/hooks', 10),
+    ])
+    layoutWorld(nested, EDGES, store)
+    for (const id of ['p/r/app/web', 'p/r/app/web/f0.ts', 'p/r/app/server', 'p/r/app/core']) {
+      const after = nested.find((n) => n.id === id)?.rect
+      const was = before.get(id) as Rect
+      expect([after?.x, after?.y], id).toEqual([was.x, was.y])
+    }
+  })
+
   it('rejects a gutter that is not a whole number of units', () => {
     expect(() => layoutWorld(makeNodes(), EDGES, emptyLayout(), { gutter: 1.5 })).toThrow(
       RangeError,
