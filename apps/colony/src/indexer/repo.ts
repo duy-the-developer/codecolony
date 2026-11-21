@@ -2,7 +2,7 @@ import { basename } from 'node:path'
 import { findAdapter } from '../adapters/registry.ts'
 import type { FileFacts } from '../core/model.ts'
 import { type FactCache, factKey } from './cache.ts'
-import { listTree, readBlobs, readHeadCommit, type TreeEntry } from './git.ts'
+import { listTree, readBlobs, type TreeEntry } from './git.ts'
 import { parseFacts } from './parse-facts.ts'
 
 // Indexes one repository at its HEAD commit, incrementally: an unchanged HEAD
@@ -81,14 +81,15 @@ const parseOnMainThread: ParseBlob = async (path, bytes) => ({
   provisional: false,
 })
 
+// `commit` is the repository's HEAD, read by the caller (`readHeadCommits`).
 export async function indexRepo(
   root: string,
+  commit: string | undefined,
   cache: FactCache,
   previous?: RepoIndex,
   parse: ParseBlob = parseOnMainThread,
 ): Promise<{ index: RepoIndex; stats: IndexStats }> {
   const name = basename(root)
-  const commit = await readHeadCommit(root)
   const stats: IndexStats = { parsed: 0, reused: 0, skipped: 0, unchanged: false }
   if (previous && previous.commit === commit) {
     return { index: previous, stats: { ...stats, unchanged: true } }
