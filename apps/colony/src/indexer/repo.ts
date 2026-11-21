@@ -12,6 +12,9 @@ export interface IndexedFile {
   path: string
   sha: string
   facts: FileFacts
+  // Size-only stand-in for a parse that failed for a reason outside the blob
+  // (a parse worker died): kept on the map, never cached or reused.
+  provisional?: boolean
 }
 
 export interface RepoIndex {
@@ -68,13 +71,21 @@ export function isVendored(entry: TreeEntry): boolean {
 }
 
 // Turns a blob into facts: parseFacts itself, or a parse pool running it.
-export type ParseBlob = (path: string, bytes: Uint8Array) => Promise<FileFacts>
+export type ParseBlob = (
+  path: string,
+  bytes: Uint8Array,
+) => Promise<{ facts: FileFacts; provisional: boolean }>
+
+const parseOnMainThread: ParseBlob = async (path, bytes) => ({
+  facts: await parseFacts(path, bytes),
+  provisional: false,
+})
 
 export async function indexRepo(
   root: string,
   cache: FactCache,
   previous?: RepoIndex,
-  parse: ParseBlob = parseFacts,
+  parse: ParseBlob = parseOnMainThread,
 ): Promise<{ index: RepoIndex; stats: IndexStats }> {
   const name = basename(root)
   const commit = await readHeadCommit(root)
@@ -93,7 +104,8 @@ export async function indexRepo(
       continue
     }
     const before = known.get(entry.path)
-    const facts = before?.sha === entry.sha ? before.facts : cache.get(keyOf(entry))
+    const facts =
+      before?.sha === entry.sha && !before.provisional ? before.facts : cache.get(keyOf(entry))
     if (facts) {
       stats.reused++
       files.push({ path: entry.path, sha: entry.sha, facts })
@@ -112,10 +124,10 @@ export async function indexRepo(
     missing.map(async (entry) => {
       const bytes = blobs.get(entry.sha)
       if (!bytes) return
-      const facts = await parse(entry.path, bytes)
-      cache.set(keyOf(entry), facts)
+      const { facts, provisional } = await parse(entry.path, bytes)
+      if (!provisional) cache.set(keyOf(entry), facts)
       stats.parsed++
-      files.push({ path: entry.path, sha: entry.sha, facts })
+      files.push({ path: entry.path, sha: entry.sha, facts, provisional })
     }),
   )
   files.sort((a, b) => (a.path < b.path ? -1 : 1))

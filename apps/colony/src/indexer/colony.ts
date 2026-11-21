@@ -3,7 +3,7 @@ import { readdirSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { findAdapter, LANGUAGE_ADAPTERS, RULES_VERSION } from '../adapters/registry.ts'
 import type { ColonyConfig, ProjectConfig } from '../config/load-config.ts'
-import { type Edge, type FileFacts, qualifiedName } from '../core/model.ts'
+import { type Edge, qualifiedName } from '../core/model.ts'
 import { emptyLayout, layoutWorld, loadLayout, saveLayout } from '../layout/world-layout.ts'
 import { logError } from '../shared/log.ts'
 import type { World } from '../shared/world-types.ts'
@@ -13,7 +13,7 @@ import { isGitRepo } from './git.ts'
 import { LspPool } from './lsp-pool.ts'
 import { buildTextFacts } from './parse-facts.ts'
 import { createParsePool, ParsePoolError } from './parse-pool.ts'
-import { type IndexStats, indexRepo, type RepoIndex } from './repo.ts'
+import { type IndexStats, indexRepo, type ParseBlob, type RepoIndex } from './repo.ts'
 
 // Keeps the world for a config up to date: indexes every repository, lays the
 // world out, and re-indexes when a repository's HEAD moves.
@@ -181,13 +181,17 @@ export class Colony extends EventEmitter<{ update: [World] }> {
   }
 
   // A worker that dies on a file (out of memory, a grammar crash) leaves that
-  // file's size on the map, as a grammar error on the main thread would.
-  private readonly parse = (path: string, bytes: Uint8Array): Promise<FileFacts> =>
-    this.parser.parse(path, bytes).catch((error: unknown) => {
-      if (!(error instanceof ParsePoolError) || error.code === 'Closed') throw error
-      logError('Parse worker failed', { path, error })
-      return buildTextFacts(bytes)
-    })
+  // file's size on the map for this index only: the failure may not happen
+  // again, so the file is parsed afresh next time instead of cached.
+  private readonly parse: ParseBlob = (path, bytes) =>
+    this.parser.parse(path, bytes).then(
+      (facts) => ({ facts, provisional: false }),
+      (error: unknown) => {
+        if (!(error instanceof ParsePoolError) || error.code === 'Closed') throw error
+        logError('Parse worker failed', { path, error })
+        return { facts: buildTextFacts(bytes), provisional: true }
+      },
+    )
 
   private repoOf(nodeId: string): { id: string; index: RepoIndex } | undefined {
     for (const [key, index] of this.indexes) {
