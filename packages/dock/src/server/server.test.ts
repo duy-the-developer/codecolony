@@ -224,3 +224,53 @@ describe('dock server', () => {
     })
   })
 })
+
+describe('dock server without herdr', () => {
+  it('tells the page when the client cannot start', async () => {
+    const dock = createDock(
+      {
+        session: null,
+        socketPath: '/nonexistent/herdr.sock',
+        client: { file: 'herdr', args: [] },
+        cwd: '/',
+        lab: false,
+      },
+      { token: TOKEN, command: { file: '/nonexistent/herdr', args: [], cwd: '/', env: {} } },
+    )
+    const server = createServer((req, res) => {
+      if (!dock.handle(req, res)) res.writeHead(418).end()
+    })
+    server.on('upgrade', (req, socket, head) => {
+      if (!dock.upgrade(req, socket, head)) socket.destroy()
+    })
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const { port } = server.address() as AddressInfo
+    try {
+      const ws = new WebSocket(
+        `ws://127.0.0.1:${port}${PTY_PATH}`,
+        [SUBPROTOCOL, `token.${TOKEN}`],
+        {
+          headers: { origin: `http://127.0.0.1:${port}` },
+        },
+      )
+      const output = await new Promise<string>((resolve) => {
+        let seen = ''
+        ws.on('message', (data: Buffer) => {
+          seen += data.toString('utf8')
+        })
+        ws.on('close', () => resolve(seen))
+      })
+      expect(output).toMatch(/could not start|exited with code/)
+      const workers = await send(port, WORKERS_PATH, {
+        headers: { authorization: `Bearer ${TOKEN}` },
+      })
+      expect(workers.status).toBe(502)
+      expect(JSON.parse(workers.body)).toMatchObject({
+        error: expect.stringContaining('herdr.sock'),
+      })
+    } finally {
+      dock.close()
+      await new Promise<void>((resolve) => server.close(() => resolve()))
+    }
+  })
+})

@@ -68,11 +68,19 @@ export function mountDock(el: HTMLElement, { token, pollMs = 3000 }: DockMountOp
 
   if (!token) {
     state.textContent = 'No token: open the URL the server printed, with #token=...'
+    // Pasting that URL into this tab only changes the hash, which reloads nothing.
+    const onHash = () => {
+      if (readToken()) location.reload()
+    }
+    window.addEventListener('hashchange', onHash)
     return {
       focusPane: () => Promise.reject(new Error('dock has no token')),
       listWorkers: () => Promise.reject(new Error('dock has no token')),
       onWorkers: () => () => {},
-      dispose: () => el.replaceChildren(),
+      dispose: () => {
+        window.removeEventListener('hashchange', onHash)
+        el.replaceChildren()
+      },
     }
   }
 
