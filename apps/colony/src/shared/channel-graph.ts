@@ -91,6 +91,9 @@ interface Item {
 // Channels next to a band, by side: top, right, bottom, left.
 type Neighbours = [number, number, number, number]
 
+// Width of the ring of channels around the map, in units.
+const RING_UNITS = 8
+
 const TOP = 0
 const RIGHT = 1
 const BOTTOM = 2
@@ -242,7 +245,56 @@ export function buildChannelGraph(root: RouteBox): ChannelGraph {
     })
   }
 
-  place({ band: toBand(root.rect), box: root }, [-1, -1, -1, -1], 0)
+  // A ring of channels around the whole map, so that a row with one wide
+  // block in it never cuts the map in two: lines can always go round.
+  const band = toBand(root.rect)
+  const ring = (channel: Omit<Channel, 'container' | 'after'>) =>
+    graph.channels.push({ ...channel, container: root.id, after: [] }) - 1
+  const left = ring({
+    axis: 'y',
+    low: band.x0 - RING_UNITS,
+    high: band.x0,
+    start: band.y0 - RING_UNITS,
+    end: band.y1 + RING_UNITS,
+    depth: -2,
+    bars: [-1, -1],
+  })
+  const right = ring({
+    axis: 'y',
+    low: band.x1,
+    high: band.x1 + RING_UNITS,
+    start: band.y0 - RING_UNITS,
+    end: band.y1 + RING_UNITS,
+    depth: -2,
+    bars: [-1, -1],
+  })
+  for (const [low, high] of [
+    [band.y0 - RING_UNITS, band.y0],
+    [band.y1, band.y1 + RING_UNITS],
+  ] as const) {
+    const index = ring({
+      axis: 'x',
+      low,
+      high,
+      start: band.x0,
+      end: band.x1,
+      depth: -1,
+      bars: [left, right],
+    })
+    attach({ bar: left, isHigh: true, from: low, to: high, mouth: band.x0, channel: index, end: 0 })
+    attach({
+      bar: right,
+      isHigh: false,
+      from: low,
+      to: high,
+      mouth: band.x1,
+      channel: index,
+      end: 1,
+    })
+  }
+  const top = graph.channels.length - 2
+  const bottom = graph.channels.length - 1
+  place({ band, box: root }, [top, right, bottom, left], 0)
   return graph
 }
 

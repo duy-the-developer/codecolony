@@ -194,6 +194,21 @@ describe('routeLanes', () => {
     expect(countBlockHits(listSegments(routing), blocks)).toBe(0)
   })
 
+  it('goes round a block that fills a whole row', () => {
+    const wall = block('wall', 0, 6, 30, 4)
+    const above = block('above', 0, 0, 5, 4)
+    const below = block('below', 0, 12, 5, 4)
+    const root: RouteBox = {
+      id: 'world',
+      rect: { x: 0, y: 0, w: 30, h: 16 },
+      header: 0,
+      kids: [above, wall, below],
+    }
+    const routing = routeLanes(buildChannelGraph(root), [{ from: 'above', to: 'below' }])
+    expect(routing.points[0]).toBeDefined()
+    expect(countBlockHits(listSegments(routing), [above, wall, below])).toBe(0)
+  })
+
   it('counts the same channel load as a full routing', () => {
     const { root, blocks } = makeWorld(2)
     const graph = buildChannelGraph(root)
