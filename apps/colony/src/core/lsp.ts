@@ -1,5 +1,6 @@
 import { type ChildProcess, spawn } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
+import { createInterface } from 'node:readline'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import {
   CallHierarchyOutgoingCallsRequest,
@@ -34,45 +35,120 @@ export interface OutgoingCall {
   lines: number[]
 }
 
+export interface LspExit {
+  code: number | null
+  signal: NodeJS.Signals | null
+  // True when close() asked for it.
+  requested: boolean
+}
+
+export interface LspSessionOptions {
+  // Each line the server writes to stderr (crash reports land here).
+  onStderr?(line: string): void
+  // Called once when the server process is gone.
+  onExit?(exit: LspExit): void
+  // Until the first call-hierarchy answer: the server is loading the project,
+  // which takes tens of seconds on a large repository.
+  loadTimeoutMs?: number
+  requestTimeoutMs?: number
+}
+
+export type LspErrorCode = 'EmptyCommand' | 'NoStdio' | 'Timeout' | 'Exited'
+
+export class LspError extends Error {
+  override name = 'LspError'
+  readonly code: LspErrorCode
+  constructor(code: LspErrorCode, message: string, options?: ErrorOptions) {
+    super(message, options)
+    this.code = code
+  }
+}
+
+const LOAD_TIMEOUT_MS = 180_000
 const REQUEST_TIMEOUT_MS = 20_000
 
 export class LspSession {
   private readonly opened = new Map<string, { version: number; text: string }>()
+  private readonly exited: Promise<never>
+  private alive = true
+  private loaded = false
+  private closing = false
 
   private constructor(
     private readonly spec: LanguageServerSpec,
     private readonly process: ChildProcess,
     private readonly connection: ProtocolConnection,
-  ) {}
+    private readonly options: LspSessionOptions,
+  ) {
+    this.exited = new Promise<never>((_, reject) => {
+      let done = false
+      const finish = (code: number | null, signal: NodeJS.Signals | null, cause?: Error) => {
+        if (done) return
+        done = true
+        this.alive = false
+        reject(
+          new LspError('Exited', `language server exited (code ${code}, signal ${signal})`, {
+            cause,
+          }),
+        )
+        options.onExit?.({ code, signal, requested: this.closing })
+      }
+      process.once('exit', (code, signal) => finish(code, signal))
+      process.once('error', (error) => finish(null, null, error))
+    })
+    // Requests race this promise; nobody else awaits it.
+    this.exited.catch(() => {})
+  }
 
-  static async start(spec: LanguageServerSpec, rootDir: string): Promise<LspSession> {
+  static async start(
+    spec: LanguageServerSpec,
+    rootDir: string,
+    options: LspSessionOptions = {},
+  ): Promise<LspSession> {
     const [command, ...args] = spec.command()
-    if (!command) throw new Error('language server command is empty')
-    const child = spawn(command, args, { cwd: rootDir, stdio: ['pipe', 'pipe', 'ignore'] })
-    if (!child.stdout || !child.stdin) throw new Error(`${command}: no stdio`)
+    if (!command) throw new LspError('EmptyCommand', 'language server command is empty')
+    const child = spawn(command, args, { cwd: rootDir, stdio: ['pipe', 'pipe', 'pipe'] })
+    if (!child.stdout || !child.stdin || !child.stderr) {
+      child.kill()
+      throw new LspError('NoStdio', `${command}: no stdio`)
+    }
+    // Writes to a server that already died fail here; the exit rejects the request.
+    child.stdin.on('error', () => {})
+    const stderr = createInterface({ input: child.stderr, crlfDelay: Number.POSITIVE_INFINITY })
+    stderr.on('line', (line) => options.onStderr?.(line))
     const connection = createProtocolConnection(
       new StreamMessageReader(child.stdout),
       new StreamMessageWriter(child.stdin),
     )
     connection.listen()
-    const session = new LspSession(spec, child, connection)
+    const session = new LspSession(spec, child, connection, options)
     const rootUri = pathToFileURL(rootDir).href
-    await session.request(
-      connection.sendRequest(InitializeRequest.type, {
-        processId: process.pid,
-        rootUri,
-        workspaceFolders: [{ uri: rootUri, name: 'root' }],
-        capabilities: {
-          textDocument: {
-            callHierarchy: { dynamicRegistration: false },
+    try {
+      await session.request(
+        connection.sendRequest(InitializeRequest.type, {
+          processId: process.pid,
+          rootUri,
+          workspaceFolders: [{ uri: rootUri, name: 'root' }],
+          capabilities: {
+            textDocument: {
+              callHierarchy: { dynamicRegistration: false },
+            },
           },
-        },
-        initializationOptions: spec.initializationOptions?.(),
-      }),
-      'initialize',
-    )
-    await connection.sendNotification(InitializedNotification.type, {})
+          initializationOptions: spec.initializationOptions?.(),
+        }),
+        'initialize',
+      )
+      await connection.sendNotification(InitializedNotification.type, {})
+    } catch (error) {
+      await session.close()
+      throw error
+    }
     return session
+  }
+
+  // False once the server process has exited; start a new session then.
+  get isAlive(): boolean {
+    return this.alive
   }
 
   // The outgoing calls of the function or method named `name` declared at
@@ -86,6 +162,7 @@ export class LspSession {
       }),
       'prepareCallHierarchy',
     )
+    this.loaded = true
     const item = items?.[0]
     if (item?.name !== name) return []
     const calls = await this.request(
@@ -104,11 +181,14 @@ export class LspSession {
   }
 
   async close(): Promise<void> {
-    try {
-      await this.request(this.connection.sendRequest(ShutdownRequest.type), 'shutdown')
-      await this.connection.sendNotification(ExitNotification.type)
-    } catch {
-      // The process is killed below either way.
+    this.closing = true
+    if (this.alive) {
+      try {
+        await this.request(this.connection.sendRequest(ShutdownRequest.type), 'shutdown')
+        await this.connection.sendNotification(ExitNotification.type)
+      } catch {
+        // The process is killed below either way.
+      }
     }
     this.connection.dispose()
     this.process.kill()
@@ -135,16 +215,20 @@ export class LspSession {
     return uri
   }
 
+  // Settles with the answer, a timeout, or the server's exit, whichever is first.
   private async request<T>(pending: Promise<T>, what: string): Promise<T> {
+    const ms = this.loaded
+      ? (this.options.requestTimeoutMs ?? REQUEST_TIMEOUT_MS)
+      : (this.options.loadTimeoutMs ?? LOAD_TIMEOUT_MS)
     let timer: NodeJS.Timeout | undefined
     const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(
-        () => reject(new Error(`language server: ${what} timed out`)),
-        REQUEST_TIMEOUT_MS,
+        () => reject(new LspError('Timeout', `language server: ${what} timed out after ${ms} ms`)),
+        ms,
       )
     })
     try {
-      return await Promise.race([pending, timeout])
+      return await Promise.race([pending, timeout, this.exited])
     } finally {
       clearTimeout(timer)
     }

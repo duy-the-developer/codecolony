@@ -3,8 +3,6 @@ import { readdirSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { findAdapter, LANGUAGE_ADAPTERS, RULES_VERSION } from '../adapters/registry.ts'
 import type { ColonyConfig, ProjectConfig } from '../config/load-config.ts'
-import type { LanguageAdapter } from '../core/language-adapter.ts'
-import { LspSession } from '../core/lsp.ts'
 import { type Edge, qualifiedName } from '../core/model.ts'
 import { layoutWorld, loadLayout, saveLayout } from '../layout/world-layout.ts'
 import { logError } from '../shared/log.ts'
@@ -12,6 +10,7 @@ import type { World } from '../shared/world-types.ts'
 import { buildWorld, type ProjectIndex, repoId } from './build-world.ts'
 import { FactCache } from './cache.ts'
 import { isGitRepo } from './git.ts'
+import { LspPool } from './lsp-pool.ts'
 import { type IndexStats, indexRepo, type RepoIndex } from './repo.ts'
 
 // Keeps the world for a config up to date: indexes every repository, lays the
@@ -34,7 +33,7 @@ export class Colony extends EventEmitter<{ update: [World] }> {
   private readonly cache: FactCache
   private readonly layoutPath: string
   private readonly indexes = new Map<string, RepoIndex>()
-  private readonly lsp = new Map<string, Promise<LspSession>>()
+  private readonly lsp = new LspPool()
   private readonly deep = new Map<string, Edge[]>()
   private current: World = { version: 0, indexedAt: '', languages: {}, nodes: [], edges: [] }
   private refreshing: Promise<RefreshResult> | undefined
@@ -122,7 +121,6 @@ export class Colony extends EventEmitter<{ update: [World] }> {
     const adapter = file?.path ? findAdapter(file.path) : undefined
     if (!file?.path || !repo || !adapter?.languageServer) return []
 
-    const session = await this.session(repo.index.root, adapter)
     const symbols = this.current.nodes.filter(
       (node) =>
         node.kind === 'symbol' &&
@@ -131,40 +129,40 @@ export class Colony extends EventEmitter<{ update: [World] }> {
     )
     const facts = repo.index.files.find((f) => f.path === file.path)?.facts.symbols ?? []
     const edges: Edge[] = []
-    for (const symbol of symbols) {
-      const fact = facts.find((f) => `${fileId}#${qualifiedName(f)}` === symbol.id)
-      if (!fact) continue
-      const calls = await session.outgoingCalls(
-        { path: join(repo.index.root, file.path), line: fact.at.line, column: fact.at.column },
-        fact.name,
-      )
-      for (const call of calls) {
-        const target = this.symbolAt(
-          repo,
-          relative(repo.index.root, call.target.path),
-          call.target.line,
-          call.name,
+    await this.lsp.use(adapter.id, adapter.languageServer, repo.index.root, async (session) => {
+      for (const symbol of symbols) {
+        const fact = facts.find((f) => `${fileId}#${qualifiedName(f)}` === symbol.id)
+        if (!fact) continue
+        const calls = await session.outgoingCalls(
+          { path: join(repo.index.root, file.path), line: fact.at.line, column: fact.at.column },
+          fact.name,
         )
-        if (!target || target === symbol.id) continue
-        edges.push({
-          from: symbol.id,
-          to: target,
-          kind: 'call',
-          provenance: 'lsp',
-          label: call.name,
-          at: { file: fileId, line: call.lines[0] ?? fact.at.line },
-        })
+        for (const call of calls) {
+          const target = this.symbolAt(
+            repo,
+            relative(repo.index.root, call.target.path),
+            call.target.line,
+            call.name,
+          )
+          if (!target || target === symbol.id) continue
+          edges.push({
+            from: symbol.id,
+            to: target,
+            kind: 'call',
+            provenance: 'lsp',
+            label: call.name,
+            at: { file: fileId, line: call.lines[0] ?? fact.at.line },
+          })
+        }
       }
-    }
+    })
     if (this.current.version === version) this.deep.set(fileId, edges)
     return edges
   }
 
   async close(): Promise<void> {
     clearInterval(this.timer)
-    const sessions = await Promise.allSettled(this.lsp.values())
-    await Promise.all(sessions.map((s) => (s.status === 'fulfilled' ? s.value.close() : undefined)))
-    this.lsp.clear()
+    await this.lsp.close()
   }
 
   private repoOf(nodeId: string): { id: string; index: RepoIndex } | undefined {
@@ -185,18 +183,5 @@ export class Colony extends EventEmitter<{ update: [World] }> {
     if (!file) return undefined
     const symbol = file.facts.symbols.find((s) => s.at.line === line && s.name === name)
     return symbol ? `${repo.id}/${path}#${qualifiedName(symbol)}` : undefined
-  }
-
-  private session(root: string, adapter: LanguageAdapter): Promise<LspSession> {
-    const key = `${adapter.id}\0${root}`
-    let session = this.lsp.get(key)
-    if (!session) {
-      if (!adapter.languageServer)
-        return Promise.reject(new Error(`${adapter.id}: no language server`))
-      session = LspSession.start(adapter.languageServer, root)
-      session.catch(() => this.lsp.delete(key))
-      this.lsp.set(key, session)
-    }
-    return session
   }
 }

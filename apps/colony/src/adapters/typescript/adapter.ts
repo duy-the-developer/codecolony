@@ -1,4 +1,5 @@
 import { createRequire } from 'node:module'
+import { totalmem } from 'node:os'
 import { extname, posix } from 'node:path'
 import type { Node } from 'web-tree-sitter'
 import type { LanguageAdapter } from '../../core/language-adapter.ts'
@@ -8,6 +9,16 @@ import type { SymbolKind } from '../../core/model.ts'
 // typescript-language-server for the semantic side.
 
 const require = createRequire(import.meta.url)
+
+// tsserver's heap: its default is too small for a large monorepo (vscode needs
+// about 5.4 GB), so allow half the machine, within these bounds.
+const MIN_TSSERVER_MEMORY_MB = 3072
+const MAX_TSSERVER_MEMORY_MB = 12_288
+
+export function resolveTsServerMemoryMb(totalBytes = totalmem()): number {
+  const half = Math.floor(totalBytes / 2 / 1024 / 1024)
+  return Math.min(MAX_TSSERVER_MEMORY_MB, Math.max(MIN_TSSERVER_MEMORY_MB, half))
+}
 
 const SYMBOLS = `
 (function_declaration name: (identifier) @name) @definition.function
@@ -134,6 +145,7 @@ export const typescriptAdapter: LanguageAdapter = {
     },
     initializationOptions: () => ({
       tsserver: { path: require.resolve('typescript/lib/tsserver.js') },
+      maxTsServerMemory: resolveTsServerMemoryMb(),
       preferences: { includeCompletionsForModuleExports: false },
     }),
   },
