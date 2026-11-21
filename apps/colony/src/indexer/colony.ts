@@ -141,12 +141,13 @@ export class Colony extends EventEmitter<{ update: [World] }> {
     )
     const facts = repo.index.files.find((f) => f.path === file.path)?.facts.symbols ?? []
     const edges: Edge[] = []
+    const path = join(repo.index.root, file.path)
     await this.lsp.use(adapter.id, adapter.languageServer, repo.index.root, async (session) => {
       for (const symbol of symbols) {
         const fact = facts.find((f) => `${fileId}#${qualifiedName(f)}` === symbol.id)
         if (!fact) continue
         const calls = await session.outgoingCalls(
-          { path: join(repo.index.root, file.path), line: fact.at.line, column: fact.at.column },
+          { path, line: fact.at.line, column: fact.at.column },
           fact.name,
         )
         for (const call of calls) {

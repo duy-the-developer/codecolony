@@ -25,7 +25,9 @@ const connection = createProtocolConnection(
 )
 let prepares = 0
 
-connection.onRequest(InitializeRequest.type, () => ({ capabilities: { callHierarchyProvider: true } }))
+connection.onRequest(InitializeRequest.type, () => ({
+  capabilities: { callHierarchyProvider: true },
+}))
 
 connection.onRequest(CallHierarchyPrepareRequest.type, async ({ textDocument }) => {
   prepares += 1
@@ -58,7 +60,7 @@ connection.onRequest(CallHierarchyOutgoingCallsRequest.type, ({ item }) => [
   },
 ])
 
-connection.onRequest(ShutdownRequest.type, () => null)
+connection.onRequest(ShutdownRequest.type, () => undefined)
 connection.onNotification(ExitNotification.type, () => process.exit(0))
 connection.onClose(() => process.exit(0))
 connection.listen()
