@@ -1,7 +1,7 @@
 import { existsSync, type FSWatcher, watch } from 'node:fs'
 import { join } from 'node:path'
 import { logError } from '../shared/log.ts'
-import { readGitDirs } from './git.ts'
+import { forEachLimited, HEAD_LANES, readGitDirs } from './git.ts'
 
 // Watches the files git rewrites when a repository's HEAD moves, so the colony
 // checks only the repositories that changed instead of polling every one:
@@ -29,11 +29,8 @@ export function createHeadWatcher({
   const folders = new Map<string, FSWatcher[]>()
   let closed = false
 
-  async function addRepo(repo: string): Promise<void> {
-    // Reserve the slot first: a sync that drops the repository meanwhile
-    // replaces it, and the watchers made here are closed.
-    const slot: FSWatcher[] = []
-    repos.set(repo, slot)
+  async function armRepo(repo: string, slot: FSWatcher[]): Promise<void> {
+    if (closed || repos.get(repo) !== slot) return
     const dirs = await readGitDirs(repo)
     if (!dirs) return
     const watchers = watchGitDirs(dirs.gitDir, dirs.commonDir, () => onRepoChange(repo))
@@ -56,7 +53,13 @@ export function createHeadWatcher({
         const watcher = watchPath(folder, false, onFolderChange)
         folders.set(folder, watcher ? [watcher] : [])
       }
-      await Promise.all(nextRepos.filter((repo) => !repos.has(repo)).map(addRepo))
+      // Reserve every slot first: a sync that drops a repository meanwhile
+      // replaces its slot, and the watchers made for it are closed.
+      const added = nextRepos
+        .filter((repo) => !repos.has(repo))
+        .map((repo): [string, FSWatcher[]] => [repo, []])
+      for (const [repo, slot] of added) repos.set(repo, slot)
+      await forEachLimited(added, HEAD_LANES, ([repo, slot]) => armRepo(repo, slot))
     },
     close() {
       closed = true

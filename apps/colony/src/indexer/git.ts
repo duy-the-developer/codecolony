@@ -10,7 +10,7 @@ import { promisify } from 'node:util'
 const run = promisify(execFile)
 const MAX_BUFFER = 256 * 1024 * 1024
 // Concurrent `git rev-parse` processes when checking many repositories.
-const HEAD_LANES = Math.min(8, availableParallelism())
+export const HEAD_LANES = Math.min(8, availableParallelism())
 
 export interface TreeEntry {
   path: string
@@ -37,14 +37,23 @@ export async function readHeadCommits(
   repos: readonly string[],
 ): Promise<Map<string, string | undefined>> {
   const heads = new Map<string, string | undefined>()
-  let next = 0
-  const lanes = Array.from({ length: Math.min(HEAD_LANES, repos.length) }, async () => {
-    for (let repo = repos[next++]; repo !== undefined; repo = repos[next++]) {
-      heads.set(repo, await readHeadCommit(repo))
-    }
+  await forEachLimited(repos, HEAD_LANES, async (repo) => {
+    heads.set(repo, await readHeadCommit(repo))
   })
-  await Promise.all(lanes)
   return heads
+}
+
+// Runs `task` on every item, at most `lanes` at a time.
+export async function forEachLimited<T>(
+  items: readonly T[],
+  lanes: number,
+  task: (item: T) => Promise<void>,
+): Promise<void> {
+  let next = 0
+  const workers = Array.from({ length: Math.min(lanes, items.length) }, async () => {
+    while (next < items.length) await task(items[next++] as T)
+  })
+  await Promise.all(workers)
 }
 
 export interface GitDirs {
