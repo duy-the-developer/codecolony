@@ -1,0 +1,95 @@
+.cc-dock {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: #08121c;
+}
+
+.cc-dock-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 8px;
+  background: var(--panel, #102235);
+  border-bottom: 1px solid var(--line, #24425f);
+  font-size: 12px;
+}
+
+.cc-dock-workers {
+  display: flex;
+  flex: 1;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  overflow-x: auto;
+  list-style: none;
+}
+
+.cc-dock-worker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border: 1px solid var(--line, #24425f);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text, #dce7f2);
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.cc-dock-worker:hover {
+  border-color: var(--muted, #7d93a8);
+}
+
+.cc-dock-worker[aria-pressed="true"] {
+  border-color: #ffb347;
+}
+
+.cc-dock-worker::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--cc-status, #7d93a8);
+}
+
+.cc-status-working {
+  --cc-status: #50c878;
+}
+
+.cc-status-blocked {
+  --cc-status: #e05050;
+}
+
+.cc-status-done {
+  --cc-status: #50a0e0;
+}
+
+.cc-status-idle {
+  --cc-status: #e0a040;
+}
+
+.cc-dock-note,
+.cc-dock-state {
+  color: var(--muted, #7d93a8);
+  white-space: nowrap;
+}
+
+.cc-dock-bar button:not(.cc-dock-worker) {
+  padding: 2px 8px;
+  border: 1px solid var(--line, #24425f);
+  border-radius: 4px;
+  background: var(--bg, #0d1b2a);
+  color: var(--text, #dce7f2);
+  font: inherit;
+  cursor: pointer;
+}
+
+.cc-dock-screen {
+  flex: 1;
+  min-height: 0;
+  padding: 4px 0 0 6px;
+}

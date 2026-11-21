@@ -1,9 +1,11 @@
+import { mountDock, readToken } from '@codecolony/dock/web'
 import type { ProjectsResponse } from '../shared/api.ts'
 import type { DeepResponse, World, WorldNode } from '../shared/world.ts'
 import { Camera, type Viewport } from './camera.ts'
 import { renderInspector } from './inspector.ts'
 import { type Drawn, hitTest, render } from './render.ts'
 import { Scene } from './scene.ts'
+import { mountWorkers } from './workers.ts'
 
 const ZOOM_STEP = 1.25
 const PAN_STEP = 80
@@ -15,10 +17,12 @@ function element<T extends HTMLElement>(selector: string): T {
   return found
 }
 
+const map = element<HTMLElement>('#map')
 const canvas = element<HTMLCanvasElement>('#canvas')
 const inspector = element<HTMLElement>('#inspector')
 const hud = element<HTMLElement>('#hud')
 const projectList = element<HTMLUListElement>('#projects')
+const dockPanel = element<HTMLElement>('#dock')
 const context = canvas.getContext('2d')
 if (!context) throw new Error('2D canvas is not available')
 const ctx = context
@@ -215,3 +219,4 @@ events.addEventListener('world', () => {
   loadWorld().catch((error: unknown) => console.error('Could not load the world', error))
 })
 loadProjects().catch((error: unknown) => console.error('Could not load projects', error))
+mountWorkers(map, mountDock(dockPanel, { token: readToken() }))
