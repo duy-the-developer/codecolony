@@ -32,7 +32,20 @@ export interface StoredRow {
 export interface PackRowsOptions {
   // Whole units between slots, between stacked items and between rows.
   gutter: number
+  // Whole units some gaps are widened by, to make room for dependency lanes.
+  widen?: GapWidening
 }
+
+// Extra units per gap, keyed by item id: the gap above the row that holds the
+// item, the gap left of the slot that holds it, and the gap above it in its
+// stack. The first row, slot and stacked item have no gap before them.
+export interface GapWidening {
+  rows: ReadonlyMap<string, number>
+  slots: ReadonlyMap<string, number>
+  stacks: ReadonlyMap<string, number>
+}
+
+const NO_WIDENING: GapWidening = { rows: new Map(), slots: new Map(), stacks: new Map() }
 
 export interface PackRowsResult {
   rows: StoredRow[]
@@ -52,7 +65,7 @@ const FILL_SHARE = 0.75
 export function packRows(
   items: readonly RowItem[],
   saved: readonly StoredRow[],
-  { gutter }: PackRowsOptions,
+  { gutter, widen = NO_WIDENING }: PackRowsOptions,
 ): PackRowsResult {
   const byId = new Map(items.map((item) => [item.id, item]))
   const seen = new Set<string>()
@@ -102,36 +115,44 @@ export function packRows(
     }
   }
 
+  // Extra units before a row or slot: the most any of its items asks for.
+  const extraBefore = (map: ReadonlyMap<string, number>, list: readonly RowItem[]) =>
+    Math.max(0, ...list.map((item) => map.get(item.id) ?? 0))
+  const stackGap = (item: RowItem) => gutter + (widen.stacks.get(item.id) ?? 0)
+
   const placed = new Map<string, Rect>()
   const stored: StoredRow[] = []
   let width = 0
   let y = 0
-  for (const row of rows) {
-    const need = Math.max(...row.slots.map((slot) => slotHeight(slot, gutter)))
+  rows.forEach((row, r) => {
+    if (r > 0) y += gutter + extraBefore(widen.rows, row.slots.flat())
+    const need = Math.max(...row.slots.map((slot) => slotHeight(slot, stackGap)))
     const h =
       row.stored !== undefined && need <= row.stored && 2 * need > row.stored ? row.stored : need
     let x = 0
-    for (const slot of row.slots) {
+    row.slots.forEach((slot, s) => {
+      if (s > 0) x += gutter + extraBefore(widen.slots, slot)
       const [only] = slot
       if (only && slot.length === 1 && only.fit && only.h >= FILL_SHARE * h) {
         const w = only.fit(h)
         placed.set(only.id, { x, y, w, h })
-        x += w + gutter
-        continue
+        x += w
+        return
       }
       const w = Math.max(...slot.map((item) => item.w))
       let top = y
-      for (const item of slot) {
+      slot.forEach((item, k) => {
+        if (k > 0) top += stackGap(item)
         placed.set(item.id, { x, y: top, w: item.fit ? w : item.w, h: item.h })
-        top += item.h + gutter
-      }
-      x += w + gutter
-    }
-    width = Math.max(width, x - gutter)
-    y += h + gutter
+        top += item.h
+      })
+      x += w
+    })
+    width = Math.max(width, x)
+    y += h
     stored.push({ h, slots: row.slots.map((slot) => slot.map((item) => item.id)) })
-  }
-  return { rows: stored, placed, width, height: Math.max(0, y - gutter) }
+  })
+  return { rows: stored, placed, width, height: y }
 }
 
 // Two of an item fit in a row this tall.
@@ -139,9 +160,13 @@ function canShare(item: RowItem, rowHeight: number, gutter: number): boolean {
   return 2 * item.h + gutter <= rowHeight
 }
 
-function slotHeight(slot: readonly RowItem[], gutter: number): number {
-  let h = -gutter
-  for (const item of slot) h += item.h + gutter
+// A stack's height, with the gap above each item after the first.
+function slotHeight(slot: readonly RowItem[], gap: number | ((item: RowItem) => number)): number {
+  let h = 0
+  slot.forEach((item, k) => {
+    if (k > 0) h += typeof gap === 'number' ? gap : gap(item)
+    h += item.h
+  })
   return h
 }
 
