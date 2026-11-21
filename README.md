@@ -79,7 +79,7 @@ The page has a header (project picker, search, map controls), the map, and a sid
 
 Dependencies: blue imports, teal calls, amber HTTP requests. Solid lines are proven by a language server or the syntax tree; dashed ones are matched on text. The Inspector lists them as Imports / Imported by, Calls / Called by, and HTTP requests / HTTP routes served, by route. "Trace calls with the language server" proves the calls of a file's functions, including method calls the parser cannot resolve.
 
-The map updates live: commit to a mapped repository and it redraws within a few seconds.
+The map updates live: commit to a mapped repository and it redraws within a few seconds. A repository created in place inside a mapped folder of repositories can take up to a minute to appear.
 
 ## Languages
 

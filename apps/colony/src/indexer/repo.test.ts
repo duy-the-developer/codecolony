@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { commit, makeRepo, makeTempDir } from '../testing/git-fixture.ts'
+import { commit, git, makeRepo, makeTempDir } from '../testing/git-fixture.ts'
 import { FactCache } from './cache.ts'
 import { buildTextFacts, parseFacts } from './parse-facts.ts'
 import { indexRepo, type ParseBlob } from './repo.ts'
@@ -33,25 +33,38 @@ describe('indexRepo', () => {
       'b.ts': 'export function b() {\n  return 2\n}\n',
     })
     const cacheDir = makeTempDir()
+    const initial = git(root, 'rev-parse', 'HEAD')
 
-    const first = await indexRepo(root, new FactCache(cacheDir, 'test'), undefined, workerDiesOnA)
+    const first = await indexRepo(
+      root,
+      initial,
+      new FactCache(cacheDir, 'test'),
+      undefined,
+      workerDiesOnA,
+    )
     const a = first.index.files.find((file) => file.path === 'a.ts')
     expect(a?.facts.symbols).toEqual([])
     expect(a?.facts.lines).toBe(3)
 
     // The next index after HEAD moves parses a.ts again rather than reusing it.
-    commit(root, { 'c.ts': 'export const c = 3\n' })
+    const moved = commit(root, { 'c.ts': 'export const c = 3\n' })
     const next = counting(realParse)
-    const second = await indexRepo(root, new FactCache(cacheDir, 'test'), first.index, next.parse)
+    const second = await indexRepo(
+      root,
+      moved,
+      new FactCache(cacheDir, 'test'),
+      first.index,
+      next.parse,
+    )
     expect(next.paths.sort()).toEqual(['a.ts', 'c.ts'])
     const reparsed = second.index.files.find((file) => file.path === 'a.ts')
     expect(reparsed?.facts.symbols.map((s) => s.name)).toEqual(['a'])
 
     // A fresh start reads nothing provisional from the cache either.
     const fresh = makeTempDir()
-    await indexRepo(root, new FactCache(fresh, 'test'), undefined, workerDiesOnA)
+    await indexRepo(root, moved, new FactCache(fresh, 'test'), undefined, workerDiesOnA)
     const restart = counting(realParse)
-    await indexRepo(root, new FactCache(fresh, 'test'), undefined, restart.parse)
+    await indexRepo(root, moved, new FactCache(fresh, 'test'), undefined, restart.parse)
     expect(restart.paths).toEqual(['a.ts'])
   })
 })

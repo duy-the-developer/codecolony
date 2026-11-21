@@ -2,7 +2,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { ColonyConfig } from '../config/load-config.ts'
 import type { World } from '../shared/world-types.ts'
-import { commit, makeRepo, makeTempDir } from '../testing/git-fixture.ts'
+import { commit, git, makeRepo, makeTempDir } from '../testing/git-fixture.ts'
 import { Colony } from './colony.ts'
 
 const colonies: Colony[] = []
@@ -14,6 +14,18 @@ function colonyFor(projects: ColonyConfig['projects'], cacheDir = makeTempDir())
   const colony = new Colony({ projects, cacheDir, source: 'test', port: 0 })
   colonies.push(colony)
   return colony
+}
+
+// Indexed and watched, with the fallback check too slow to fire in a test.
+async function watchedColony(projects: ColonyConfig['projects']): Promise<Colony> {
+  const colony = colonyFor(projects)
+  await colony.refresh()
+  await colony.watch({ fallbackMs: 60_000, settleMs: 20 })
+  return colony
+}
+
+function nextWorld(colony: Colony): Promise<World> {
+  return new Promise((resolve) => colony.once('update', resolve))
 }
 
 function rects(world: World): Map<string, string> {
@@ -204,11 +216,53 @@ describe('Colony', () => {
 
   it('announces a new world when HEAD moves', async () => {
     const root = makeRepo({ 'a.ts': 'export const a = 1\n' })
+    const colony = await watchedColony([{ name: 'p', root, kind: 'repo' }])
+    const updated = nextWorld(colony)
+    commit(root, { 'b.ts': 'export const b = 2\n' })
+    const world = await updated
+    expect(world.nodes.some((n) => n.path === 'b.ts')).toBe(true)
+  })
+
+  it('sees a checkout that moves only HEAD', async () => {
+    const root = makeRepo({ 'a.ts': 'export const a = 1\n' })
+    commit(root, { 'b.ts': 'export const b = 2\n' })
+    const colony = await watchedColony([{ name: 'p', root, kind: 'repo' }])
+    const updated = nextWorld(colony)
+    git(root, 'checkout', '-q', '--detach', 'HEAD~1')
+    const world = await updated
+    expect(world.nodes.some((n) => n.path === 'b.ts')).toBe(false)
+  })
+
+  it('sees a commit in a linked worktree', async () => {
+    const main = makeRepo({ 'a.ts': 'export const a = 1\n' })
+    const root = join(makeTempDir(), 'side')
+    git(main, 'worktree', 'add', '-q', '-b', 'side', root)
+    const colony = await watchedColony([{ name: 'p', root, kind: 'repo' }])
+    const updated = nextWorld(colony)
+    commit(root, { 'b.ts': 'export const b = 2\n' })
+    const world = await updated
+    expect(world.nodes.some((n) => n.path === 'b.ts')).toBe(true)
+  })
+
+  it('maps a repository that appears in a watched folder', async () => {
+    const org = makeTempDir()
+    makeRepo({ 'a.ts': 'export const a = 1\n' }, join(org, 'alpha'))
+    const colony = await watchedColony([{ name: 'org', root: org, kind: 'repos' }])
+    const updated = nextWorld(colony)
+    makeRepo({ 'b.ts': 'export const b = 1\n' }, join(org, 'beta'))
+    const world = await updated
+    const repos = world.nodes.filter((n) => n.kind === 'repo').map((n) => n.id)
+    expect(repos).toEqual(['project:org/alpha', 'project:org/beta'])
+  })
+
+  it('falls back to a full check on a timer', async () => {
+    const root = makeRepo({ 'a.ts': 'export const a = 1\n' })
     const colony = colonyFor([{ name: 'p', root, kind: 'repo' }])
     await colony.refresh()
-    const updated = new Promise<World>((resolve) => colony.once('update', resolve))
+    const updated = nextWorld(colony)
+    // Moved before anything watches it, so only the timer can see it.
     commit(root, { 'b.ts': 'export const b = 2\n' })
-    colony.watch(50)
+    await colony.watch({ fallbackMs: 50, settleMs: 60_000 })
     const world = await updated
     expect(world.nodes.some((n) => n.path === 'b.ts')).toBe(true)
   })
