@@ -17,6 +17,9 @@ export interface ColonistPresence {
 }
 
 // The colonist status a firstmate status line stands for.
+// TODO(#44): captain holds live in the firstmate backlog, not in status
+// lines; once the build-queue module merges, map a held task to 'waiting'
+// (waiting on you) through it.
 export function statusFromTask(task: FirstmateTask): ColonistStatus | undefined {
   switch (task.status?.state) {
     case 'working':
