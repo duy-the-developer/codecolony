@@ -54,7 +54,7 @@ export const PIN_HEIGHT_PX = 16
 export const BADGE_RADIUS_PX = 7
 // A block narrower than this passes its pins up to its folder.
 export const PIN_HOST_PX = 16
-const POINTER_PX = 4
+export const POINTER_PX = 4
 // A row of pins lifts at most this many times to clear the others.
 const MAX_LIFTS = 4
 const GAP_PX = 2

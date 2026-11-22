@@ -18,6 +18,7 @@ import {
   layoutPins,
   type Pin,
   type PinLayout,
+  POINTER_PX,
 } from './colonist-pins.ts'
 import { LABEL_FONT } from './lod.ts'
 import type { Drawn } from './render.ts'
@@ -229,7 +230,8 @@ export class ColonistLayer {
     )
     for (const pin of ordered) {
       const { head } = pin
-      if (sx >= head.x - 1 && sx <= head.x + head.w + 1 && sy >= head.y - 1 && sy <= pin.tipY)
+      const bottom = head.y + head.h + POINTER_PX
+      if (sx >= head.x - 1 && sx <= head.x + head.w + 1 && sy >= head.y - 1 && sy <= bottom)
         return { kind: 'pin', colonistId: pin.colonistId, pin }
     }
     return undefined

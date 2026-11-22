@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { PlacedChange, PlacedColonist } from '../scene/colonist-places.ts'
+import { type PlacedChange, type PlacedColonist, placeColonists } from '../scene/colonist-places.ts'
 import { Scene } from '../scene/scene.ts'
 import type { NodeKind, Rect, World, WorldNode } from '../world/world-types.ts'
 import { Camera } from './camera.ts'
@@ -137,5 +137,49 @@ describe('ColonistLayer', () => {
     layer.selected = '/one'
     layer.setColonists([])
     expect(layer.selected).toBeUndefined()
+  })
+})
+
+describe('ColonistLayer pins in lifted rows', () => {
+  // b.ts sits half a unit right of a.ts, so at 5px a unit one file's row of
+  // pins is lifted above the other's.
+  const tight = new Scene({
+    version: 1,
+    indexedAt: '',
+    languages: {},
+    nodes: [
+      node('w', 'world', { x: 0, y: 0, w: 40, h: 40 }),
+      node('r', 'repo', { x: 0, y: 0, w: 40, h: 40 }, 'w'),
+      node('r/m', 'module', { x: 1, y: 2, w: 20, h: 20 }, 'r'),
+      node('r/m/a.ts', 'file', { x: 2, y: 3, w: 4, h: 4 }, 'r/m'),
+      node('r/m/b.ts', 'file', { x: 6.5, y: 3, w: 4, h: 4 }, 'r/m'),
+    ],
+    edges: [],
+  } satisfies World)
+  const near = new Camera()
+  near.scale = 5
+  const frame = ['r', 'r/m', 'r/m/a.ts', 'r/m/b.ts'].map((id): Drawn => {
+    const item = tight.byId.get(id) as WorldNode
+    const { x, y, w, h } = item.rect
+    return { node: item, x: x * 5, y: y * 5, w: w * 5, h: h * 5, alpha: 1, open: 1 }
+  })
+
+  it('finds every pin by its head, never through the stem of a lifted pin', () => {
+    const layer = new ColonistLayer()
+    const both = (id: string): PlacedColonist['colonist'] => ({
+      ...placed(id, '').colonist,
+      changes: [
+        { path: 'm/a.ts', kind: 'modified', units: 1 },
+        { path: 'm/b.ts', kind: 'modified', units: 1 },
+      ],
+    })
+    layer.setColonists(placeColonists(tight, [both('/one'), both('/two')]))
+    layer.drawChanges(ctx, tight, near, frame)
+    const { pins } = layer.pins
+    expect(new Set(pins.map((pin) => pin.head.y)).size).toBeGreaterThan(1)
+    for (const pin of pins) {
+      const hit = layer.hitPin(pin.head.x + pin.head.w / 2, pin.head.y + pin.head.h / 2)
+      expect(hit).toMatchObject({ kind: 'pin', colonistId: pin.colonistId })
+    }
   })
 })
