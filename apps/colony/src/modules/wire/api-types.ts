@@ -86,7 +86,7 @@ export interface Colonist {
   repoId: string
   label: string
   status: ColonistStatus
-  // The last status line it reported, when it reports one.
+  // The text of the status line that decides its status, when it has one.
   note?: string
   // The firstmate task working in the copy.
   task?: string

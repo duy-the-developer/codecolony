@@ -71,7 +71,11 @@ describe('parseStatusLog', () => {
   })
 
   it('treats failed as blocked and an empty log as working', () => {
-    expect(parseStatusLog('failed [at=1]: gave up').state).toBe('blocked')
+    expect(parseStatusLog('failed [at=1]: gave up')).toEqual({
+      state: 'blocked',
+      note: 'gave up',
+      failed: true,
+    })
     expect(parseStatusLog('')).toEqual({ state: 'working' })
   })
 })

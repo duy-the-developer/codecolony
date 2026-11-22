@@ -16,29 +16,14 @@ export interface ColonistPresence {
   paneId?: string
 }
 
-// The colonist status a firstmate status line stands for.
+// The colonist status a firstmate status log stands for: the build queue's
+// state for the same task, with a failed task shown as an error.
 // TODO(#44): captain holds live in the firstmate backlog, not in status
-// lines; once the build-queue module merges, map a held task to 'waiting'
-// (waiting on you) through it.
-export function statusFromTask(task: FirstmateTask): ColonistStatus | undefined {
-  switch (task.status?.state) {
-    case 'working':
-    case 'progress':
-    case 'resolved':
-      return 'working'
-    case 'paused':
-      return 'paused'
-    case 'needs-decision':
-      return 'waiting'
-    case 'blocked':
-      return 'blocked'
-    case 'failed':
-      return 'error'
-    case 'done':
-      return task.pr ? 'pr-ready' : 'paused'
-    default:
-      return undefined
-  }
+// logs; map a held task to 'waiting' (waiting on you) through the
+// build-queue module's backlog.
+function statusFromTask(task: FirstmateTask): ColonistStatus | undefined {
+  if (!task.status) return undefined
+  return task.status.failed ? 'error' : task.status.state
 }
 
 // Statuses a firstmate task can end in, which hold with no live session.
@@ -54,8 +39,8 @@ export function resolvePresence(
 ): ColonistPresence {
   const isLive = sessions.length > 0 || (task !== undefined && !canSeeSessions)
   const presence: ColonistPresence = { status: 'idle', session: 'none' }
-  if (task?.status?.text) presence.note = task.status.text
-  if (task?.pr) presence.pr = task.pr
+  if (task?.status?.note) presence.note = task.status.note
+  if (task?.status?.pullRequestUrl) presence.pr = task.status.pullRequestUrl
   const agent = sessions.find((session) => session.agent)?.agent
   if (agent) presence.agent = agent
   if (!isLive) {
@@ -69,7 +54,7 @@ export function resolvePresence(
   const live = sessions.find((session) => session.status)?.status
   let status = (task && statusFromTask(task)) ?? live ?? 'working'
   // Herdr sees a prompt waiting for an answer before any status line does.
-  if (live === 'waiting' && (status === 'working' || status === 'paused')) status = 'waiting'
+  if (live === 'waiting' && status === 'working') status = 'waiting'
   presence.status = status
   return presence
 }

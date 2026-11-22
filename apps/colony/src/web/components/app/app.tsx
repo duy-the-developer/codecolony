@@ -181,7 +181,9 @@ export function App() {
   // its worker changed.
   const showOrderOnMap = useCallback(
     async (order: BuildOrder) => {
-      const colonist = placed.find((p) => p.colonist.task === order.colonist && p.bounds)
+      const colonist = placed.find(
+        (p) => order.colonist !== undefined && p.colonist.task === order.colonist && p.bounds,
+      )
       if (colonist) {
         pickColonist(colonist.colonist.id)
         return true
