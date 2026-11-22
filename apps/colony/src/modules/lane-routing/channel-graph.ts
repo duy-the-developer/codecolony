@@ -11,7 +11,10 @@ import type { Rect } from '../world/world-types.ts'
 // channel, and lanes run along it on the whole grid lines strictly inside it.
 // A cut at the edge of a band, such as a container's padding or the room below
 // a short block in a tall row, holds no lanes: lines only cross it straight on
-// their way between a channel and a block side or another channel.
+// their way between a channel and a block side or another channel. With
+// edgeLanes, padding that holds a lane is a channel too, so that a block side
+// facing a container wall meets the lane beside it rather than one outside
+// the container.
 
 // The direction lanes run in: 'x' for a horizontal channel.
 export type Axis = 'x' | 'y'
@@ -105,7 +108,7 @@ const CUT_SIDES = {
   x: [LEFT, RIGHT, TOP, BOTTOM],
 } as const
 
-export function buildChannelGraph(root: RouteBox): ChannelGraph {
+export function buildChannelGraph(root: RouteBox, edgeLanes = false): ChannelGraph {
   const graph: ChannelGraph = {
     channels: [],
     attachments: [],
@@ -160,6 +163,72 @@ export function buildChannelGraph(root: RouteBox): ChannelGraph {
     split(band, items, 'y', nb, box.id, depth)
   }
 
+  // A channel from low to high across `across`, the length of the band, with
+  // its ends on the channels beside the band, from their high and low sides.
+  const addChannel = (
+    band: Band,
+    across: Axis,
+    low: number,
+    high: number,
+    nb: Neighbours,
+    container: string,
+    after: string[],
+    depth: number,
+  ): number => {
+    const [, , startSide, endSide] = CUT_SIDES[across]
+    const [start, end] = across === 'y' ? [band.x0, band.x1] : [band.y0, band.y1]
+    const index =
+      graph.channels.push({
+        axis: across === 'y' ? 'x' : 'y',
+        low,
+        high,
+        start,
+        end,
+        depth,
+        container,
+        after,
+        bars: [nb[startSide], nb[endSide]],
+      }) - 1
+    if (nb[startSide] >= 0) {
+      attach({
+        bar: nb[startSide],
+        isHigh: true,
+        from: low,
+        to: high,
+        mouth: start,
+        channel: index,
+        end: 0,
+      })
+    }
+    if (nb[endSide] >= 0) {
+      attach({
+        bar: nb[endSide],
+        isHigh: false,
+        from: low,
+        to: high,
+        mouth: end,
+        channel: index,
+        end: 1,
+      })
+    }
+    return index
+  }
+
+  // With edgeLanes: the axis across which a band's padding beside one item
+  // holds a lane, if any.
+  const paddedAxis = (band: Band, item: Item, preferred: Axis): Axis | undefined => {
+    if (!edgeLanes) return undefined
+    for (const across of [preferred, preferred === 'y' ? 'x' : 'y'] as const) {
+      if (
+        holdsLane(lowEdge(band, across), lowEdge(item.band, across)) ||
+        holdsLane(highEdge(item.band, across), highEdge(band, across))
+      ) {
+        return across
+      }
+    }
+    return undefined
+  }
+
   const place = (item: Item, nb: Neighbours, depth: number) => {
     const { box } = item
     if (!box) return
@@ -179,19 +248,49 @@ export function buildChannelGraph(root: RouteBox): ChannelGraph {
     depth: number,
   ): void => {
     if (items.length === 0) return
+    let cut: { across: Axis; groups: Group[] } | undefined
     if (items.length === 1) {
-      place(items[0] as Item, nb, depth)
-      return
+      const item = items[0] as Item
+      const across = paddedAxis(band, item, preferred)
+      if (!across) {
+        place(item, nb, depth)
+        return
+      }
+      cut = {
+        across,
+        groups: [{ start: lowEdge(item.band, across), end: highEdge(item.band, across), items }],
+      }
+    } else {
+      cut = cutItems(items, preferred)
     }
-    const cut = cutItems(items, preferred)
     if (!cut) {
       // Not a row layout: leave these boxes without lanes.
       graph.stuck += items.length
       return
     }
     const { across, groups } = cut
-    const [lowSide, highSide, startSide, endSide] = CUT_SIDES[across]
-    const [start, end] = across === 'y' ? [band.x0, band.x1] : [band.y0, band.y1]
+    const [lowSide, highSide] = CUT_SIDES[across]
+    const afterOf = (group: Group): string[] => {
+      const after: string[] = []
+      for (const item of group.items) {
+        if (item.box && lowEdge(item.band, across) === group.start) after.push(item.box.id)
+      }
+      return after
+    }
+    // With edgeLanes, the channels in the padding before the first group and
+    // after the last.
+    const first = groups[0] as Group
+    const last = groups[groups.length - 1] as Group
+    const bandLow = lowEdge(band, across)
+    const bandHigh = highEdge(band, across)
+    const lowPad =
+      edgeLanes && holdsLane(bandLow, first.start)
+        ? addChannel(band, across, bandLow, first.start, nb, container, afterOf(first), depth)
+        : nb[lowSide]
+    const highPad =
+      edgeLanes && holdsLane(last.end, bandHigh)
+        ? addChannel(band, across, last.end, bandHigh, nb, container, [], depth)
+        : nb[highSide]
     // The channel after each group, or -1 when the next group touches it.
     const between: number[] = []
     for (let g = 0; g + 1 < groups.length; g++) {
@@ -201,47 +300,7 @@ export function buildChannelGraph(root: RouteBox): ChannelGraph {
         between.push(-1)
         continue
       }
-      const after: string[] = []
-      for (const item of next.items) {
-        if (item.box && lowEdge(item.band, across) === next.start) after.push(item.box.id)
-      }
-      const index =
-        graph.channels.push({
-          axis: across === 'y' ? 'x' : 'y',
-          low,
-          high: next.start,
-          start,
-          end,
-          depth,
-          container,
-          after,
-          bars: [nb[startSide], nb[endSide]],
-        }) - 1
-      between.push(index)
-      // Its ends meet the channels beside the band, from their high and low
-      // sides.
-      if (nb[startSide] >= 0) {
-        attach({
-          bar: nb[startSide],
-          isHigh: true,
-          from: low,
-          to: next.start,
-          mouth: start,
-          channel: index,
-          end: 0,
-        })
-      }
-      if (nb[endSide] >= 0) {
-        attach({
-          bar: nb[endSide],
-          isHigh: false,
-          from: low,
-          to: next.start,
-          mouth: end,
-          channel: index,
-          end: 1,
-        })
-      }
+      between.push(addChannel(band, across, low, next.start, nb, container, afterOf(next), depth))
     }
     groups.forEach((group, g) => {
       const piece: Band =
@@ -249,8 +308,8 @@ export function buildChannelGraph(root: RouteBox): ChannelGraph {
           ? { ...band, y0: group.start, y1: group.end }
           : { ...band, x0: group.start, x1: group.end }
       const pieceNb: Neighbours = [...nb]
-      pieceNb[lowSide] = g === 0 ? nb[lowSide] : (between[g - 1] as number)
-      pieceNb[highSide] = g === groups.length - 1 ? nb[highSide] : (between[g] as number)
+      pieceNb[lowSide] = g === 0 ? lowPad : (between[g - 1] as number)
+      pieceNb[highSide] = g === groups.length - 1 ? highPad : (between[g] as number)
       split(piece, group.items, across === 'y' ? 'x' : 'y', pieceNb, container, depth + 1)
     })
   }
@@ -358,6 +417,11 @@ function lowEdge(band: Band, across: Axis): number {
 
 function highEdge(band: Band, across: Axis): number {
   return across === 'y' ? band.y1 : band.x1
+}
+
+// Whether a free strip from low to high holds a whole-unit lane.
+function holdsLane(low: number, high: number): boolean {
+  return Math.ceil(high) - Math.floor(low) - 1 > 0
 }
 
 // Whole-unit lanes a channel holds: the grid lines strictly inside it.

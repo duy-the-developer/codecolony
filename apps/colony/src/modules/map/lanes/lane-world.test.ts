@@ -36,4 +36,36 @@ describe('LaneWorld', () => {
     // half a unit off the spot where a's line leaves.
     expect(listPoints(world, open)).toEqual([4, 4, 4.5, 4, 4.5, 3.5, 5, 3.5])
   })
+
+  // world > repo r > folder r/src, with module core up on the right and
+  // module util down on the left, a 1-unit pad from src's left wall.
+  it('keeps a file wire inside the folder when its padding holds a lane', () => {
+    const file = (id: string, x: number, y: number): RouteNode => ({
+      id,
+      parent: id.slice(0, id.lastIndexOf('/')),
+      kind: 'file',
+      rect: { x, y, w: 1, h: 1 },
+    })
+    const nodes: RouteNode[] = [
+      { id: 'world', kind: 'world', rect: { x: 0, y: 0, w: 26, h: 22 } },
+      { id: 'r', parent: 'world', kind: 'repo', rect: { x: 1, y: 2, w: 24, h: 19 } },
+      { id: 'r/src', parent: 'r', kind: 'module', rect: { x: 2, y: 4, w: 19, h: 16 } },
+      { id: 'r/src/core', parent: 'r/src', kind: 'module', rect: { x: 13, y: 5, w: 5, h: 6 } },
+      { id: 'r/src/util', parent: 'r/src', kind: 'module', rect: { x: 3, y: 13, w: 5, h: 6 } },
+      file('r/src/core/c1.ts', 14, 6),
+      file('r/src/core/c2.ts', 14, 8),
+      file('r/src/core/c3.ts', 16, 6),
+      file('r/src/util/u1.ts', 4, 14),
+      file('r/src/util/u2.ts', 4, 16),
+      file('r/src/util/u3.ts', 6, 14),
+    ]
+    const world = new LaneWorld(nodes, [['r/src/core/c2.ts', 'r/src/util/u2.ts']])
+    const points = listPoints(world, ['r', 'r/src', 'r/src/core', 'r/src/util'])
+    expect(points.length).toBeGreaterThan(0)
+    for (let k = 0; k < points.length; k += 2) {
+      const x = points[k] as number
+      const y = points[k + 1] as number
+      expect(x >= 2 && x <= 21 && y >= 4 && y <= 20, `${x},${y}`).toBe(true)
+    }
+  })
 })

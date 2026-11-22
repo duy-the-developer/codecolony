@@ -118,7 +118,7 @@ export class LaneWorld {
       const boxes = buildRouteBoxes(this.nodes, has, has)
       const pitch = boxes.hasFileBlocks ? FILE_LANE_PITCH : 1
       const graph = boxes.root
-        ? buildChannelGraph(scaleBox(boxes.root, pitch))
+        ? buildChannelGraph(scaleBox(boxes.root, pitch), pitch !== 1)
         : { channels: [], attachments: [], blockAttachments: new Map(), stuck: 0 }
       found = { boxes, graph, pitch, level: buildLevel(this.edges, boxes) }
       if (this.levels.size >= MAX_LEVELS) {
