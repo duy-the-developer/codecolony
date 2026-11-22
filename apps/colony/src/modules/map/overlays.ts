@@ -19,5 +19,13 @@ export const OVERLAYS = [
 
 export type OverlayId = (typeof OVERLAYS)[number]['id']
 
+// The kinds of line a frame drew, for the map legend.
+export interface DrawnLines {
+  // The overlays whose lines are drawn.
+  overlays: readonly OverlayId[]
+  // The selection's lines are drawn, coloured by direction.
+  isDirected: boolean
+}
+
 // Named in the overlay menu, not built yet.
 export const PLANNED_OVERLAYS = ['Calls', 'HTTP requests'] as const

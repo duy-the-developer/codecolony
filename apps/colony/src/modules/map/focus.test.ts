@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { Scene } from '../scene/scene.ts'
 import type { NodeKind, World, WorldNode } from '../world/world-types.ts'
-import { buildFocus, crossesFocus, NO_FOCUS } from './focus.ts'
+import { buildFocus, DEPENDANT, DEPENDS_ON, focusDirection, NO_FOCUS } from './focus.ts'
 
 function node(id: string, kind: NodeKind, parent?: string): WorldNode {
   const base = { id, kind, name: id, lines: 1, complexity: 0, rect: { x: 0, y: 0, w: 1, h: 1 } }
@@ -47,17 +47,21 @@ describe('buildFocus', () => {
   })
 })
 
-describe('crossesFocus', () => {
-  it('counts edges in or out of a focused node, and between two of them', () => {
+describe('focusDirection', () => {
+  it('tells edges out of a focused node from edges into one', () => {
     const focus = buildFocus(scene, ['a', 'b'])
-    expect(crossesFocus(focus, 'a/f.ts', 'c.ts')).toBe(true)
-    expect(crossesFocus(focus, 'c.ts', 'b/g.ts')).toBe(true)
-    expect(crossesFocus(focus, 'a/f.ts', 'b/g.ts')).toBe(true)
+    expect(focusDirection(focus, 'a/f.ts', 'c.ts')).toBe(DEPENDS_ON)
+    expect(focusDirection(focus, 'c.ts', 'b/g.ts')).toBe(DEPENDANT)
+  })
+
+  it('counts an edge between two focused nodes both ways', () => {
+    const focus = buildFocus(scene, ['a', 'b'])
+    expect(focusDirection(focus, 'a/f.ts', 'b/g.ts')).toBe(DEPENDS_ON | DEPENDANT)
   })
 
   it('leaves out edges inside one focused node or outside all of them', () => {
     const focus = buildFocus(scene, ['a', 'b'])
-    expect(crossesFocus(focus, 'a', 'a/f.ts')).toBe(false)
-    expect(crossesFocus(focus, 'c.ts', 'w')).toBe(false)
+    expect(focusDirection(focus, 'a', 'a/f.ts')).toBe(0)
+    expect(focusDirection(focus, 'c.ts', 'w')).toBe(0)
   })
 })

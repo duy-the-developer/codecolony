@@ -26,6 +26,14 @@ export const EDGE_COLORS: Record<Edge['kind'], string> = {
 export const SELECTION_COLOR = '#ffd166'
 export const HOVER_COLOR = 'rgba(228, 237, 246, 0.85)'
 
+// The selection's lines, by direction: what it depends on (it imports them)
+// and its dependants (they import it). With nothing selected, lines take
+// their overlay's colour and arrows alone show the direction.
+export const DIRECTION_COLORS = {
+  dependsOn: '#3fd0c9',
+  dependant: '#c48cff',
+} as const satisfies Record<string, string>
+
 const hues = new Map<string, number>()
 // A stable hue per module, so a module's files share a colour and
 // neighbouring modules tell apart at every zoom.

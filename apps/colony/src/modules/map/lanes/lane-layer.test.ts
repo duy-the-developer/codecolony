@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { Scene } from '../../scene/scene.ts'
 import type { Edge, NodeKind, Rect, World, WorldNode } from '../../world/world-types.ts'
-import { buildFocus, NO_FOCUS } from '../focus.ts'
+import { buildFocus, DEPENDANT, DEPENDS_ON, NO_FOCUS } from '../focus.ts'
 import { type LaneFrame, LaneLayer } from './lane-layer.ts'
 import { createLaneRouter } from './lane-router.ts'
 import type { LaneRoutes } from './lane-world.ts'
@@ -115,6 +115,35 @@ describe('LaneLayer', () => {
     )
     expect(listLanes(frame)).toHaveLength(3)
     expect(listLanes(frame).every((lane) => lane.emphasis === 'hot')).toBe(true)
+  })
+
+  it('tells the links the focus depends on from those of its dependants', async () => {
+    const scene = makeScene()
+    const layer = new LaneLayer(scene, createLaneRouter(), () => {})
+    // b imports c and is imported by a.
+    const focus = buildFocus(scene, ['r/b'])
+    const off = await settle(() => layer.frame(SCALE, [], focus, false))
+    const on = await settle(() => layer.frame(SCALE, [], focus, true))
+    for (const [routes, hot] of [
+      [off.focus, off.focusHot],
+      [on.all, on.hot],
+    ] as const) {
+      const directions = [...(routes?.links ?? [])].map((link) => hot?.[link] ?? 0)
+      expect(directions.filter((d) => d !== 0).sort()).toEqual([DEPENDS_ON, DEPENDANT])
+    }
+  })
+
+  it('marks each drawn partner by the way its imports run', async () => {
+    const scene = makeScene()
+    const layer = new LaneLayer(scene, createLaneRouter(), () => {})
+    const holders = scene.world.nodes.filter((n) => n.kind === 'module').map((node) => ({ node }))
+    const frame = await settle(() => layer.frame(SCALE, holders, buildFocus(scene, ['r/b']), false))
+    expect(frame.partners).toEqual(
+      new Map([
+        ['r/a', DEPENDANT],
+        ['r/c', DEPENDS_ON],
+      ]),
+    )
   })
 
   it('ends each lane with an arrow into the imported block', async () => {

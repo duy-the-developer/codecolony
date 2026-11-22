@@ -26,7 +26,16 @@ describe('shellPreferencesFrom', () => {
       left: { widthPx: 9999, isCollapsed: true, tab: 'files' },
       right: DEFAULT_SHELL_PREFERENCES.right,
       openQueueSections: { active: false, queued: true, done: true },
+      isLegendOpen: false,
     })
+  })
+
+  it('remembers whether the legend is open, and drops the old Legend tab', () => {
+    const raw = JSON.stringify({ left: { tab: 'legend' }, isLegendOpen: true })
+    const preferences = shellPreferencesFrom(raw)
+    expect(preferences.isLegendOpen).toBe(true)
+    expect(preferences.left.tab).toBe('queue')
+    expect(shellPreferencesFrom(JSON.stringify({ isLegendOpen: 'yes' })).isLegendOpen).toBe(false)
   })
 
   it('raises widths below the minimum', () => {

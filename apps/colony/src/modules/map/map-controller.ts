@@ -7,7 +7,7 @@ import { buildFocus, type Focus, NO_FOCUS } from './focus.ts'
 import { LaneLayer } from './lanes/lane-layer.ts'
 import { createLaneRouter } from './lanes/lane-router.ts'
 import { FILE_OPEN } from './lod.ts'
-import type { OverlayId } from './overlays.ts'
+import type { DrawnLines, OverlayId } from './overlays.ts'
 import { type Drawn, hitTest, hoverTarget, render } from './render.ts'
 import {
   buildSelection,
@@ -37,6 +37,8 @@ export interface MapControllerOptions {
   onHover(hover: MapHover | undefined): void
   // After each frame, for the zoom readout.
   onDraw(camera: Camera): void
+  // The kinds of line drawn changed, for the legend.
+  onLines?(lines: DrawnLines): void
   // A file or symbol was double-clicked: show its file.
   onOpen(id: string): void
   // A colonist was picked or let go, by one of its pins or a caller.
@@ -85,6 +87,7 @@ export function createMapController(
   const camera = new Camera()
   let scene: Scene | undefined
   let drawn: Drawn[] = []
+  let linesKey = ''
   let selected: readonly string[] = []
   let selectedSet: ReadonlySet<string> = new Set()
   // Grows with each selection change, so a selection that waits for symbols
@@ -110,13 +113,19 @@ export function createMapController(
     frame = requestAnimationFrame(() => {
       frame = undefined
       if (!scene) return
-      drawn = render(ctx, scene, camera, view, {
+      const result = render(ctx, scene, camera, view, {
         selected: selectedSet,
         focus,
         overlays,
         colonists,
         ...(lanes ? { lanes } : {}),
       })
+      drawn = result.drawn
+      const key = `${result.lines.overlays.join(',')}|${result.lines.isDirected}`
+      if (key !== linesKey) {
+        linesKey = key
+        options.onLines?.(result.lines)
+      }
       prefetchSymbols(scene)
       requestMarkerDraw()
       options.onDraw(camera)

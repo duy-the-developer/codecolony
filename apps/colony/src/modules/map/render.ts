@@ -1,14 +1,20 @@
 import type { Scene } from '../scene/scene.ts'
-import { HOVER_COLOR, hueOf, SELECTION_COLOR, SYMBOL_COLORS } from '../theme/palette.ts'
+import {
+  DIRECTION_COLORS,
+  HOVER_COLOR,
+  hueOf,
+  SELECTION_COLOR,
+  SYMBOL_COLORS,
+} from '../theme/palette.ts'
 import { HEADER_UNITS, type WorldNode } from '../world/world-types.ts'
 import type { Camera, Viewport } from './camera.ts'
 import type { ColonistLayer } from './colonist-layer.ts'
-import type { Focus } from './focus.ts'
+import { DEPENDANT, DEPENDS_ON, type Focus } from './focus.ts'
 import type { LaneFrame, LaneLayer } from './lanes/lane-layer.ts'
 import type { LaneRoutes } from './lanes/lane-world.ts'
 import { MIN_LINK_ALPHA } from './link-cache.ts'
 import { fade, GRID_FADE, LABEL_FONT, MIN_VISIBLE_PX, openness } from './lod.ts'
-import { OVERLAYS, type OverlayId } from './overlays.ts'
+import { type DrawnLines, OVERLAYS, type OverlayId } from './overlays.ts'
 
 // Draws one frame: the unit grid, flat blocks (fill plus a 1px border), the
 // overlays' lanes, labels, then outlines. World coordinates are grid units,
@@ -37,6 +43,11 @@ export interface RenderState {
   colonists?: ColonistLayer
 }
 
+export interface RenderResult {
+  drawn: Drawn[]
+  lines: DrawnLines
+}
+
 const BACKGROUND = '#0d1b2a'
 const GRID = '#1b3149'
 const FONT = 'system-ui, -apple-system, Segoe UI, sans-serif'
@@ -59,7 +70,7 @@ export function render(
   camera: Camera,
   view: Viewport,
   state: RenderState,
-): Drawn[] {
+): RenderResult {
   ctx.fillStyle = BACKGROUND
   ctx.fillRect(0, 0, view.width, view.height)
   drawGrid(ctx, camera, view)
@@ -91,7 +102,10 @@ export function render(
     state.focus,
     state.overlays.has('dependency'),
   )
-  if (frame) drawLanes(ctx, frame, camera, view)
+  // With a selection, its lines are coloured by direction; a hovered node's
+  // keep their overlay's colour.
+  const isDirected = state.selected.size > 0
+  if (frame) drawLanes(ctx, frame, camera, view, isDirected)
   drawLabels(ctx, labels)
   state.colonists?.drawChanges(ctx, scene, camera, drawn)
   ctx.globalAlpha = 1
@@ -99,9 +113,13 @@ export function render(
   // The nodes at the other end of the focus's imports, then the hovered
   // node, then the selection.
   if (frame && frame.partners.size > 0) {
-    ctx.strokeStyle = DEPENDENCY_COLOR
     ctx.lineWidth = 1.5
-    for (const item of drawn) if (frame.partners.has(item.node.id)) outline(ctx, item, 1)
+    for (const item of drawn) {
+      const direction = frame.partners.get(item.node.id)
+      if (direction === undefined) continue
+      ctx.strokeStyle = isDirected ? directionColor(direction) : DEPENDENCY_COLOR
+      outline(ctx, item, 1)
+    }
   }
   const hovered = state.selected.size === 0 ? state.focus.ids[0] : undefined
   const focus = hovered !== undefined && drawn.find((d) => d.node.id === hovered)
@@ -115,10 +133,25 @@ export function render(
     ctx.lineWidth = 2
     for (const item of drawn) if (state.selected.has(item.node.id)) outline(ctx, item, 0.5)
   }
-  return drawn
+  return {
+    drawn,
+    lines: {
+      overlays: frame?.all ? ['dependency'] : [],
+      isDirected:
+        isDirected &&
+        frame !== undefined &&
+        (!!frame.hot || !!frame.focus || frame.partners.size > 0),
+    },
+  }
 }
 
 const DEPENDENCY_COLOR = OVERLAYS[0].color
+
+// A line or node the focus depends on takes that colour, even when it also
+// depends on the focus, as between two selected nodes.
+function directionColor(direction: number): string {
+  return direction & DEPENDS_ON ? DIRECTION_COLORS.dependsOn : DIRECTION_COLORS.dependant
+}
 
 // A line just outside a drawn node's border.
 function outline(ctx: CanvasRenderingContext2D, item: Drawn, inset: number): void {
@@ -342,8 +375,38 @@ interface LaneBucket {
   lanes: number[]
 }
 
-const allPaths = new WeakMap<LaneRoutes, LanePaths>()
-const hotPaths = new WeakMap<Uint8Array, { routes: LaneRoutes; paths: LanePaths }>()
+// The lanes of a routing a layer draws: all of them, those that carry the
+// focus's imports, or those that carry them one way.
+type LaneGroup = 'all' | 'hot' | 'dependsOn' | 'dependant'
+const lanePaths = new WeakMap<
+  LaneRoutes,
+  Map<LaneGroup, { hot: Uint8Array | undefined; paths: LanePaths }>
+>()
+
+// A group's paths, built once per routing and direction bits.
+function getLanePaths(
+  routes: LaneRoutes,
+  group: LaneGroup,
+  hot: Uint8Array | undefined,
+): LanePaths {
+  let held = lanePaths.get(routes)
+  if (!held) {
+    held = new Map()
+    lanePaths.set(routes, held)
+  }
+  const kept = held.get(group)
+  if (kept && kept.hot === hot) return kept.paths
+  const directionOf = (i: number) => hot?.[routes.links[i] as number] ?? 0
+  const paths = buildLanePaths(routes, (i) => {
+    if (group === 'all') return true
+    const direction = directionOf(i)
+    if (group === 'hot') return direction !== 0
+    if (group === 'dependsOn') return (direction & DEPENDS_ON) !== 0
+    return direction === DEPENDANT
+  })
+  held.set(group, { hot, paths })
+  return paths
+}
 
 // Builds the paths of the routed links that pick() keeps, once.
 function buildLanePaths(routes: LaneRoutes, pick: (i: number) => boolean): LanePaths {
@@ -385,7 +448,8 @@ function buildLanePaths(routes: LaneRoutes, pick: (i: number) => boolean): LaneP
 
 // Each lane is a polyline from the importer's side to the imported block's
 // side, where an arrowhead points into the block. With a focus, every lane is
-// dimmed and the focus's lanes drawn bright on top. Lanes between files are
+// dimmed and the focus's lanes drawn bright on top, coloured by direction when
+// isDirected. Lanes between files are
 // too many to read one by one, so they are always dimmed. Paths are built
 // once per routing and drawn in world units, so a frame only strokes the
 // buckets on screen.
@@ -394,36 +458,29 @@ function drawLanes(
   frame: LaneFrame,
   camera: Camera,
   view: Viewport,
+  isDirected: boolean,
 ): void {
-  const layers: [LaneRoutes, LanePaths, LaneEmphasis][] = []
-  const { all, hot, focus } = frame
+  const layers: [LaneRoutes, LanePaths, LaneEmphasis, string][] = []
+  // The focus's lanes of a routing: by direction, those it depends on on top.
+  const addHot = (routes: LaneRoutes, hot: Uint8Array | undefined, group: LaneGroup) => {
+    if (!isDirected) {
+      layers.push([routes, getLanePaths(routes, group, hot), 'hot', DEPENDENCY_COLOR])
+      return
+    }
+    for (const [direction, color] of [
+      ['dependant', DIRECTION_COLORS.dependant],
+      ['dependsOn', DIRECTION_COLORS.dependsOn],
+    ] as const) {
+      layers.push([routes, getLanePaths(routes, direction, hot), 'hot', color])
+    }
+  }
+  const { all, hot, focus, focusHot } = frame
   if (all) {
-    let paths = allPaths.get(all)
-    if (!paths) {
-      paths = buildLanePaths(all, () => true)
-      allPaths.set(all, paths)
-    }
-    layers.push([all, paths, hot || all.pitch > 1 ? 'dim' : 'normal'])
-    if (hot) {
-      let held = hotPaths.get(hot)
-      if (held?.routes !== all) {
-        held = {
-          routes: all,
-          paths: buildLanePaths(all, (i) => hot[all.links[i] as number] === 1),
-        }
-        hotPaths.set(hot, held)
-      }
-      layers.push([all, held.paths, 'hot'])
-    }
+    const emphasis = hot || all.pitch > 1 ? 'dim' : 'normal'
+    layers.push([all, getLanePaths(all, 'all', undefined), emphasis, DEPENDENCY_COLOR])
+    if (hot) addHot(all, hot, 'hot')
   }
-  if (focus) {
-    let paths = allPaths.get(focus)
-    if (!paths) {
-      paths = buildLanePaths(focus, () => true)
-      allPaths.set(focus, paths)
-    }
-    layers.push([focus, paths, 'hot'])
-  }
+  if (focus) addHot(focus, focusHot, 'all')
   if (layers.length === 0) return
 
   const unit = camera.scale
@@ -432,11 +489,11 @@ function drawLanes(
   const isOnScreen = (b: LaneBucket) =>
     b.x1 >= left && b.x0 <= right && b.y1 >= top && b.y0 <= bottom
   const base = ctx.getTransform()
-  ctx.strokeStyle = DEPENDENCY_COLOR
-  ctx.fillStyle = DEPENDENCY_COLOR
   ctx.setLineDash([])
   ctx.lineJoin = 'miter'
-  for (const [routes, paths, emphasis] of layers) {
+  for (const [routes, paths, emphasis, color] of layers) {
+    ctx.strokeStyle = color
+    ctx.fillStyle = color
     const shown = paths.buckets.filter(isOnScreen)
     const apart = unit / routes.pitch
     const width = Math.min(Math.max(apart * 0.25, LANE_WIDTH_PX[0]), LANE_WIDTH_PX[1])

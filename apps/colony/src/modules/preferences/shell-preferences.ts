@@ -1,9 +1,10 @@
 // What the page remembers per browser: each side panel's width, whether it is
-// collapsed, and its active tab, and which build queue sections are open. Storage can be missing or full (private
+// collapsed, and its active tab, which build queue sections are open, and
+// whether the map legend is open. Storage can be missing or full (private
 // windows, blocked site data), so reads fall back to defaults and writes are
 // best effort.
 
-export const LEFT_TABS = ['queue', 'legend', 'files'] as const
+export const LEFT_TABS = ['queue', 'files'] as const
 export type LeftTab = (typeof LEFT_TABS)[number]
 export const RIGHT_TABS = ['terminal', 'file', 'inspector'] as const
 export type RightTab = (typeof RIGHT_TABS)[number]
@@ -22,6 +23,7 @@ export interface ShellPreferences {
   left: PanelPreferences<LeftTab>
   right: PanelPreferences<RightTab>
   openQueueSections: Record<QueueSection, boolean>
+  isLegendOpen: boolean
 }
 
 // A panel can be dragged as wide as the map and the other panel allow: the map
@@ -33,6 +35,7 @@ export const DEFAULT_SHELL_PREFERENCES: ShellPreferences = {
   left: { widthPx: 280, isCollapsed: false, tab: 'queue' },
   right: { widthPx: 420, isCollapsed: false, tab: 'terminal' },
   openQueueSections: { active: true, queued: true, done: false },
+  isLegendOpen: false,
 }
 
 const STORAGE_KEY = 'codecolony.shell.v1'
@@ -81,6 +84,10 @@ export function shellPreferencesFrom(raw: string | null): ShellPreferences {
     left: panelFrom(record.left, DEFAULT_SHELL_PREFERENCES.left, LEFT_TABS),
     right: panelFrom(record.right, DEFAULT_SHELL_PREFERENCES.right, RIGHT_TABS),
     openQueueSections: queueSectionsFrom(record.openQueueSections),
+    isLegendOpen:
+      typeof record.isLegendOpen === 'boolean'
+        ? record.isLegendOpen
+        : DEFAULT_SHELL_PREFERENCES.isLegendOpen,
   }
 }
 

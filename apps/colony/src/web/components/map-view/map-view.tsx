@@ -5,7 +5,7 @@ import {
   type MapHandle,
   type MapHover,
 } from '../../../modules/map/map-controller.ts'
-import type { OverlayId } from '../../../modules/map/overlays.ts'
+import type { DrawnLines, OverlayId } from '../../../modules/map/overlays.ts'
 import type { PlacedColonist } from '../../../modules/scene/colonist-places.ts'
 import type { Scene } from '../../../modules/scene/scene.ts'
 
@@ -20,6 +20,8 @@ export interface MapViewProps {
   onSelectColonist(id: string | undefined): void
   // A file or symbol was double-clicked.
   onOpen(id: string): void
+  // The kinds of line drawn changed.
+  onLines(lines: DrawnLines): void
   // Overlays drawn over the canvas: breadcrumb, zoom buttons.
   children?: ReactNode
 }
@@ -35,6 +37,7 @@ export function MapView({
   onSelect,
   onSelectColonist,
   onOpen,
+  onLines,
   children,
 }: MapViewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -53,6 +56,8 @@ export function MapView({
   onSelectColonistRef.current = onSelectColonist
   const onOpenRef = useRef(onOpen)
   onOpenRef.current = onOpen
+  const onLinesRef = useRef(onLines)
+  onLinesRef.current = onLines
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -64,6 +69,7 @@ export function MapView({
         if (tooltipRef.current) placeTooltip(tooltipRef.current, hover)
       },
       onOpen: (id) => onOpenRef.current(id),
+      onLines: (lines) => onLinesRef.current(lines),
       ...(markerCanvasRef.current ? { markerCanvas: markerCanvasRef.current } : {}),
       onDraw: (camera) => {
         if (hudRef.current && sceneRef.current)
