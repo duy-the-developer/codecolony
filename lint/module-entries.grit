@@ -8,7 +8,7 @@ or {
   `import type $_ from $source`,
   `export $_ from $source`
 } where {
-  $source <: r"['\"].*/(wire|layout|config|language|search|build-queue|indexing|map|preferences)/([^'\"]+)['\"]"($module, $file),
+  $source <: r"['\"].*/(wire|layout|config|language|search|build-queue|indexing|map|preferences|agents)/([^'\"]+)['\"]"($module, $file),
   not or {
     and {
       $module <: "wire",
@@ -22,7 +22,8 @@ or {
       $module <: "layout",
       $file <: or {
         "world-layout.ts",
-        "symbol-band.ts"
+        "symbol-band.ts",
+        "pack-cells.ts"
       }
     },
     and { $module <: "config", $file <: "load-config.ts" },
@@ -61,7 +62,17 @@ or {
         "selection.ts"
       }
     },
-    and { $module <: "preferences", $file <: "shell-preferences.ts" }
+    and { $module <: "preferences", $file <: "shell-preferences.ts" },
+    and {
+      $module <: "agents",
+      $file <: or {
+        "colonist-tracker.ts",
+        "herdr-sessions.ts",
+        "process-sessions.ts",
+        "firstmate-tasks.ts",
+        r"testing/.*"
+      }
+    }
   },
   register_diagnostic(span=$source, message="Import a module only through its entry files (CONVENTIONS.md).")
 }

@@ -98,6 +98,7 @@
                       "**/map/**",
                       "**/preferences/**",
                       "**/build-queue/**",
+                      "**/agents/**",
                       "**/server/**",
                       "**/web/**"
                     ],
@@ -150,6 +151,7 @@
                       "**/map/**",
                       "**/preferences/**",
                       "**/build-queue/**",
+                      "**/agents/**",
                       "**/server/**",
                       "**/web/**"
                     ],
@@ -201,6 +203,7 @@
                       "**/map/**",
                       "**/preferences/**",
                       "**/build-queue/**",
+                      "**/agents/**",
                       "**/server/**",
                       "**/web/**"
                     ],
@@ -252,6 +255,7 @@
                       "**/map/**",
                       "**/preferences/**",
                       "**/build-queue/**",
+                      "**/agents/**",
                       "**/server/**",
                       "**/web/**"
                     ],
@@ -302,6 +306,7 @@
                       "**/map/**",
                       "**/preferences/**",
                       "**/build-queue/**",
+                      "**/agents/**",
                       "**/server/**",
                       "**/web/**"
                     ],
@@ -352,6 +357,7 @@
                       "**/map/**",
                       "**/preferences/**",
                       "**/build-queue/**",
+                      "**/agents/**",
                       "**/server/**",
                       "**/web/**"
                     ],
@@ -403,6 +409,7 @@
                       "**/map/**",
                       "**/preferences/**",
                       "**/build-queue/**",
+                      "**/agents/**",
                       "**/server/**",
                       "**/web/**"
                     ],
@@ -452,6 +459,7 @@
                       "**/map/**",
                       "**/preferences/**",
                       "**/build-queue/**",
+                      "**/agents/**",
                       "**/server/**",
                       "**/web/**"
                     ],
@@ -504,6 +512,7 @@
                       "**/map/**",
                       "**/preferences/**",
                       "**/build-queue/**",
+                      "**/agents/**",
                       "**/server/**",
                       "**/web/**"
                     ],
@@ -546,6 +555,7 @@
                       "**/map/**",
                       "**/preferences/**",
                       "**/build-queue/**",
+                      "**/agents/**",
                       "**/server/**",
                       "**/web/**"
                     ],
@@ -584,6 +594,7 @@
                       "**/map/**",
                       "**/preferences/**",
                       "**/build-queue/**",
+                      "**/agents/**",
                       "**/server/**",
                       "**/web/**"
                     ],
@@ -630,6 +641,7 @@
                       "**/scene/**",
                       "**/map/**",
                       "**/preferences/**",
+                      "**/agents/**",
                       "**/server/**",
                       "**/web/**"
                     ],
@@ -675,6 +687,7 @@
                       "**/scene/**",
                       "**/map/**",
                       "**/preferences/**",
+                      "**/agents/**",
                       "**/server/**",
                       "**/web/**"
                     ],
@@ -713,6 +726,7 @@
                       "**/map/**",
                       "**/preferences/**",
                       "**/build-queue/**",
+                      "**/agents/**",
                       "**/server/**",
                       "**/web/**"
                     ],
@@ -754,6 +768,91 @@
                       "**/map/**",
                       "**/preferences/**",
                       "**/build-queue/**",
+                      "**/agents/**",
+                      "**/server/**",
+                      "**/web/**"
+                    ],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
+                  },
+                  {
+                    "group": ["@codecolony/dock/web"],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "apps/colony/src/modules/agents/**",
+        "!**/*.test.ts",
+        "!apps/colony/src/modules/agents/testing/**"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "**/world/**",
+                      "**/theme/**",
+                      "**/lane-routing/**",
+                      "**/config/**",
+                      "**/language/**",
+                      "**/search/**",
+                      "**/indexing/**",
+                      "**/scene/**",
+                      "**/map/**",
+                      "**/preferences/**",
+                      "**/server/**",
+                      "**/web/**"
+                    ],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
+                  },
+                  {
+                    "group": ["**/testing/**"],
+                    "message": "testing/ is for tests only."
+                  },
+                  {
+                    "group": ["@codecolony/dock/web"],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "apps/colony/src/modules/agents/**/*.test.ts",
+        "apps/colony/src/modules/agents/testing/**"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "**/world/**",
+                      "**/theme/**",
+                      "**/lane-routing/**",
+                      "**/config/**",
+                      "**/language/**",
+                      "**/search/**",
+                      "**/scene/**",
+                      "**/map/**",
+                      "**/preferences/**",
                       "**/server/**",
                       "**/web/**"
                     ],
@@ -791,6 +890,7 @@
                       "**/map/**",
                       "**/preferences/**",
                       "**/build-queue/**",
+                      "**/agents/**",
                       "**/server/**",
                       "**/web/**"
                     ],
@@ -838,6 +938,7 @@
                       "**/indexing/**",
                       "**/preferences/**",
                       "**/build-queue/**",
+                      "**/agents/**",
                       "**/server/**",
                       "**/web/**"
                     ],
@@ -890,6 +991,7 @@
                       "**/scene/**",
                       "**/map/**",
                       "**/build-queue/**",
+                      "**/agents/**",
                       "**/server/**",
                       "**/web/**"
                     ],
@@ -1006,6 +1108,7 @@
                       "**/language/**",
                       "**/search/**",
                       "**/indexing/**",
+                      "**/agents/**",
                       "**/server/**"
                     ],
                     "message": "Imports follow the module rules in CONVENTIONS.md."

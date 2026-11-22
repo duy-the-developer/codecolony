@@ -2,6 +2,7 @@ import type { Scene } from '../scene/scene.ts'
 import { HOVER_COLOR, hueOf, SELECTION_COLOR, SYMBOL_COLORS } from '../theme/palette.ts'
 import { HEADER_UNITS, type WorldNode } from '../world/world-types.ts'
 import type { Camera, Viewport } from './camera.ts'
+import type { ColonistLayer } from './colonist-layer.ts'
 import type { Focus } from './focus.ts'
 import type { LaneFrame, LaneLayer } from './lanes/lane-layer.ts'
 import type { LaneRoutes } from './lanes/lane-world.ts'
@@ -32,6 +33,8 @@ export interface RenderState {
   overlays: ReadonlySet<OverlayId>
   // Routes the Dependency overlay's lanes; without it none are drawn.
   lanes?: LaneLayer
+  // Colonists' diff outlines, drawn over the blocks under the selection.
+  colonists?: ColonistLayer
 }
 
 const BACKGROUND = '#0d1b2a'
@@ -90,6 +93,7 @@ export function render(
   )
   if (frame) drawLanes(ctx, frame, camera, view)
   drawLabels(ctx, labels)
+  state.colonists?.drawChanges(ctx, scene, camera, drawn)
   ctx.globalAlpha = 1
   ctx.setLineDash([])
   // The nodes at the other end of the focus's imports, then the hovered

@@ -5,6 +5,7 @@ import type {
   PanelImperativeHandle,
   PanelSize,
 } from 'react-resizable-panels'
+import { logError } from '../../../modules/logging/log.ts'
 import { type MapHandle, ZOOM_STEP } from '../../../modules/map/map-controller.ts'
 import type { OverlayId } from '../../../modules/map/overlays.ts'
 import {
@@ -14,17 +15,20 @@ import {
   type ShellPreferences,
 } from '../../../modules/preferences/shell-preferences.ts'
 import { findChangeTarget } from '../../../modules/scene/change-target.ts'
+import { placeColonists } from '../../../modules/scene/colonist-places.ts'
 import type { BuildOrder } from '../../../modules/wire/api-types.ts'
 import type { DeepResponse, WorldNode } from '../../../modules/world/world-types.ts'
 import { fetchOrderChanges } from '../../client/build-queue-client.ts'
 import { fetchSearchMatches } from '../../client/world-client.ts'
 import { useBuildQueue } from '../../hooks/use-build-queue.ts'
+import { useColonists } from '../../hooks/use-colonists.ts'
 import { useDock } from '../../hooks/use-dock.ts'
 import { useProjects } from '../../hooks/use-projects.ts'
 import { useSceneRevision } from '../../hooks/use-scene-revision.ts'
 import { useShellPreferences } from '../../hooks/use-shell-preferences.ts'
 import { useWorld } from '../../hooks/use-world.ts'
 import { AppHeader } from '../app-header/app-header.tsx'
+import { ColonistRoster } from '../colonist-roster/colonist-roster.tsx'
 import { LeftPanel } from '../left-panel/left-panel.tsx'
 import { MapBreadcrumb } from '../map-breadcrumb/map-breadcrumb.tsx'
 import { MapView } from '../map-view/map-view.tsx'
@@ -57,7 +61,10 @@ export function App() {
     })
   }, [])
   const [dockElement, setDockElement] = useState<HTMLDivElement | null>(null)
-  const { workers } = useDock(dockElement)
+  const { dock, workers } = useDock(dockElement)
+  const colonists = useColonists()
+  const placed = useMemo(() => (scene ? placeColonists(scene, colonists) : []), [scene, colonists])
+  const [selectedColonistId, setSelectedColonistId] = useState<string>()
   const mapRef = useRef<MapHandle | null>(null)
   const leftPanelRef = useRef<PanelImperativeHandle | null>(null)
   const rightPanelRef = useRef<PanelImperativeHandle | null>(null)
@@ -79,6 +86,7 @@ export function App() {
     [selectedIds, scene],
   )
   const selected = selection.at(-1)
+  const selectedColonist = placed.find((p) => p.colonist.id === selectedColonistId)
 
   const updatePanel = useCallback(
     <S extends PanelSide>(side: S, change: Partial<ShellPreferences[S]>) =>
@@ -102,6 +110,40 @@ export function App() {
     const panel = panelRefs.right.current
     if (panel?.isCollapsed()) panel.resize(widthsPx.current.right)
   }, [updatePanel, panelRefs])
+
+  // Opens the right panel on a tab.
+  const showRightTab = useCallback(
+    (tab: ShellPreferences['right']['tab']) => {
+      updatePanel('right', { tab })
+      const panel = panelRefs.right.current
+      if (panel?.isCollapsed()) panel.resize(widthsPx.current.right)
+    },
+    [updatePanel, panelRefs],
+  )
+
+  // A colonist picked on the map shows its card in the Inspector.
+  const handleSelectColonist = useCallback(
+    (id: string | undefined) => {
+      setSelectedColonistId(id)
+      if (id) showRightTab('inspector')
+    },
+    [showRightTab],
+  )
+
+  // Picks a colonist from a panel and frames everything it touches.
+  const pickColonist = useCallback((id: string) => {
+    mapRef.current?.selectColonist(id, true)
+  }, [])
+
+  const openTerminal = useCallback(
+    (paneId: string) => {
+      showRightTab('terminal')
+      dock?.focusPane(paneId).catch((error: unknown) => {
+        logError('Could not focus the pane', { paneId, error })
+      })
+    },
+    [dock, showRightTab],
+  )
 
   const openFile = useCallback(
     (id: string) => {
@@ -135,16 +177,23 @@ export function App() {
     [updatePreferences],
   )
 
-  // Flies to the files the order's worker changed. TODO(#43): once colonists
-  // are on the map, select the order's colonist (order.colonist) instead.
+  // Picks the order's colonist when it is on the map, else flies to the files
+  // its worker changed.
   const showOrderOnMap = useCallback(
     async (order: BuildOrder) => {
+      const colonist = placed.find(
+        (p) => order.colonist !== undefined && p.colonist.task === order.colonist && p.bounds,
+      )
+      if (colonist) {
+        pickColonist(colonist.colonist.id)
+        return true
+      }
       const changes = await fetchOrderChanges(order.id)
       const target = changes && scene ? findChangeTarget(scene, changes) : undefined
       if (target) pick(target.id)
       return target !== undefined
     },
-    [scene, pick],
+    [placed, pickColonist, scene, pick],
   )
 
   const togglePanel = useCallback(
@@ -256,11 +305,20 @@ export function App() {
             scene={scene}
             handleRef={mapRef}
             overlays={overlays}
+            colonists={placed}
             onSelect={setSelectedIds}
+            onSelectColonist={handleSelectColonist}
             onOpen={showFile}
           >
             <div className="pointer-events-none absolute inset-x-3 top-3 flex items-start gap-2">
               <MapBreadcrumb scene={scene} selected={selected} onPick={pick} />
+              <div className="ml-auto flex min-w-0 justify-end">
+                <ColonistRoster
+                  colonists={colonists}
+                  selectedId={selectedColonistId}
+                  onPick={pickColonist}
+                />
+              </div>
             </div>
             <ZoomControls
               onZoomIn={() => mapRef.current?.zoomBy(ZOOM_STEP)}
@@ -288,6 +346,10 @@ export function App() {
               scene={scene}
               selected={selected}
               selection={selection}
+              colonist={selectedColonist}
+              canOpenTerminal={workers.some(
+                (worker) => worker.paneId === selectedColonist?.colonist.paneId,
+              )}
               workerCount={workers.length}
               dockRef={setDockElement}
               onTabChange={(tab) => updatePanel('right', { tab })}
@@ -295,6 +357,8 @@ export function App() {
               onPick={pick}
               onOpen={openFile}
               onTraceCalls={traceCalls}
+              onCloseColonist={() => mapRef.current?.selectColonist(undefined)}
+              onOpenTerminal={openTerminal}
             />
           </PanelContent>
         </ResizablePanel>

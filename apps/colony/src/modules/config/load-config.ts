@@ -18,8 +18,8 @@ export interface ProjectConfig extends ProjectSummary {
 export interface ColonyConfig {
   projects: ProjectConfig[]
   cacheDir: string
-  // A firstmate home whose backlog and worker state feed the build queue,
-  // read only. Absent: the queue is not connected.
+  // A firstmate home whose backlog and worker state feed the build queue and
+  // the colonists' tasks, read only. Absent: neither is connected.
   firstmateHome?: string
   // Where the config came from: a file path, or 'default'.
   source: string
