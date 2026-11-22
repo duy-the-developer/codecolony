@@ -27,7 +27,7 @@ interface StatusEvent {
 const LINE = /^([a-z][\w-]*)((?:\s*\[[^\]]*\])*)\s*:\s?(.*)$/
 const KEY = /\[key=([^\]]+)\]/
 const PULL_REQUEST_URL = /https?:\/\/\S+?\/(?:pull|pulls|merge_requests)\/\d+/g
-const EVENT_VERBS = new Set(['working', 'paused', 'needs-decision', 'blocked', 'done', 'failed'])
+const PROGRESS_VERBS = new Set(['working', 'paused', 'done', 'failed'])
 const OPENING_VERBS = new Set(['needs-decision', 'blocked'])
 
 export function parseStatusLog(text: string): WorkerStatus {
@@ -45,7 +45,7 @@ export function parseStatusLog(text: string): WorkerStatus {
       open.delete(key)
       open.set(key, event)
     }
-    if (EVENT_VERBS.has(event.verb)) last = event
+    if (PROGRESS_VERBS.has(event.verb)) last = event
   }
   const pending = [...open.values()]
   const waiting = pending.findLast((event) => event.verb === 'needs-decision')

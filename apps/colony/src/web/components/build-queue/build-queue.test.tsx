@@ -109,6 +109,17 @@ describe('BuildQueue', () => {
     await waitFor(() => expect(screen.getByText('No file changes on the map yet.')).toBeTruthy())
   })
 
+  it('logs a failed show on map instead of claiming there are no changes', async () => {
+    const error = new Error('502')
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const onShowOnMap = vi.fn(() => Promise.reject(error))
+    renderQueue({ onShowOnMap })
+    fireEvent.click(screen.getByRole('button', { name: 'Show on map' }))
+    await waitFor(() => expect(consoleError).toHaveBeenCalledWith('Show on map failed', error))
+    expect(screen.queryByText('No file changes on the map yet.')).toBeNull()
+    consoleError.mockRestore()
+  })
+
   it('says it is not connected without a firstmate home', () => {
     renderQueue({ queue: { isConnected: false } })
     expect(screen.getByText(/Not connected to firstmate/)).toBeTruthy()

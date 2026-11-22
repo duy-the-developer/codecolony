@@ -194,7 +194,10 @@ function OrderCard({ order, number, onShowOnMap }: OrderCardProps) {
   const handleShowOnMap = () => {
     onShowOnMap(order).then(
       (isShown) => setHasNoChanges(!isShown),
-      () => setHasNoChanges(true),
+      (error: unknown) => {
+        console.error('Show on map failed', error)
+        setHasNoChanges(false)
+      },
     )
   }
   return (

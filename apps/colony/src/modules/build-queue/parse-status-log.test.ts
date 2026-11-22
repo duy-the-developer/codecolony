@@ -34,6 +34,30 @@ describe('parseStatusLog', () => {
     expect(status).toEqual({ state: 'blocked', note: 'daemon socket refused' })
   })
 
+  it('goes back to the latest progress once its open decision or block is resolved', () => {
+    expect(
+      parseStatusLog(
+        [
+          'working [at=1]: started',
+          'needs-decision [key=scope] [at=2]: A or B?',
+          'resolved [key=scope] [at=3]: A',
+        ].join('\n'),
+      ),
+    ).toEqual({ state: 'working', note: 'started' })
+    expect(
+      parseStatusLog(
+        [
+          'working [at=1]: started',
+          'blocked [key=x] [at=2]: no socket',
+          'resolved [key=x] [at=3]: up',
+        ].join('\n'),
+      ),
+    ).toEqual({ state: 'working', note: 'started' })
+    expect(parseStatusLog('blocked [at=1]: no socket\nresolved [at=2]: up')).toEqual({
+      state: 'working',
+    })
+  })
+
   it('is PR ready when done names the PR, and still working on a bare handoff', () => {
     expect(parseStatusLog(`working [at=1]: draft at ${PR}\ndone [at=2]: built it`)).toEqual({
       state: 'working',
