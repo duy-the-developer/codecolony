@@ -137,7 +137,10 @@ export function render(
     drawn,
     lines: {
       overlays: frame?.all ? ['dependency'] : [],
-      isDirected: isDirected && frame !== undefined && (frame.partners.size > 0 || !!frame.focus),
+      isDirected:
+        isDirected &&
+        frame !== undefined &&
+        (!!frame.hot || !!frame.focus || frame.partners.size > 0),
     },
   }
 }
