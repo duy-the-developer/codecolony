@@ -34,6 +34,10 @@ export interface PackRowsOptions {
   gutter: number
   // Whole units some gaps are widened by, to make room for dependency lanes.
   widen?: GapWidening
+  // A width-to-height ratio for the whole: new items fill rows to the width
+  // that brings the packed rows closest to it. Without one, rows fill to
+  // about ASPECT, judged by area.
+  aspect?: number
 }
 
 // Extra units per gap, keyed by item id: the gap above the row that holds the
@@ -46,6 +50,11 @@ export interface GapWidening {
 }
 
 const NO_WIDENING: GapWidening = { rows: new Map(), slots: new Map(), stacks: new Map() }
+
+interface Row {
+  stored: number | undefined
+  slots: RowItem[][]
+}
 
 export interface PackRowsResult {
   rows: StoredRow[]
@@ -65,11 +74,11 @@ const FILL_SHARE = 0.75
 export function packRows(
   items: readonly RowItem[],
   saved: readonly StoredRow[],
-  { gutter, widen = NO_WIDENING }: PackRowsOptions,
+  { gutter, widen = NO_WIDENING, aspect }: PackRowsOptions,
 ): PackRowsResult {
   const byId = new Map(items.map((item) => [item.id, item]))
   const seen = new Set<string>()
-  const rows: { stored: number | undefined; slots: RowItem[][] }[] = []
+  const rows: Row[] = []
   for (const row of saved) {
     const slots: RowItem[][] = []
     for (const slot of row.slots) {
@@ -95,24 +104,12 @@ export function packRows(
       area += (item.w + gutter) * (item.h + gutter)
       widest = Math.max(widest, item.w)
     }
-    const target = Math.max(
-      widest,
-      Math.ceil(Math.sqrt(area * ASPECT)),
-      ...rows.map((row) => rowWidth(row.slots, gutter)),
-    )
-    const topRank = rows.map((row) => Math.max(...row.slots.flat().map((item) => item.rank)))
-    for (const item of pending) {
-      // The lowest row that still holds something ranked at or above the item.
-      const r = topRank.findLastIndex((rank) => rank >= item.rank)
-      const row = rows[r]
-      if (row && insert(row, item, target, gutter)) {
-        topRank[r] = Math.max(topRank[r] as number, item.rank)
-        continue
-      }
-      const at = r + 1
-      rows.splice(at, 0, { stored: undefined, slots: [[item]] })
-      topRank.splice(at, 0, item.rank)
-    }
+    const least = Math.max(widest, ...rows.map((row) => rowWidth(row.slots, gutter)))
+    const target =
+      aspect === undefined
+        ? Math.max(least, Math.ceil(Math.sqrt(area * ASPECT)))
+        : fitTarget(rows, pending, least, aspect, gutter)
+    fillRows(rows, pending, target, gutter)
   }
 
   // Extra units before a row or slot: the most any of its items asks for.
@@ -155,6 +152,58 @@ export function packRows(
   return { rows: stored, placed, width, height: y }
 }
 
+// Places new items, highest rank first, in the lowest row that holds
+// something ranked at or above them, or in a new row below it.
+function fillRows(rows: Row[], pending: readonly RowItem[], target: number, gutter: number): void {
+  const topRank = rows.map((row) => Math.max(...row.slots.flat().map((item) => item.rank)))
+  for (const item of pending) {
+    const r = topRank.findLastIndex((rank) => rank >= item.rank)
+    const row = rows[r]
+    if (row && insert(row, item, target, gutter)) {
+      topRank[r] = Math.max(topRank[r] as number, item.rank)
+      continue
+    }
+    const at = r + 1
+    rows.splice(at, 0, { stored: undefined, slots: [[item]] })
+    topRank.splice(at, 0, item.rank)
+  }
+}
+
+// The row width, from least up, that packs the rows closest to `aspect`: one
+// try per width that fits one more of the new items in a row.
+function fitTarget(
+  rows: readonly Row[],
+  pending: readonly RowItem[],
+  least: number,
+  aspect: number,
+  gutter: number,
+): number {
+  const widths = new Set([least])
+  let run = -gutter
+  for (const item of pending) {
+    run += item.w + gutter
+    widths.add(Math.max(least, run))
+  }
+  let best = least
+  let bestMiss = Number.POSITIVE_INFINITY
+  for (const width of [...widths].sort((a, b) => a - b)) {
+    const trial = rows.map((row) => ({ stored: row.stored, slots: row.slots.map((s) => [...s]) }))
+    fillRows(trial, pending, width, gutter)
+    let w = 0
+    let h = -gutter
+    for (const row of trial) {
+      w = Math.max(w, rowWidth(row.slots, gutter))
+      h += gutter + Math.max(row.stored ?? 0, ...row.slots.map((slot) => slotHeight(slot, gutter)))
+    }
+    const miss = Math.abs(Math.log(w / h / aspect))
+    if (miss < bestMiss) {
+      best = width
+      bestMiss = miss
+    }
+  }
+  return best
+}
+
 // Two of an item fit in a row this tall.
 function canShare(item: RowItem, rowHeight: number, gutter: number): boolean {
   return 2 * item.h + gutter <= rowHeight
@@ -182,12 +231,7 @@ function rowWidth(slots: readonly RowItem[][], gutter: number): number {
 
 // Puts a new item on a stack with room, or in a new slot at the end of the
 // row while the row stays within target. False when neither fits.
-function insert(
-  row: { stored: number | undefined; slots: RowItem[][] },
-  item: RowItem,
-  target: number,
-  gutter: number,
-): boolean {
+function insert(row: Row, item: RowItem, target: number, gutter: number): boolean {
   const need = Math.max(...row.slots.map((slot) => slotHeight(slot, gutter)))
   const h = Math.max(need, row.stored ?? 0)
   const width = rowWidth(row.slots, gutter)

@@ -1,58 +1,58 @@
-import type { RouteNode } from '../../lane-routing/route-boxes.ts'
+import { looseId, type RouteNode } from '../../lane-routing/route-boxes.ts'
 import type { Scene } from '../../scene/scene.ts'
 import type { WorldNode } from '../../world/world-types.ts'
 import { DEPENDANT, DEPENDS_ON, type Focus, focusDirection } from '../focus.ts'
-import { LinkCache } from '../link-cache.ts'
+import { LINK_LEVELS_PER_OCTAVE, LinkCache } from '../link-cache.ts'
+import { FILE_LANES_PX } from '../lod.ts'
+import { clipHighways } from './clip-highways.ts'
 import type { LaneRouterHandle } from './lane-router.ts'
-import type { LaneEdge, LaneLevel, LaneRoutes } from './lane-world.ts'
+import type { Highways, HolderRoutes, LaneEdge, LaneRoutes } from './lane-world.ts'
 
-// The Dependency overlay's lanes for one scene, frame by frame. Each zoom
-// level (../link-cache.ts) has its own blocks, so lanes are routed per level, in
-// the worker, and kept for levels with the same open containers. With the
-// overlay on, every link of the level is routed; with it off, only the links
-// of the hovered or selected nodes. Until a level's routes arrive, the last
-// ones routed are drawn. Zoomed in far enough, the files on screen open, so
-// panning there moves to new levels as files come into view.
+// The Dependency overlay's lanes for one scene, frame by frame. Every lane is
+// routed once from the layout (lane-world.ts), in the worker, and kept: the
+// highways between blocks as soon as the scene loads, and the lanes inside a
+// holder of files the first time it is drawn with its files from
+// FILE_LANES_PX. The camera never changes a lane; each zoom level only cuts
+// the highways at the closed containers drawn for their ends
+// (clip-highways.ts), and decides which holders' lanes show. With the overlay
+// on, every lane is drawn; with it off, only those of the hovered or selected
+// nodes.
 
 export interface LaneFrame {
-  // Every link of the level, with the overlay on.
+  // Every highway drawn at this zoom level, with the overlay on.
   all: LaneRoutes | undefined
-  // Per link of all's level, the focus.ts direction bits of the focus's
-  // imports it carries, 0 for none; undefined when nothing in focus has such
-  // a link. Kept while the focus and level stay the same.
+  // Per link of all, the focus.ts direction bits of the focus's imports it
+  // carries, 0 for none; undefined when nothing in focus has such a link.
   hot: Uint8Array | undefined
-  // Only the focus's links, with the overlay off, and their direction bits
-  // per link of their level.
+  // With the overlay off, the highways drawn at this level, of which only
+  // those with direction bits in focusHot show.
   focus: LaneRoutes | undefined
   focusHot: Uint8Array | undefined
+  // The lanes inside the holders of files drawn on screen, from FILE_LANES_PX.
+  files: FileLanes[]
   // Drawn nodes at the other end of the focus's imports, by id, with the
   // direction bits of the imports that reach them.
   partners: ReadonlyMap<string, number>
 }
 
-interface FocusRoutes {
+export interface FileLanes {
   routes: LaneRoutes
-  hot: Uint8Array
+  // Direction bits per link, as for LaneFrame.hot.
+  hot: Uint8Array | undefined
+  // Every lane shows, not only those of the focus.
+  isAll: boolean
 }
 
 interface Holder {
   readonly node: WorldNode
 }
 
-type Job =
-  | { kind: 'level'; key: string; open: readonly string[] }
-  | { kind: 'all'; key: string; open: readonly string[] }
-  | {
-      kind: 'focus'
-      key: string
-      open: readonly string[]
-      focus: string
-      only: number[]
-      hot: Uint8Array
-    }
+type Job = { kind: 'highways' } | { kind: 'holder'; holder: string }
 
-// Routed results kept per kind.
-const MAX_KEPT = 6
+// Zoom levels and holders whose lanes are kept; routing them again gives the
+// same lanes.
+const MAX_LEVELS = 16
+const MAX_HOLDERS = 512
 
 let versions = 0
 
@@ -60,21 +60,23 @@ export class LaneLayer {
   private readonly router: LaneRouterHandle
   private readonly onChange: () => void
   private readonly version = ++versions
+  private readonly scene: Scene
   private readonly links: LinkCache
   // The scene's import edges, in the order the worker has them.
   private readonly edges: LaneEdge[] = []
-  private readonly levels = new Map<string, LaneLevel>()
-  private readonly allRoutes = new Map<string, LaneRoutes>()
-  private readonly focusRoutes = new Map<string, FocusRoutes>()
-  private lastAll: { key: string; routes: LaneRoutes } | undefined
-  private lastFocus: { focus: string; routed: FocusRoutes } | undefined
-  private hot: { key: string; focus: Focus; links: Uint8Array | undefined } | undefined
+  private highways: Highways | undefined
+  private readonly levels = new Map<number, LaneRoutes>()
+  private readonly holders = new Map<string, HolderRoutes>()
+  private hot: { focus: Focus; links: Uint8Array | undefined } | undefined
+  private holderHot = new WeakMap<HolderRoutes, Uint8Array | undefined>()
+  private holderHotFocus: Focus | undefined
   private busy: Job | undefined
-  private wanted: Job | undefined
+  private readonly wanted: Job[] = []
 
   constructor(scene: Scene, router: LaneRouterHandle, onChange: () => void) {
     this.router = router
     this.onChange = onChange
+    this.scene = scene
     this.links = new LinkCache(scene)
     for (const edge of scene.edges)
       if (edge.kind === 'import') this.edges.push([edge.from, edge.to])
@@ -90,50 +92,45 @@ export class LaneLayer {
   // The lanes to draw at this scale. holders: the drawn nodes that can hold
   // a link end; focus: the hovered or selected nodes, if any.
   frame(scale: number, holders: readonly Holder[], focus: Focus, isOverlayOn: boolean): LaneFrame {
-    const open = this.links.listOpenContainers(scale, holders)
-    const level = this.levels.get(open.key)
-    let job: Job | undefined
     const frame: LaneFrame = {
       all: undefined,
       hot: undefined,
       focus: undefined,
       focusHot: undefined,
+      files: [],
       partners: new Map(),
     }
-    if (!level) {
-      job = { kind: 'level', key: open.key, open: open.ids }
-    } else if (isOverlayOn) {
-      if (!this.allRoutes.has(open.key)) job = { kind: 'all', key: open.key, open: open.ids }
-    } else if (focus.ids.length > 0) {
-      const hot = this.listHot(open.key, level, focus)
-      const only: number[] = []
-      hot?.forEach((direction, link) => {
-        if (direction) only.push(link)
-      })
-      const routed = this.focusRoutes.get(`${open.key}\n${focus.key}`)
-      frame.focus = routed?.routes
-      frame.focusHot = routed?.hot
-      if (!routed && hot && only.length > 0) {
-        job = { kind: 'focus', key: open.key, open: open.ids, focus: focus.key, only, hot }
+    const hasFocus = focus.ids.length > 0
+    const jobs: Job[] = []
+    if (!this.highways) {
+      jobs.push({ kind: 'highways' })
+    } else if (isOverlayOn || hasFocus) {
+      const routes = this.resolveLevel(scale)
+      const hot = hasFocus ? this.listHot(focus) : undefined
+      if (isOverlayOn) {
+        frame.all = routes
+        frame.hot = hot
+      } else if (hot) {
+        frame.focus = routes
+        frame.focusHot = hot
+      }
+      if (scale >= FILE_LANES_PX) {
+        for (const holder of this.listFileHolders(holders)) {
+          const routed = this.holders.get(holder)
+          if (!routed) {
+            jobs.push({ kind: 'holder', holder })
+            continue
+          }
+          const lanes = hasFocus ? this.listHolderHot(routed, focus) : undefined
+          if (isOverlayOn || lanes) {
+            frame.files.push({ routes: routed.routes, hot: lanes, isAll: isOverlayOn })
+          }
+        }
       }
     }
-    // While the focus's lanes at this level are on their way, its last ones.
-    if (!isOverlayOn && !frame.focus && job && this.lastFocus?.focus === focus.key) {
-      frame.focus = this.lastFocus.routed.routes
-      frame.focusHot = this.lastFocus.routed.hot
-    }
-    if (isOverlayOn) {
-      const routed = this.allRoutes.get(open.key)
-      const shown = routed ? { key: open.key, routes: routed } : this.lastAll
-      const shownLevel = shown && this.levels.get(shown.key)
-      if (shown && shownLevel) {
-        frame.all = shown.routes
-        if (focus.ids.length > 0) frame.hot = this.listHot(shown.key, shownLevel, focus)
-      }
-    }
-    this.want(job)
+    this.want(jobs)
 
-    if (focus.ids.length > 0) {
+    if (hasFocus) {
       const partners = new Map<string, number>()
       const links = this.links.listLinks(scale, holders, focus.all)
       const mark = (id: string | undefined, direction: number) => {
@@ -151,36 +148,91 @@ export class LaneLayer {
     return frame
   }
 
-  // Which way each of a level's links carries imports into or out of a
-  // focused node, or undefined when none does. Imports inside one are left
-  // out, as in the inspector; imports between two focused nodes count.
-  private listHot(key: string, level: LaneLevel, focus: Focus): Uint8Array | undefined {
-    if (this.hot?.key === key && this.hot.focus === focus) return this.hot.links
+  // The highways as drawn at the level a scale falls in, cut once per level.
+  private resolveLevel(scale: number): LaneRoutes {
+    const level = Math.floor(Math.log2(scale) * LINK_LEVELS_PER_OCTAVE)
+    let routes = this.levels.get(level)
+    if (!routes) {
+      routes = clipHighways(this.highways as Highways, this.links, this.links.getDrawnLevel(scale))
+      keep(this.levels, level, routes, MAX_LEVELS)
+    }
+    return routes
+  }
+
+  // The holders (route-boxes.ts) of the files drawn, in id order: a module of
+  // files, or a folder's own files beside its subfolders.
+  private listFileHolders(holders: readonly Holder[]): string[] {
+    const found = new Set<string>()
+    for (const { node } of holders) {
+      if (node.kind !== 'file' || !node.parent) continue
+      const parent = this.scene.byId.get(node.parent)
+      if (!parent) continue
+      const hasFolders = this.scene.children
+        .get(parent.id)
+        ?.some((kid) => kid.kind !== 'file' && kid.kind !== 'symbol')
+      found.add(hasFolders ? looseId(parent.id) : parent.id)
+    }
+    return [...found].sort()
+  }
+
+  // Which way each highway carries imports into or out of a focused node, or
+  // undefined when none does. Imports inside one are left out, as in the
+  // inspector; imports between two focused nodes count.
+  private listHot(focus: Focus): Uint8Array | undefined {
+    if (this.hot?.focus === focus) return this.hot.links
+    const { linkOfEdge, links: all } = this.highways as Highways
     let links: Uint8Array | undefined
     this.edges.forEach(([from, to], e) => {
-      const link = level.linkOfEdge[e] as number
+      const link = linkOfEdge[e] as number
       const direction = link < 0 ? 0 : focusDirection(focus, from, to)
       if (direction === 0) return
-      links ??= new Uint8Array(level.links.length)
+      links ??= new Uint8Array(all.length)
       links[link] = (links[link] as number) | direction
     })
-    this.hot = { key, focus, links }
+    this.hot = { focus, links }
     return links
   }
 
-  // Asks for a job once the one in flight is done; a newer wish replaces an
-  // older one that has not started.
-  private want(job: Job | undefined): void {
-    if (!job || (this.busy && sameJob(this.busy, job))) return
-    this.wanted = job
+  // The same for a holder's lanes, kept per focus.
+  private listHolderHot(routed: HolderRoutes, focus: Focus): Uint8Array | undefined {
+    if (this.holderHotFocus !== focus) {
+      this.holderHotFocus = focus
+      this.holderHot = new WeakMap()
+    }
+    if (this.holderHot.has(routed)) return this.holderHot.get(routed)
+    let links: Uint8Array | undefined
+    const count = routed.routes.links.length
+    for (let i = 0; i < count; i++) {
+      let direction = 0
+      for (
+        let k = routed.edgeOffsets[i] as number;
+        k < (routed.edgeOffsets[i + 1] as number);
+        k++
+      ) {
+        const [from, to] = this.edges[routed.edges[k] as number] as LaneEdge
+        direction |= focusDirection(focus, from, to)
+      }
+      if (direction === 0) continue
+      links ??= new Uint8Array(count)
+      links[i] = direction
+    }
+    this.holderHot.set(routed, links)
+    return links
+  }
+
+  // Asks for the jobs this frame needs once the one in flight is done; they
+  // replace any asked for before that have not started.
+  private want(jobs: Job[]): void {
+    this.wanted.length = 0
+    for (const job of jobs) if (!this.busy || !sameJob(this.busy, job)) this.wanted.push(job)
     this.run()
   }
 
   private run(): void {
-    const job = this.wanted
-    if (this.busy || !job) return
+    if (this.busy) return
+    const job = this.wanted.shift()
+    if (!job) return
     this.busy = job
-    this.wanted = undefined
     const done = () => {
       this.busy = undefined
       this.onChange()
@@ -191,42 +243,29 @@ export class LaneLayer {
       this.busy = undefined
       this.run()
     }
-    if (job.kind === 'level') {
-      this.router.describeLevel(this.version, job.key, job.open).then((level) => {
-        keep(this.levels, job.key, level)
+    if (job.kind === 'highways') {
+      this.router.routeHighways(this.version).then((highways) => {
+        this.highways = highways
         done()
       }, failed)
       return
     }
-    this.router
-      .route(this.version, job.key, job.open, job.kind === 'focus' ? job.only : undefined)
-      .then((routes) => {
-        if (job.kind === 'all') {
-          keep(this.allRoutes, job.key, routes)
-          this.lastAll = { key: job.key, routes }
-        } else {
-          const routed = { routes, hot: job.hot }
-          keep(this.focusRoutes, `${job.key}\n${job.focus}`, routed)
-          this.lastFocus = { focus: job.focus, routed }
-        }
-        done()
-      }, failed)
+    this.router.routeHolder(this.version, job.holder).then((routed) => {
+      keep(this.holders, job.holder, routed, MAX_HOLDERS)
+      done()
+    }, failed)
   }
 }
 
 function sameJob(a: Job, b: Job): boolean {
-  return (
-    a.kind === b.kind &&
-    a.key === b.key &&
-    (a.kind !== 'focus' || b.kind !== 'focus' || a.focus === b.focus)
-  )
+  return a.kind === b.kind && (a.kind !== 'holder' || b.kind !== 'holder' || a.holder === b.holder)
 }
 
-// Adds a value, dropping the oldest once more than MAX_KEPT are held.
-function keep<T>(map: Map<string, T>, key: string, value: T): void {
+// Adds a value, dropping the oldest once more than max are held.
+function keep<K, T>(map: Map<K, T>, key: K, value: T, max: number): void {
   map.delete(key)
   map.set(key, value)
-  if (map.size > MAX_KEPT) {
+  if (map.size > max) {
     const oldest = map.keys().next().value
     if (oldest !== undefined) map.delete(oldest)
   }

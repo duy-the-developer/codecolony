@@ -99,6 +99,8 @@ export interface ChannelGraph {
   stuck: number
   // Every box by id.
   nest: Map<string, BoxNest>
+  // The ring of channels around the whole map, by side.
+  around: Record<BlockSide, number>
 }
 
 interface Band {
@@ -116,7 +118,7 @@ interface Item {
 // Channels next to a band, by side: top, right, bottom, left.
 type Neighbours = [number, number, number, number]
 
-// Width of the ring of channels around the map, in units.
+// Width of the ring of channels around the map, in units, by default.
 const RING_UNITS = 8
 
 const TOP = 0
@@ -130,13 +132,18 @@ const CUT_SIDES = {
   x: [LEFT, RIGHT, TOP, BOTTOM],
 } as const
 
-export function buildChannelGraph(root: RouteBox, edgeLanes = false): ChannelGraph {
+export function buildChannelGraph(
+  root: RouteBox,
+  edgeLanes = false,
+  ringUnits = RING_UNITS,
+): ChannelGraph {
   const graph: ChannelGraph = {
     channels: [],
     attachments: [],
     blockAttachments: new Map(),
     stuck: 0,
     nest: nestBoxes(root),
+    around: { top: -1, right: -1, bottom: -1, left: -1 },
   }
 
   const attach = (attachment: Attachment) => {
@@ -423,25 +430,25 @@ export function buildChannelGraph(root: RouteBox, edgeLanes = false): ChannelGra
     graph.channels.push({ ...channel, container: root.id, after: [] }) - 1
   const left = ring({
     axis: 'y',
-    low: band.x0 - RING_UNITS,
+    low: band.x0 - ringUnits,
     high: band.x0,
-    start: band.y0 - RING_UNITS,
-    end: band.y1 + RING_UNITS,
+    start: band.y0 - ringUnits,
+    end: band.y1 + ringUnits,
     depth: -2,
     bars: [-1, -1],
   })
   const right = ring({
     axis: 'y',
     low: band.x1,
-    high: band.x1 + RING_UNITS,
-    start: band.y0 - RING_UNITS,
-    end: band.y1 + RING_UNITS,
+    high: band.x1 + ringUnits,
+    start: band.y0 - ringUnits,
+    end: band.y1 + ringUnits,
     depth: -2,
     bars: [-1, -1],
   })
   for (const [low, high] of [
-    [band.y0 - RING_UNITS, band.y0],
-    [band.y1, band.y1 + RING_UNITS],
+    [band.y0 - ringUnits, band.y0],
+    [band.y1, band.y1 + ringUnits],
   ] as const) {
     const index = ring({
       axis: 'x',
@@ -465,6 +472,7 @@ export function buildChannelGraph(root: RouteBox, edgeLanes = false): ChannelGra
   }
   const top = graph.channels.length - 2
   const bottom = graph.channels.length - 1
+  graph.around = { top, right, bottom, left }
   place({ band, box: root }, [top, right, bottom, left], 0)
   return graph
 }

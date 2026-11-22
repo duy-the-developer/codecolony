@@ -20,6 +20,8 @@ import type { DeepResponse, Edge, World } from '../modules/world/world-types.ts'
 // The part of the Colony the API reads; tests pass a stub.
 export interface WorldSource {
   readonly world: World
+  // Fits a fresh layout's top level to a page's window shape (Colony.fitWindow).
+  fitWindow(aspect: number): void
   deepIndex(fileId: string): Promise<Edge[]>
   readFile(fileId: string): Promise<FileResponse | undefined>
   on(event: 'update', listener: (world: World) => void): unknown
@@ -45,6 +47,8 @@ export interface ApiDeps {
 const HEARTBEAT_MS = 25_000
 const MAX_SEARCH_LIMIT = 50
 const MAX_SYMBOL_FILES = 500
+// Window shapes a page may report, width over height.
+const WINDOW_ASPECTS = [0.2, 10] as const
 
 // Answers /api/* and returns true, or returns false to let the page handle it.
 // Source text and colonists (folders, agent status lines) are token-guarded;
@@ -64,6 +68,9 @@ export function createApi(config: ColonyConfig, { world: source, colonists, deny
       }
       json(res, 200, body)
     } else if (pathname === '/api/world') {
+      // ?aspect=A: the page's window is A times as wide as it is tall.
+      const aspect = Number(url.searchParams.get('aspect') ?? Number.NaN)
+      if (aspect >= WINDOW_ASPECTS[0] && aspect <= WINDOW_ASPECTS[1]) source.fitWindow(aspect)
       // ?session=S&since=V: the page holds version V and wants what changed.
       const session = url.searchParams.get('session')
       const since = Number(url.searchParams.get('since'))

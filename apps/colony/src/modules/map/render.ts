@@ -449,8 +449,8 @@ function buildLanePaths(routes: LaneRoutes, pick: (i: number) => boolean): LaneP
 // Each lane is a polyline from the importer's side to the imported block's
 // side, where an arrowhead points into the block. With a focus, every lane is
 // dimmed and the focus's lanes drawn bright on top, coloured by direction when
-// isDirected. Lanes between files are
-// too many to read one by one, so they are always dimmed. Paths are built
+// isDirected. Lanes inside holders of files are too many to read one by one,
+// so they are always dimmed. Paths are built
 // once per routing and drawn in world units, so a frame only strokes the
 // buckets on screen.
 function drawLanes(
@@ -476,11 +476,26 @@ function drawLanes(
   }
   const { all, hot, focus, focusHot } = frame
   if (all) {
-    const emphasis = hot || all.pitch > 1 ? 'dim' : 'normal'
-    layers.push([all, getLanePaths(all, 'all', undefined), emphasis, DEPENDENCY_COLOR])
+    layers.push([
+      all,
+      getLanePaths(all, 'all', undefined),
+      hot ? 'dim' : 'normal',
+      DEPENDENCY_COLOR,
+    ])
     if (hot) addHot(all, hot, 'hot')
   }
-  if (focus) addHot(focus, focusHot, 'all')
+  if (focus) addHot(focus, focusHot, 'hot')
+  for (const files of frame.files) {
+    if (files.isAll) {
+      layers.push([
+        files.routes,
+        getLanePaths(files.routes, 'all', undefined),
+        'dim',
+        DEPENDENCY_COLOR,
+      ])
+    }
+    if (files.hot) addHot(files.routes, files.hot, 'hot')
+  }
   if (layers.length === 0) return
 
   const unit = camera.scale
@@ -514,6 +529,7 @@ function drawLanes(
     ctx.beginPath()
     for (const bucket of shown) {
       for (const i of bucket.lanes) {
+        if (routes.arrows && !routes.arrows[i]) continue
         const end = routes.offsets[i + 1] as number
         const [px, py] = camera.toScreen(
           routes.points[end - 4] as number,

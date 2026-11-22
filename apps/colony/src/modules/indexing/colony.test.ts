@@ -301,6 +301,38 @@ describe('Colony', () => {
     expect(world.nodes.some((n) => n.path === 'b.ts')).toBe(true)
   })
 
+  it("fits a fresh layout's projects to the first window shape, and keeps it", async () => {
+    const files: Record<string, string> = {}
+    for (let i = 0; i < 8; i++) files[`src/f${i}.ts`] = `export const v${i} = ${i}\n`.repeat(20)
+    const projects: ColonyConfig['projects'] = [
+      { name: 'one', root: makeRepo(files), kind: 'repo' },
+      { name: 'two', root: makeRepo(files), kind: 'repo' },
+    ]
+    const cacheDir = makeTempDir()
+    const colony = colonyFor(projects, cacheDir)
+    await colony.refresh()
+    const placeOf = (world: World) =>
+      world.nodes.filter((n) => n.kind === 'project').map((n) => [n.rect.x, n.rect.y])
+    // Laid out for a 16:9 screen until a page says otherwise: side by side.
+    const [one, two] = placeOf(colony.world) as [number[], number[]]
+    expect(one[1]).toBe(two[1])
+
+    // A tall window's page stacks them, once; later shapes change nothing.
+    const version = colony.world.version
+    colony.fitWindow(9 / 16)
+    expect(colony.world.version).toBe(version + 1)
+    const tall = placeOf(colony.world) as [number[], number[]]
+    expect(tall[0]?.[0]).toBe(tall[1]?.[0])
+    colony.fitWindow(21 / 9)
+    expect(colony.world.version).toBe(version + 1)
+
+    // The shape is saved with the layout.
+    const restarted = colonyFor(projects, cacheDir)
+    await restarted.refresh()
+    restarted.fitWindow(21 / 9)
+    expect(placeOf(restarted.world)).toEqual(tall)
+  })
+
   it('maps every repository in a folder of repositories', async () => {
     const org = makeTempDir()
     makeRepo({ 'a.ts': 'export const a = 1\n' }, join(org, 'alpha'))

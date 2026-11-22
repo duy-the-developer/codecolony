@@ -21,16 +21,19 @@ interface StoredLayout {
   version: number
   rows: Record<string, StoredRow[]>
   modules: Record<string, StoredModule>
+  aspect?: number
 }
 
 export function loadLayout(path: string): LayoutStore {
   try {
     const raw = JSON.parse(readFileSync(path, 'utf8')) as Partial<StoredLayout>
     if (raw.version !== STORE_VERSION) return emptyLayout()
-    return {
+    const store: LayoutStore = {
       rows: new Map(Object.entries(raw.rows ?? {})),
       modules: new Map(Object.entries(raw.modules ?? {})),
     }
+    if (typeof raw.aspect === 'number' && raw.aspect > 0) store.aspect = raw.aspect
+    return store
   } catch {
     return emptyLayout()
   }
@@ -42,5 +45,6 @@ export function saveLayout(path: string, store: LayoutStore): void {
     rows: Object.fromEntries(store.rows),
     modules: Object.fromEntries(store.modules),
   }
+  if (store.aspect !== undefined) raw.aspect = store.aspect
   writeAtomic(path, JSON.stringify(raw))
 }

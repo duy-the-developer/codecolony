@@ -1,39 +1,33 @@
 import type { RouteNode } from '../../lane-routing/route-boxes.ts'
 import { logError } from '../../logging/log.ts'
-import { type LaneEdge, type LaneLevel, type LaneRoutes, LaneWorld } from './lane-world.ts'
+import {
+  type Highways,
+  type HolderRoutes,
+  type LaneEdge,
+  type LaneRoutes,
+  LaneWorld,
+} from './lane-world.ts'
 
 // Talks to the routing worker (lane-worker.ts). Where workers are missing, as
 // under test, it routes on the calling thread instead.
 
 export type LaneRequest =
   | { op: 'world'; version: number; nodes: RouteNode[]; edges: LaneEdge[] }
-  | { op: 'level'; id: number; version: number; key: string; open: readonly string[] }
-  | {
-      op: 'route'
-      id: number
-      version: number
-      key: string
-      open: readonly string[]
-      only?: readonly number[]
-    }
+  | { op: 'highways'; id: number; version: number }
+  | { op: 'holder'; id: number; version: number; holder: string }
 
 export interface LaneReply {
   id: number
-  level?: LaneLevel
-  routes?: LaneRoutes
+  highways?: Highways
+  holder?: HolderRoutes
   error?: string
 }
 
 export interface LaneRouterHandle {
   // Replaces the world routed; requests for older versions fail.
   loadWorld(version: number, nodes: RouteNode[], edges: LaneEdge[]): void
-  describeLevel(version: number, key: string, open: readonly string[]): Promise<LaneLevel>
-  route(
-    version: number,
-    key: string,
-    open: readonly string[],
-    only?: readonly number[],
-  ): Promise<LaneRoutes>
+  routeHighways(version: number): Promise<Highways>
+  routeHolder(version: number, holder: string): Promise<HolderRoutes>
   dispose(): void
 }
 
@@ -48,32 +42,43 @@ export function answerLaneRequest(
   request: Exclude<LaneRequest, { op: 'world' }>,
 ): LaneReply {
   if (!world || world.version !== request.version) return { id: request.id, error: 'stale' }
-  if (request.op === 'level') {
-    return { id: request.id, level: world.lanes.describeLevel(request.key, request.open) }
-  }
-  return {
-    id: request.id,
-    routes: world.lanes.route(request.key, request.open, request.only),
-  }
+  if (request.op === 'highways') return { id: request.id, highways: world.lanes.routeHighways() }
+  return { id: request.id, holder: world.lanes.routeHolder(request.holder) }
 }
 
-// A reply ready to post with its buffers moved, not copied. Routes are built
-// for the reply and can move; a level stays with the world, which answers
-// with it again, so a copy of it moves instead.
+// A reply ready to post with its buffers moved, not copied. A holder's routes
+// are built for the reply and can move; the highways stay with the world,
+// which routes holders against them, so a copy of them moves instead.
 export function toTransfer(reply: LaneReply): { reply: LaneReply; transfer: ArrayBuffer[] } {
   const transfer: ArrayBuffer[] = []
   let sent = reply
-  if (reply.routes) {
+  const move = (routes: LaneRoutes) => {
     transfer.push(
-      reply.routes.points.buffer as ArrayBuffer,
-      reply.routes.offsets.buffer as ArrayBuffer,
-      reply.routes.links.buffer as ArrayBuffer,
+      routes.points.buffer as ArrayBuffer,
+      routes.offsets.buffer as ArrayBuffer,
+      routes.links.buffer as ArrayBuffer,
+    )
+    if (routes.arrows) transfer.push(routes.arrows.buffer as ArrayBuffer)
+  }
+  if (reply.holder) {
+    move(reply.holder.routes)
+    transfer.push(
+      reply.holder.edgeOffsets.buffer as ArrayBuffer,
+      reply.holder.edges.buffer as ArrayBuffer,
     )
   }
-  if (reply.level) {
-    const linkOfEdge = reply.level.linkOfEdge.slice()
-    sent = { ...reply, level: { ...reply.level, linkOfEdge } }
-    transfer.push(linkOfEdge.buffer)
+  if (reply.highways) {
+    const { routes, linkOfEdge } = reply.highways
+    const copy: LaneRoutes = {
+      links: routes.links.slice(),
+      points: routes.points.slice(),
+      offsets: routes.offsets.slice(),
+      pitch: routes.pitch,
+    }
+    const edges = linkOfEdge.slice()
+    sent = { ...reply, highways: { ...reply.highways, routes: copy, linkOfEdge: edges } }
+    move(copy)
+    transfer.push(edges.buffer)
   }
   return { reply: sent, transfer }
 }
@@ -103,17 +108,15 @@ function createWorkerRouter(): LaneRouterHandle {
     loadWorld(version, nodes, edges) {
       worker.postMessage({ op: 'world', version, nodes, edges } satisfies LaneRequest)
     },
-    async describeLevel(version, key, open) {
-      const reply = await ask({ op: 'level', id: next++, version, key, open: [...open] })
-      if (!reply.level) throw new Error(reply.error ?? 'no level')
-      return reply.level
+    async routeHighways(version) {
+      const reply = await ask({ op: 'highways', id: next++, version })
+      if (!reply.highways) throw new Error(reply.error ?? 'no highways')
+      return reply.highways
     },
-    async route(version, key, open, only) {
-      const request: LaneRequest = { op: 'route', id: next++, version, key, open: [...open] }
-      if (only) request.only = [...only]
-      const reply = await ask(request)
-      if (!reply.routes) throw new Error(reply.error ?? 'no routes')
-      return reply.routes
+    async routeHolder(version, holder) {
+      const reply = await ask({ op: 'holder', id: next++, version, holder })
+      if (!reply.holder) throw new Error(reply.error ?? 'no holder routes')
+      return reply.holder
     },
     dispose() {
       worker.terminate()
@@ -133,13 +136,11 @@ function createLocalRouter(): LaneRouterHandle {
     loadWorld(version, nodes, edges) {
       world = { version, lanes: new LaneWorld(nodes, edges) }
     },
-    async describeLevel(version, key, open) {
-      return (await ask({ op: 'level', id: next++, version, key, open })).level as LaneLevel
+    async routeHighways(version) {
+      return (await ask({ op: 'highways', id: next++, version })).highways as Highways
     },
-    async route(version, key, open, only) {
-      const request: LaneRequest = { op: 'route', id: next++, version, key, open }
-      if (only) request.only = only
-      return (await ask(request)).routes as LaneRoutes
+    async routeHolder(version, holder) {
+      return (await ask({ op: 'holder', id: next++, version, holder })).holder as HolderRoutes
     },
     dispose() {
       world = undefined
