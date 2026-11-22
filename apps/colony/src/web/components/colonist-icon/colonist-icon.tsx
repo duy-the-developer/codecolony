@@ -28,7 +28,7 @@ export interface ColonistIconProps {
   canMove?: boolean
 }
 
-// A colonist's robot in its status colour, as on the map.
+// A colonist's robot in its status colour.
 export function ColonistIcon({ status, className, canMove = false }: ColonistIconProps) {
   const Icon = ICONS[COLONIST_GLYPHS[status]]
   return (
