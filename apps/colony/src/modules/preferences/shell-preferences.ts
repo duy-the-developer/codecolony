@@ -24,8 +24,10 @@ export interface ShellPreferences {
   openQueueSections: Record<QueueSection, boolean>
 }
 
+// A panel can be dragged as wide as the map and the other panel allow: the map
+// keeps at least this share of the window, the other panel its minimum.
 export const MIN_PANEL_PX = 220
-export const MAX_PANEL_PX = 720
+export const MIN_MAP_PERCENT = 25
 
 export const DEFAULT_SHELL_PREFERENCES: ShellPreferences = {
   left: { widthPx: 280, isCollapsed: false, tab: 'queue' },
@@ -102,11 +104,35 @@ function panelFrom<Tab extends string>(
   return {
     widthPx:
       typeof widthPx === 'number' && Number.isFinite(widthPx)
-        ? Math.min(Math.max(Math.round(widthPx), MIN_PANEL_PX), MAX_PANEL_PX)
+        ? Math.max(Math.round(widthPx), MIN_PANEL_PX)
         : fallback.widthPx,
     isCollapsed: typeof isCollapsed === 'boolean' ? isCollapsed : fallback.isCollapsed,
     tab: tabs.find((known) => known === tab) ?? fallback.tab,
   }
+}
+
+// The widest a panel can be dragged in a group this wide. Without it, dragging
+// past the map's minimum would push the other panel shut.
+export function maxPanelWidthPx(groupPx: number, isOtherOpen: boolean): number {
+  const roomPx = (groupPx * (100 - MIN_MAP_PERCENT)) / 100
+  return Math.max(roomPx - (isOtherOpen ? MIN_PANEL_PX : 0), MIN_PANEL_PX)
+}
+
+// Shrinks remembered widths that no longer fit beside the map, as when the
+// window is smaller than when they were saved. Each open panel gives up room in
+// proportion to how far it is above its minimum. A collapsed panel is 0.
+export function fitPanelWidths(
+  widthsPx: Record<'left' | 'right', number>,
+  groupPx: number,
+): Record<'left' | 'right', number> {
+  const roomPx = (groupPx * (100 - MIN_MAP_PERCENT)) / 100
+  const excessPx = widthsPx.left + widthsPx.right - roomPx
+  const slackPx = (widthPx: number) => (widthPx > 0 ? Math.max(widthPx - MIN_PANEL_PX, 0) : 0)
+  const totalSlackPx = slackPx(widthsPx.left) + slackPx(widthsPx.right)
+  if (excessPx <= 0 || totalSlackPx <= 0) return widthsPx
+  const shrink = (widthPx: number) =>
+    widthPx - (slackPx(widthPx) * Math.min(excessPx, totalSlackPx)) / totalSlackPx
+  return { left: shrink(widthsPx.left), right: shrink(widthsPx.right) }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

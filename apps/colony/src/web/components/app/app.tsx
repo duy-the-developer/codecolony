@@ -9,8 +9,10 @@ import { logError } from '../../../modules/logging/log.ts'
 import { type MapHandle, ZOOM_STEP } from '../../../modules/map/map-controller.ts'
 import type { OverlayId } from '../../../modules/map/overlays.ts'
 import {
-  MAX_PANEL_PX,
+  fitPanelWidths,
+  MIN_MAP_PERCENT,
   MIN_PANEL_PX,
+  maxPanelWidthPx,
   type QueueSection,
   type ShellPreferences,
 } from '../../../modules/preferences/shell-preferences.ts'
@@ -216,9 +218,19 @@ export function App() {
     updatePanel(side, { isCollapsed })
   }
 
+  // The group's width, which sets how wide each panel can be dragged.
+  const groupRef = useRef<HTMLDivElement | null>(null)
+  const [groupPx, setGroupPx] = useState(() => window.innerWidth)
+  useEffect(() => {
+    const group = groupRef.current
+    if (!group) return
+    const observer = new ResizeObserver(() => setGroupPx(group.clientWidth))
+    observer.observe(group)
+    return () => observer.disconnect()
+  }, [])
+
   // Widths are remembered when a drag settles; window resizes keep them as is.
   // A collapsed panel keeps the width it had before.
-  const groupRef = useRef<HTMLDivElement | null>(null)
   const handleLayoutChanged = (layout: Layout, meta: LayoutChangedMeta) => {
     const groupPx = groupRef.current?.clientWidth
     if (!meta.isUserInteraction || !groupPx) return
@@ -276,7 +288,7 @@ export function App() {
           collapsible
           collapsedSize={0}
           minSize={MIN_PANEL_PX}
-          maxSize={MAX_PANEL_PX}
+          maxSize={maxPanelWidthPx(groupPx, !collapsed.right)}
           defaultSize={preferences.left.widthPx}
           groupResizeBehavior="preserve-pixel-size"
           onResize={handleResize('left')}
@@ -300,7 +312,7 @@ export function App() {
           </PanelContent>
         </ResizablePanel>
         <ResizableHandle aria-label="Resize left panel" />
-        <ResizablePanel id="map" minSize="25%">
+        <ResizablePanel id="map" minSize={`${MIN_MAP_PERCENT}%`}>
           <MapView
             scene={scene}
             handleRef={mapRef}
@@ -334,7 +346,7 @@ export function App() {
           collapsible
           collapsedSize={0}
           minSize={MIN_PANEL_PX}
-          maxSize={MAX_PANEL_PX}
+          maxSize={maxPanelWidthPx(groupPx, !collapsed.left)}
           defaultSize={preferences.right.widthPx}
           groupResizeBehavior="preserve-pixel-size"
           onResize={handleResize('right')}
@@ -382,10 +394,11 @@ function PanelContent({ isCollapsed, children }: { isCollapsed: boolean; childre
 }
 
 function buildDefaultLayout(preferences: ShellPreferences, windowPx: number): Layout {
-  const percent = (side: PanelSide) =>
-    preferences[side].isCollapsed ? 0 : (100 * preferences[side].widthPx) / Math.max(windowPx, 1)
-  const left = percent('left')
-  const right = percent('right')
+  const openPx = (side: PanelSide) =>
+    preferences[side].isCollapsed ? 0 : preferences[side].widthPx
+  const widthsPx = fitPanelWidths({ left: openPx('left'), right: openPx('right') }, windowPx)
+  const left = (100 * widthsPx.left) / Math.max(windowPx, 1)
+  const right = (100 * widthsPx.right) / Math.max(windowPx, 1)
   return { left, map: 100 - left - right, right }
 }
 
