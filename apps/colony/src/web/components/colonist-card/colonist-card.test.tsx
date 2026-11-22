@@ -27,6 +27,7 @@ const PLACED: PlacedColonist = {
     ],
     omitted: 0,
   },
+  initials: 'CB',
   changes: [
     {
       path: 'apps/colony/src/web/render.ts',

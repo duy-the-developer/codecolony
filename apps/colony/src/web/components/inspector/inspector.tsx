@@ -1,6 +1,7 @@
 import { FileCodeIcon } from 'lucide-react'
 import { useState } from 'react'
 import { isMacPlatform, toggleKeyLabel } from '../../../modules/map/selection.ts'
+import { listColonistsOn, type PlacedColonist } from '../../../modules/scene/colonist-places.ts'
 import {
   describeEdgeRow,
   type EdgeSection,
@@ -8,7 +9,14 @@ import {
 } from '../../../modules/scene/edge-sections.ts'
 import type { Scene } from '../../../modules/scene/scene.ts'
 import { buildSelectionSummary } from '../../../modules/scene/selection-summary.ts'
-import { EDGE_COLORS, SELECTION_COLOR } from '../../../modules/theme/palette.ts'
+import { COLONIST_STATUS_TEXT } from '../../../modules/theme/colonist-glyphs.ts'
+import {
+  COLONIST_CHIP,
+  COLONIST_COLORS,
+  CONFLICT_COLOR,
+  EDGE_COLORS,
+  SELECTION_COLOR,
+} from '../../../modules/theme/palette.ts'
 import { PROVEN_PROVENANCES } from '../../../modules/world/facts.ts'
 import type { Provenance, WorldNode } from '../../../modules/world/world-types.ts'
 import { Button } from '../ui/button.tsx'
@@ -19,7 +27,11 @@ export interface InspectorProps {
   scene: Scene | undefined
   // The selected nodes, in the order they were added.
   selection: readonly WorldNode[]
+  // Every colonist on the map, to list those changing the node.
+  colonists: readonly PlacedColonist[]
   onPick(id: string): void
+  // Picks a colonist and frames its pins.
+  onPickColonist(id: string): void
   // Shows the node's file in the File tab.
   onOpen(id: string): void
   // Proves a file's calls with the language server; rejects with the reason.
@@ -30,7 +42,15 @@ const MAX_ROWS = 14
 
 // The selected node: its facts, and every dependency in or out of it with
 // how it was proven. Several selected nodes show combined.
-export function Inspector({ scene, selection, onPick, onOpen, onTraceCalls }: InspectorProps) {
+export function Inspector({
+  scene,
+  selection,
+  colonists,
+  onPick,
+  onPickColonist,
+  onOpen,
+  onTraceCalls,
+}: InspectorProps) {
   const [first] = selection
   if (!scene || !first) {
     return (
@@ -46,7 +66,9 @@ export function Inspector({ scene, selection, onPick, onOpen, onTraceCalls }: In
     <NodeDetails
       scene={scene}
       node={first}
+      colonists={colonists}
       onPick={onPick}
+      onPickColonist={onPickColonist}
       onOpen={onOpen}
       onTraceCalls={onTraceCalls}
     />
@@ -56,12 +78,22 @@ export function Inspector({ scene, selection, onPick, onOpen, onTraceCalls }: In
 interface NodeDetailsProps {
   scene: Scene
   node: WorldNode
+  colonists: readonly PlacedColonist[]
   onPick(id: string): void
+  onPickColonist(id: string): void
   onOpen(id: string): void
   onTraceCalls(file: WorldNode): Promise<void>
 }
 
-function NodeDetails({ scene, node, onPick, onOpen, onTraceCalls }: NodeDetailsProps) {
+function NodeDetails({
+  scene,
+  node,
+  colonists,
+  onPick,
+  onPickColonist,
+  onOpen,
+  onTraceCalls,
+}: NodeDetailsProps) {
   const kind = node.kind === 'symbol' ? (node.symbolKind ?? 'symbol') : node.kind
   const repo = scene.repoOf(node)
   const subtree = scene.listSubtree(node)
@@ -101,6 +133,8 @@ function NodeDetails({ scene, node, onPick, onOpen, onTraceCalls }: NodeDetailsP
           ),
         )}
       </dl>
+
+      <ColonistList scene={scene} node={node} colonists={colonists} onPick={onPickColonist} />
 
       {node.transports?.length ? (
         <section>
@@ -200,6 +234,77 @@ function CombinedDetails({ scene, selection, onPick }: CombinedDetailsProps) {
         />
       ))}
     </div>
+  )
+}
+
+interface ColonistListProps {
+  scene: Scene
+  node: WorldNode
+  colonists: readonly PlacedColonist[]
+  onPick(id: string): void
+}
+
+// The colonists changing the node. A file two or more of them change, in
+// different copies, is a possible conflict.
+function ColonistList({ scene, node, colonists, onPick }: ColonistListProps) {
+  const touching = listColonistsOn(scene, colonists, node)
+  if (touching.length === 0) return null
+  const isConflict =
+    touching.length > 1 &&
+    (node.kind === 'file' ||
+      touching.some(({ placed, paths }) =>
+        placed.changes.some((change) => change.sharedWith && paths.includes(change.path)),
+      ))
+  return (
+    <section>
+      <SectionTitle title="Colonists changing it" count={touching.length} />
+      {isConflict && (
+        <p
+          className="mb-1 border-l-2 pl-2 text-xs"
+          style={{ borderColor: CONFLICT_COLOR, color: CONFLICT_COLOR }}
+        >
+          Possible conflict: {node.kind === 'file' ? 'this file is' : 'files in here are'} changed
+          in more than one copy.
+        </p>
+      )}
+      <ul aria-label="Colonists changing it">
+        {touching.map(({ placed, paths }) => {
+          const { colonist } = placed
+          const color = COLONIST_COLORS[colonist.status]
+          const shared = placed.changes.filter(
+            (change) => change.sharedWith && paths.includes(change.path),
+          ).length
+          return (
+            <li key={colonist.id}>
+              <button
+                type="button"
+                onClick={() => onPick(colonist.id)}
+                className="flex w-full cursor-pointer items-center gap-2 rounded px-1 py-0.5 text-left hover:bg-accent"
+              >
+                <span
+                  className="shrink-0 rounded-full px-1.5 font-bold text-[10px] leading-4"
+                  style={{ background: color, color: COLONIST_CHIP }}
+                >
+                  {placed.initials}
+                </span>
+                <span className="min-w-0 flex-1 break-all font-mono text-xs">{colonist.label}</span>
+                <span className="shrink-0 text-[11px]" style={{ color }}>
+                  {COLONIST_STATUS_TEXT[colonist.status]}
+                </span>
+                {node.kind !== 'file' && (
+                  <span className="shrink-0 text-muted-foreground text-xs">
+                    {paths.length} {paths.length === 1 ? 'file' : 'files'}
+                    {shared > 0 && (
+                      <span style={{ color: CONFLICT_COLOR }}> · {shared} shared</span>
+                    )}
+                  </span>
+                )}
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+    </section>
   )
 }
 

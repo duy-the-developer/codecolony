@@ -7,6 +7,8 @@ import type { Scene } from './scene.ts'
 // committed code), so it gets a placeholder square, sized by its line count,
 // in the first free spot of the folder it is added to. Files added in a new
 // folder share one placeholder box for that folder, one small square each.
+// A file two or more colonists change, in different copies of the same
+// repository, is a possible conflict: each of its changes names the others.
 
 export interface PlacedChange {
   path: string
@@ -18,6 +20,8 @@ export interface PlacedChange {
   holderId?: string
   // The placeholder's square, for an added file.
   placeholder?: Rect
+  // The other colonists changing the same file, when there are any.
+  sharedWith?: string[]
 }
 
 // A dashed box for a folder a colonist adds, labelled `<name>/ new`.
@@ -31,6 +35,8 @@ export interface NewFolder {
 
 export interface PlacedColonist {
   colonist: Colonist
+  // One or two letters that tell it apart from the others on its pins.
+  initials: string
   changes: PlacedChange[]
   folders: NewFolder[]
   // Everything it touches on the map, to frame it; undefined when nothing is.
@@ -49,7 +55,58 @@ const FOLDER_HEADER_UNITS = 1
 export function placeColonists(scene: Scene, colonists: readonly Colonist[]): PlacedColonist[] {
   // Placeholders taken so far in each holder, so colonists never overlap.
   const taken = new Map<string, Rect[]>()
-  return colonists.map((colonist) => placeColonist(scene, colonist, taken))
+  const placed = colonists.map((colonist) => placeColonist(scene, colonist, taken))
+  markShared(placed)
+  const used = new Set<string>()
+  for (const item of placed) {
+    item.initials = pickInitials(item.colonist.label, scene.byId.get(item.colonist.repoId), used)
+    used.add(item.initials)
+  }
+  return placed
+}
+
+// Names, on each change, the other colonists changing the same file.
+function markShared(placed: readonly PlacedColonist[]): void {
+  const byFile = new Map<string, PlacedChange[]>()
+  const owners = new Map<PlacedChange, string>()
+  for (const { colonist, changes } of placed) {
+    for (const change of changes) {
+      const key = `${colonist.repoId}\0${change.path}`
+      byFile.set(key, [...(byFile.get(key) ?? []), change])
+      owners.set(change, colonist.id)
+    }
+  }
+  for (const changes of byFile.values()) {
+    const ids = [...new Set(changes.map((change) => owners.get(change) as string))]
+    if (ids.length < 2) continue
+    for (const change of changes) {
+      change.sharedWith = ids.filter((id) => id !== owners.get(change))
+    }
+  }
+}
+
+// The first letters of the first two words of a colonist's label, leaving
+// out the repository's name that firstmate task ids start with
+// (`codecolony-colonist-pins` is CP), and a different pair when another
+// colonist has those already.
+export function pickInitials(
+  label: string,
+  repo: WorldNode | undefined,
+  used: ReadonlySet<string>,
+): string {
+  let text = label.split(' · ')[0] ?? label
+  const prefix = repo?.name.toLowerCase()
+  if (prefix && text.toLowerCase().startsWith(prefix) && text.length > prefix.length)
+    text = text.slice(prefix.length)
+  const words = text.split(/[^A-Za-z0-9]+/).filter(Boolean)
+  const [first = '?', second] = words
+  const lead = first.charAt(0)
+  const candidates = [
+    second ? lead + second.charAt(0) : first.slice(0, 2),
+    ...[...words.join('').slice(1)].map((letter) => lead + letter),
+    ...Array.from({ length: 9 }, (_, i) => lead + String(i + 1)),
+  ].map((candidate) => candidate.toUpperCase())
+  return candidates.find((candidate) => !used.has(candidate)) ?? (candidates[0] as string)
 }
 
 function placeColonist(
@@ -57,7 +114,7 @@ function placeColonist(
   colonist: Colonist,
   taken: Map<string, Rect[]>,
 ): PlacedColonist {
-  const placed: PlacedColonist = { colonist, changes: [], folders: [] }
+  const placed: PlacedColonist = { colonist, initials: '', changes: [], folders: [] }
   const repo = scene.byId.get(colonist.repoId)
   if (!repo) {
     placed.changes = colonist.changes.map(({ path, kind }) => ({ path, kind }))
@@ -241,4 +298,28 @@ function unionOf(rects: readonly Rect[]): Rect | undefined {
     y1 = Math.max(y1, r.y + r.h)
   }
   return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }
+}
+
+// The colonists changing a node, and the files of it each changes: a file's
+// own colonists, or for a folder, every change to a file inside it,
+// placeholders included.
+export function listColonistsOn(
+  scene: Scene,
+  colonists: readonly PlacedColonist[],
+  node: WorldNode,
+): { placed: PlacedColonist; paths: string[] }[] {
+  const subtree = scene.listSubtree(node)
+  return colonists.flatMap((placed) => {
+    const paths = placed.changes
+      .filter((change) =>
+        change.nodeId
+          ? subtree.has(change.nodeId)
+          : node.kind !== 'file' &&
+            change.placeholder !== undefined &&
+            change.holderId !== undefined &&
+            subtree.has(change.holderId),
+      )
+      .map((change) => change.path)
+    return paths.length > 0 ? [{ placed, paths }] : []
+  })
 }

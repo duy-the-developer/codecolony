@@ -1,16 +1,24 @@
 import type { PlacedColonist } from '../scene/colonist-places.ts'
 import type { Scene } from '../scene/scene.ts'
-import { COLONIST_GLYPHS, COLONIST_STATUS_TEXT, GLYPH_PATHS } from '../theme/colonist-glyphs.ts'
+import { COLONIST_STATUS_TEXT } from '../theme/colonist-glyphs.ts'
 import {
   CHANGE_CASING,
   CHANGE_COLORS,
   COLONIST_CHIP,
   COLONIST_COLORS,
   COLONIST_INK,
+  CONFLICT_COLOR,
   REMOVED_VEIL,
 } from '../theme/palette.ts'
 import type { Rect } from '../world/world-types.ts'
 import type { Camera, Viewport } from './camera.ts'
+import {
+  BADGE_RADIUS_PX,
+  type ConflictBadge,
+  layoutPins,
+  type Pin,
+  type PinLayout,
+} from './colonist-pins.ts'
 import { LABEL_FONT } from './lod.ts'
 import type { Drawn } from './render.ts'
 
@@ -18,33 +26,28 @@ import type { Drawn } from './render.ts'
 // blue on modified files, red over removed ones, and green placeholder
 // squares for added files in the folder they are added to. Zoomed out, a
 // closed folder that holds changes gets one outline (blue when they mix).
-// Each colonist has exactly one robot marker, drawn on its own canvas over
-// the map so it can bob without redrawing the map.
+// Over them, every changed file carries a pin in its colonist's status
+// colour with its initials (see colonist-pins.ts), drawn on their own canvas
+// over the map so a waiting colonist's pins can pulse without redrawing it.
 
 type ChangeKind = keyof typeof CHANGE_COLORS
-type ColonistStatus = PlacedColonist['colonist']['status']
 
-interface Marker {
-  id: string
-  status: ColonistStatus
-  label: string
-  count: number
-  // Where the pointer under the chip touches: the top right of a changed
-  // block on screen.
-  tipX: number
-  tipY: number
+// What is under the pointer: a colonist's pin, or the possible-conflict
+// badge on a block.
+export type PinHit =
+  | { kind: 'pin'; colonistId: string; pin: Pin }
+  | { kind: 'conflict'; badge: ConflictBadge }
+
+// Names a pin or badge across frames.
+export function keyOfHit(hit: PinHit): string {
+  return hit.kind === 'pin'
+    ? `pin\0${hit.colonistId}\0${hit.pin.nodeId}\0${hit.pin.isMerged ? '' : hit.pin.paths[0]}`
+    : `conflict\0${hit.badge.nodeId}\0${hit.badge.paths.join('\0')}`
 }
 
-const CHIP_PX = 24
-const ICON_PX = 16
-const POINTER_PX = 5
-// Markers of different colonists on the same spot sit side by side.
-const SIDE_BY_SIDE_PX = 28
-const BOB_PX = 3
-const BOB_MS = 1400
 const PULSE_MS = 1600
 const IDLE_ALPHA = 0.55
-// With a colonist picked, the others' outlines step back to this.
+// With a colonist picked, the others' outlines and pins step back to this.
 const OTHERS_ALPHA = 0.35
 const LINE_PX = 1.75
 const SELECTED_LINE_PX = 2.5
@@ -62,15 +65,17 @@ const FONT = 'system-ui, -apple-system, Segoe UI, sans-serif'
 
 export class ColonistLayer {
   selected: string | undefined
-  hovered: string | undefined
+  hovered: PinHit | undefined
   private colonists: readonly PlacedColonist[] = []
-  private markers: Marker[] = []
-  private readonly glyphs = new Map<string, Path2D[]>()
+  private layout: PinLayout = { pins: [], badges: [] }
+  private readonly labels = new Map<string, string>()
 
   setColonists(colonists: readonly PlacedColonist[]): void {
     this.colonists = colonists
+    this.labels.clear()
+    for (const { colonist } of colonists) this.labels.set(colonist.id, colonist.label)
     if (this.selected && !this.has(this.selected)) this.selected = undefined
-    if (this.hovered && !this.has(this.hovered)) this.hovered = undefined
+    this.hovered = undefined
   }
 
   has(id: string): boolean {
@@ -81,17 +86,20 @@ export class ColonistLayer {
     return this.colonists.find((placed) => placed.colonist.id === id)?.bounds
   }
 
-  // True while a marker on screen moves: a working robot bobs, a waiting
-  // one pulses.
+  // The pins and badges of the last frame.
+  get pins(): PinLayout {
+    return this.layout
+  }
+
+  // True while a pin on screen moves: a waiting colonist's pins pulse.
   get isAnimated(): boolean {
-    return this.markers.some((m) => m.status === 'working' || m.status === 'waiting')
+    return this.layout.pins.some((pin) => pin.status === 'waiting')
   }
 
   // Draws every colonist's diff over the map's blocks and works out where
-  // the markers go. drawn: the frame's blocks, parents before children.
+  // the pins go. drawn: the frame's blocks, parents before children.
   drawChanges(ctx: CanvasRenderingContext2D, scene: Scene, camera: Camera, drawn: Drawn[]): void {
     const byId = new Map(drawn.map((item) => [item.node.id, item]))
-    const markers: Marker[] = []
     const ordered = [...this.colonists].sort(
       (a, b) => Number(a.colonist.id === this.selected) - Number(b.colonist.id === this.selected),
     )
@@ -124,7 +132,6 @@ export class ColonistLayer {
         (colonist.status === 'idle' ? IDLE_ALPHA : 1) *
         (this.selected && !isSelected ? OTHERS_ALPHA : 1)
       const width = isSelected ? SELECTED_LINE_PX : LINE_PX
-      const anchors: Rect[] = []
       // Closed folders standing for changes inside them, with the kinds.
       const folders = new Map<string, { item: Drawn; kinds: Set<ChangeKind> }>()
       const toFolder = (item: Drawn, kind: ChangeKind) => {
@@ -141,7 +148,6 @@ export class ColonistLayer {
           const item = byId.get(change.nodeId)
           if (item && item.alpha >= SHOWN_ALPHA) {
             drawFileChange(ctx, item, change.kind, width)
-            anchors.push(item)
           } else {
             const block = shownBlock(change.nodeId)
             if (block) toFolder(block, change.kind)
@@ -152,7 +158,6 @@ export class ColonistLayer {
           if (holder && holder.alpha * holder.open >= SHOWN_ALPHA) {
             const rect = toScreenRect(camera, change.placeholder)
             drawPlaceholder(ctx, rect, change.path.split('/').at(-1) ?? '', width)
-            anchors.push(rect)
           } else {
             const block = shownBlock(change.holderId)
             if (block) toFolder(block, 'added')
@@ -164,169 +169,143 @@ export class ColonistLayer {
         if (!holder || holder.alpha * holder.open < SHOWN_ALPHA || !onScreen(folder.rect)) continue
         const rect = toScreenRect(camera, folder.rect)
         drawNewFolder(ctx, rect, folder.name, width, folder.header * camera.scale)
-        anchors.push(rect)
       }
       for (const { item, kinds } of folders.values()) {
         const kind = kinds.size === 1 ? ([...kinds][0] as ChangeKind) : 'modified'
         strokeDiff(ctx, snapRect(item), kind, width)
-        anchors.push(item)
-      }
-      const anchor = nearestTo(anchors, placed.bounds && toScreenRect(camera, placed.bounds))
-      if (anchor) {
-        markers.push({
-          id: colonist.id,
-          status: colonist.status,
-          label: colonist.label,
-          count: colonist.changes.length + colonist.omitted,
-          tipX: anchor.x + anchor.w - 3,
-          tipY: anchor.y + 2,
-        })
       }
     }
     ctx.globalAlpha = 1
     ctx.setLineDash([])
-    this.markers = spreadMarkers(markers)
+    const view = { width: ctx.canvas.clientWidth, height: ctx.canvas.clientHeight }
+    this.layout = layoutPins(this.colonists, scene, camera, view, drawn)
+    // The hovered pin or badge moved with the map: follow it, or let it go.
+    const key = this.hovered && keyOfHit(this.hovered)
+    this.hovered = key ? this.findHit(key) : undefined
   }
 
-  // Draws the markers on their own canvas; now drives the bob and pulse.
-  drawMarkers(ctx: CanvasRenderingContext2D, view: Viewport, now: number, isStill: boolean): void {
+  private findHit(key: string): PinHit | undefined {
+    const pin = this.layout.pins.find(
+      (p) => keyOfHit({ kind: 'pin', colonistId: p.colonistId, pin: p }) === key,
+    )
+    if (pin) return { kind: 'pin', colonistId: pin.colonistId, pin }
+    const badge = this.layout.badges.find((b) => keyOfHit({ kind: 'conflict', badge: b }) === key)
+    return badge && { kind: 'conflict', badge }
+  }
+
+  // Draws the pins on their own canvas, the picked colonist's on top; now
+  // drives the pulse.
+  drawPins(ctx: CanvasRenderingContext2D, view: Viewport, now: number, isStill: boolean): void {
     ctx.clearRect(0, 0, view.width, view.height)
-    let label: Marker | undefined
-    for (const marker of this.markers) {
-      const color = COLONIST_COLORS[marker.status]
-      const isSelected = marker.id === this.selected
-      const bob =
-        marker.status === 'working' && !isStill
-          ? -BOB_PX * (0.5 - 0.5 * Math.cos((2 * Math.PI * now) / BOB_MS))
-          : 0
-      const { x, y } = chipCentre(marker)
-      const cy = y + bob
-      ctx.globalAlpha = marker.status === 'idle' ? IDLE_ALPHA : 1
-      if (marker.status === 'waiting' && !isStill) {
-        const phase = (now % PULSE_MS) / PULSE_MS
-        ctx.globalAlpha = 1 - phase
-        ctx.strokeStyle = color
-        ctx.lineWidth = 2
-        ctx.setLineDash([])
-        roundRect(
-          ctx,
-          x - CHIP_PX / 2 - 6 * phase,
-          cy - CHIP_PX / 2 - 6 * phase,
-          CHIP_PX + 12 * phase,
-          CHIP_PX + 12 * phase,
-          6 + 3 * phase,
-        )
-        ctx.stroke()
-        ctx.globalAlpha = 1
-      }
-      // The pointer, then the chip over it.
-      ctx.fillStyle = COLONIST_CHIP
-      ctx.strokeStyle = color
-      ctx.lineWidth = 1
-      ctx.setLineDash([])
-      ctx.beginPath()
-      ctx.moveTo(x - 4, cy + CHIP_PX / 2 - 1)
-      ctx.lineTo(marker.tipX, marker.tipY + bob)
-      ctx.lineTo(x + 4, cy + CHIP_PX / 2 - 1)
-      ctx.closePath()
-      ctx.fill()
-      ctx.stroke()
-      roundRect(ctx, x - CHIP_PX / 2, cy - CHIP_PX / 2, CHIP_PX, CHIP_PX, 6)
-      ctx.fill()
-      ctx.stroke()
-      if (isSelected) {
-        ctx.strokeStyle = '#ffffff'
-        ctx.lineWidth = 2
-        roundRect(ctx, x - CHIP_PX / 2 - 2.5, cy - CHIP_PX / 2 - 2.5, CHIP_PX + 5, CHIP_PX + 5, 8)
-        ctx.stroke()
-      }
-      this.drawGlyph(ctx, marker.status, x, cy, color)
-      if (marker.count > 1) drawBadge(ctx, x + CHIP_PX / 2, cy - CHIP_PX / 2, marker.count)
-      if (marker.id === this.hovered || (isSelected && !label)) label = marker
+    const { pins, badges } = this.layout
+    const ordered = [...pins].sort(
+      (a, b) => Number(a.colonistId === this.selected) - Number(b.colonistId === this.selected),
+    )
+    for (const pin of ordered) {
+      const isSelected = pin.colonistId === this.selected
+      const alpha =
+        (pin.status === 'idle' ? IDLE_ALPHA : 1) * (this.selected && !isSelected ? OTHERS_ALPHA : 1)
+      const pulse = pin.status === 'waiting' && !isStill ? (now % PULSE_MS) / PULSE_MS : undefined
+      drawPin(ctx, pin, alpha, isSelected, pulse)
+    }
+    for (const badge of badges) {
+      const isDimmed = this.selected !== undefined && !badge.colonistIds.includes(this.selected)
+      drawConflictBadge(ctx, badge, isDimmed ? OTHERS_ALPHA : 1)
     }
     ctx.globalAlpha = 1
-    if (label) drawMarkerLabel(ctx, label, view)
+    if (this.hovered) drawHoverLabel(ctx, this.hovered, view, this.labels)
   }
 
-  // The colonist whose marker is under a screen point.
-  hitMarker(sx: number, sy: number): string | undefined {
-    for (let i = this.markers.length - 1; i >= 0; i--) {
-      const marker = this.markers[i] as Marker
-      const { x, y } = chipCentre(marker)
-      const half = CHIP_PX / 2 + 2
-      if (Math.abs(sx - x) <= half && sy >= y - half && sy <= y + half + POINTER_PX)
-        return marker.id
+  // The badge or pin under a screen point, the topmost first.
+  hitPin(sx: number, sy: number): PinHit | undefined {
+    const { pins, badges } = this.layout
+    for (let i = badges.length - 1; i >= 0; i--) {
+      const badge = badges[i] as ConflictBadge
+      if (Math.hypot(sx - badge.x, sy - badge.y) <= BADGE_RADIUS_PX + 1)
+        return { kind: 'conflict', badge }
+    }
+    const ordered = [...pins].sort(
+      (a, b) => Number(b.colonistId === this.selected) - Number(a.colonistId === this.selected),
+    )
+    for (const pin of ordered) {
+      const { head } = pin
+      if (sx >= head.x - 1 && sx <= head.x + head.w + 1 && sy >= head.y - 1 && sy <= pin.tipY)
+        return { kind: 'pin', colonistId: pin.colonistId, pin }
     }
     return undefined
   }
+}
 
-  private drawGlyph(
-    ctx: CanvasRenderingContext2D,
-    status: ColonistStatus,
-    x: number,
-    y: number,
-    color: string,
-  ): void {
-    const name = COLONIST_GLYPHS[status]
-    let paths = this.glyphs.get(name)
-    if (!paths) {
-      paths = GLYPH_PATHS[name].map((d) => new Path2D(d))
-      this.glyphs.set(name, paths)
-    }
-    const scale = ICON_PX / 24
-    const base = ctx.getTransform()
-    ctx.translate(x - ICON_PX / 2, y - ICON_PX / 2)
-    ctx.scale(scale, scale)
+// A rounded tag with the colonist's initials (and the count of files it
+// stands for, merged on a folder), pointing down at the block's corner.
+function drawPin(
+  ctx: CanvasRenderingContext2D,
+  pin: Pin,
+  alpha: number,
+  isSelected: boolean,
+  pulse: number | undefined,
+): void {
+  const color = COLONIST_COLORS[pin.status]
+  const { head } = pin
+  const r = head.h / 2
+  ctx.setLineDash([])
+  if (pulse !== undefined) {
+    ctx.globalAlpha = alpha * (1 - pulse)
     ctx.strokeStyle = color
-    ctx.lineWidth = 2.25
-    ctx.lineCap = 'round'
-    ctx.lineJoin = 'round'
-    for (const path of paths) ctx.stroke(path)
-    ctx.setTransform(base)
-    ctx.lineCap = 'butt'
-    ctx.lineJoin = 'miter'
+    ctx.lineWidth = 2
+    roundRect(
+      ctx,
+      head.x - 4 * pulse,
+      head.y - 4 * pulse,
+      head.w + 8 * pulse,
+      head.h + 8 * pulse,
+      r,
+    )
+    ctx.stroke()
   }
+  ctx.globalAlpha = alpha
+  ctx.fillStyle = color
+  ctx.strokeStyle = COLONIST_CHIP
+  ctx.lineWidth = 1
+  ctx.beginPath()
+  ctx.moveTo(pin.tipX - 3.5, head.y + head.h - 1)
+  ctx.lineTo(pin.tipX, pin.tipY)
+  ctx.lineTo(pin.tipX + 3.5, head.y + head.h - 1)
+  ctx.closePath()
+  ctx.fill()
+  ctx.stroke()
+  roundRect(ctx, head.x, head.y, head.w, head.h, r)
+  ctx.fill()
+  ctx.stroke()
+  if (isSelected) {
+    ctx.strokeStyle = COLONIST_INK
+    ctx.lineWidth = 1.5
+    roundRect(ctx, head.x - 2, head.y - 2, head.w + 4, head.h + 4, r + 2)
+    ctx.stroke()
+  }
+  ctx.font = `700 9px ${FONT}`
+  ctx.fillStyle = COLONIST_CHIP
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(pin.text, head.x + head.w / 2, head.y + head.h / 2 + 0.5)
 }
 
-function chipCentre(marker: Marker): { x: number; y: number } {
-  return { x: marker.tipX, y: marker.tipY - POINTER_PX - CHIP_PX / 2 }
-}
-
-// Moves markers that would cover each other apart, side by side.
-function spreadMarkers(markers: Marker[]): Marker[] {
-  const placed: Marker[] = []
-  for (const marker of [...markers].sort((a, b) => a.tipY - b.tipY || a.tipX - b.tipX)) {
-    const moved = { ...marker }
-    while (
-      placed.some(
-        (other) =>
-          Math.abs(other.tipX - moved.tipX) < SIDE_BY_SIDE_PX &&
-          Math.abs(other.tipY - moved.tipY) < SIDE_BY_SIDE_PX,
-      )
-    ) {
-      moved.tipX += SIDE_BY_SIDE_PX
-    }
-    placed.push(moved)
-  }
-  return placed
-}
-
-// The block closest to a point: the middle of everything the colonist
-// touches, so its one marker sits where its work is.
-function nearestTo(anchors: readonly Rect[], around: Rect | undefined): Rect | undefined {
-  if (!around) return anchors[0]
-  const cx = around.x + around.w / 2
-  const cy = around.y + around.h / 2
-  let best: Rect | undefined
-  let bestDistance = Number.POSITIVE_INFINITY
-  for (const anchor of anchors) {
-    const distance = Math.hypot(anchor.x + anchor.w / 2 - cx, anchor.y + anchor.h / 2 - cy)
-    if (distance < bestDistance) {
-      best = anchor
-      bestDistance = distance
-    }
-  }
-  return best
+// The possible-conflict badge: an exclamation mark in a circle.
+function drawConflictBadge(ctx: CanvasRenderingContext2D, badge: ConflictBadge, alpha: number) {
+  ctx.globalAlpha = alpha
+  ctx.setLineDash([])
+  ctx.fillStyle = CONFLICT_COLOR
+  ctx.strokeStyle = COLONIST_CHIP
+  ctx.lineWidth = 1.5
+  ctx.beginPath()
+  ctx.arc(badge.x, badge.y, BADGE_RADIUS_PX, 0, 2 * Math.PI)
+  ctx.fill()
+  ctx.stroke()
+  ctx.font = `800 10px ${FONT}`
+  ctx.fillStyle = COLONIST_CHIP
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText('!', badge.x, badge.y + 0.5)
 }
 
 function toScreenRect(camera: Camera, rect: Rect): Rect {
@@ -442,33 +421,58 @@ function drawNewFolder(
   ctx.fillText(`${name}/ new`, snapped.x + size * 0.6, snapped.y + headerPx / 2, snapped.w - size)
 }
 
-function drawBadge(ctx: CanvasRenderingContext2D, x: number, y: number, count: number): void {
-  const text = count > 99 ? '99+' : String(count)
-  ctx.font = `700 9px ${FONT}`
-  const w = Math.max(14, ctx.measureText(text).width + 6)
-  ctx.fillStyle = '#ffffff'
-  roundRect(ctx, x - w / 2, y - 7, w, 14, 7)
-  ctx.fill()
-  ctx.fillStyle = COLONIST_CHIP
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  ctx.fillText(text, x, y + 0.5)
-}
-
-// The colonist's name and status next to its marker.
-function drawMarkerLabel(ctx: CanvasRenderingContext2D, marker: Marker, view: Viewport): void {
-  const color = COLONIST_COLORS[marker.status]
-  const files = `${marker.count} ${marker.count === 1 ? 'file' : 'files'}`
-  const lines = [marker.label, `● ${COLONIST_STATUS_TEXT[marker.status]} · ${files}`]
+// What the hovered pin or badge stands for, next to it.
+function drawHoverLabel(
+  ctx: CanvasRenderingContext2D,
+  hit: PinHit,
+  view: Viewport,
+  labels: ReadonlyMap<string, string>,
+): void {
+  let color: string
+  let lines: string[]
+  let anchor: Rect
+  if (hit.kind === 'pin') {
+    const { pin } = hit
+    color = COLONIST_COLORS[pin.status]
+    const files = pin.isMerged
+      ? `${pin.paths.length} ${pin.paths.length === 1 ? 'file' : 'files'} in here`
+      : (pin.paths[0] ?? '')
+    lines = [
+      labels.get(pin.colonistId) ?? pin.colonistId,
+      `● ${COLONIST_STATUS_TEXT[pin.status]} · ${files}`,
+    ]
+    if (pin.isShared) lines.push('also changed by another colonist')
+    anchor = pin.head
+  } else {
+    const { badge } = hit
+    color = CONFLICT_COLOR
+    const [first] = badge.paths
+    const what =
+      badge.paths.length === 1 && first
+        ? (first.split('/').at(-1) ?? first)
+        : `${badge.paths.length} files`
+    lines = [
+      `Possible conflict · ${what}`,
+      ...badge.colonistIds.map((id) => `● ${labels.get(id) ?? id}`),
+    ]
+    anchor = {
+      x: badge.x - BADGE_RADIUS_PX,
+      y: badge.y - BADGE_RADIUS_PX,
+      w: 2 * BADGE_RADIUS_PX,
+      h: 2 * BADGE_RADIUS_PX,
+    }
+  }
   ctx.font = `11px ${MONO}`
-  const w = Math.max(...lines.map((line) => ctx.measureText(line).width)) + 16
-  const h = 38
-  const { x: cx, y: cy } = chipCentre(marker)
-  // Clear of the count badge on the chip's corner.
-  let x = cx + CHIP_PX / 2 + 12
-  if (x + w > view.width - 4) x = cx - CHIP_PX / 2 - 6 - w
-  const y = Math.max(4, cy - h / 2)
+  const w = Math.min(
+    Math.max(...lines.map((line) => ctx.measureText(line).width)) + 16,
+    view.width - 8,
+  )
+  const h = 10 + lines.length * 15
+  let x = anchor.x + anchor.w + 8
+  if (x + w > view.width - 4) x = Math.max(4, anchor.x - 8 - w)
+  const y = Math.min(Math.max(4, anchor.y + anchor.h / 2 - h / 2), view.height - h - 4)
   ctx.globalAlpha = 1
+  ctx.setLineDash([])
   ctx.fillStyle = COLONIST_CHIP
   ctx.strokeStyle = color
   ctx.lineWidth = 1
@@ -477,10 +481,10 @@ function drawMarkerLabel(ctx: CanvasRenderingContext2D, marker: Marker, view: Vi
   ctx.stroke()
   ctx.textAlign = 'left'
   ctx.textBaseline = 'middle'
-  ctx.fillStyle = COLONIST_INK
-  ctx.fillText(lines[0] as string, x + 8, y + 12)
-  ctx.fillStyle = color
-  ctx.fillText(lines[1] as string, x + 8, y + 27)
+  lines.forEach((line, i) => {
+    ctx.fillStyle = i === 0 ? COLONIST_INK : color
+    ctx.fillText(line, x + 8, y + 12 + i * 15, w - 16)
+  })
 }
 
 function roundRect(
