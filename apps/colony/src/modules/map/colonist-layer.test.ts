@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { PlacedColonist } from '../scene/colonist-places.ts'
 import { Scene } from '../scene/scene.ts'
-import type { Colonist } from '../wire/api-types.ts'
 import type { NodeKind, Rect, World, WorldNode } from '../world/world-types.ts'
 import { Camera } from './camera.ts'
 import { ColonistLayer } from './colonist-layer.ts'
@@ -50,7 +49,7 @@ function drawn(id: string, alpha: number, open: number): Drawn {
 }
 
 function placed(id: string): PlacedColonist {
-  const colonist: Colonist = {
+  const colonist: PlacedColonist['colonist'] = {
     id,
     repoId: 'r',
     label: id,
