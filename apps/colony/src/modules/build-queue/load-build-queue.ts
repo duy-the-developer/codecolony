@@ -9,7 +9,7 @@ import type {
   OrderState,
   ProjectKind,
 } from '../wire/api-types.ts'
-import { type BacklogEntry, holdReason, parseBacklog } from './parse-backlog.ts'
+import { type BacklogEntry, holdReason, isCaptainHeld, parseBacklog } from './parse-backlog.ts'
 import { parseStatusLog, type WorkerStatus } from './parse-status-log.ts'
 
 export { parseStatusLog, type WorkerStatus }
@@ -30,6 +30,11 @@ export interface QueueProject {
   kind: ProjectKind
 }
 
+// A task the backlog holds for the captain, with its reason when it gives one.
+export interface CaptainHold {
+  reason?: string
+}
+
 interface Worker {
   status: WorkerStatus
   worktree?: string
@@ -42,9 +47,8 @@ export async function loadBuildQueue(
   home: string,
   projects: readonly QueueProject[],
 ): Promise<BuildOrder[]> {
-  const backlog = await readOptional(join(home, 'data', 'backlog.md'))
   const orders: BuildOrder[] = []
-  for (const entry of parseBacklog(backlog ?? '')) {
+  for (const entry of await loadBacklog(home)) {
     const project = findProject(entry.fields.repo, projects)
     if (!project) continue
     const worker = entry.section === 'done' ? undefined : await loadWorker(home, entry.id)
@@ -67,13 +71,29 @@ export async function loadOrderChanges(
   id: string,
 ): Promise<OrderChangesResponse | undefined> {
   if (!TASK_ID.test(id)) return undefined
-  const backlog = await readOptional(join(home, 'data', 'backlog.md'))
-  const entry = parseBacklog(backlog ?? '').find((e) => e.id === id && e.section !== 'done')
+  const entry = (await loadBacklog(home)).find((e) => e.id === id && e.section !== 'done')
   const project = findProject(entry?.fields.repo, projects)
   const worker = await loadWorker(home, id)
   if (!entry?.fields.repo || !project || !worker?.worktree) return undefined
   const paths = await readChangedPaths(worker.worktree)
   return { project: project.name, repo: entry.fields.repo, paths }
+}
+
+// The tasks the backlog holds for the captain, by id, each with its hold's
+// reason when it gives one: the orders the queue shows as waiting on you.
+export async function loadCaptainHolds(home: string): Promise<Map<string, CaptainHold>> {
+  const holds = new Map<string, CaptainHold>()
+  for (const entry of await loadBacklog(home)) {
+    if (!isCaptainHeld(entry)) continue
+    const reason = holdReason(entry.fields.hold)
+    holds.set(entry.id, reason ? { reason } : {})
+  }
+  return holds
+}
+
+// A missing backlog has no items.
+async function loadBacklog(home: string): Promise<BacklogEntry[]> {
+  return parseBacklog((await readOptional(join(home, 'data', 'backlog.md'))) ?? '')
 }
 
 function buildOrder(entry: BacklogEntry, project: QueueProject, worker: Worker | undefined) {
@@ -95,16 +115,19 @@ function buildOrder(entry: BacklogEntry, project: QueueProject, worker: Worker |
     if (date) order.date = date
   } else {
     if (fields.since) order.date = fields.since
-    const isCaptainHeld = fields['hold-kind'] === 'captain'
+    const isHeld = isCaptainHeld(entry)
     if (worker) {
       order.colonist = entry.id
-      note = worker.status.note
       pullRequestUrl = worker.status.pullRequestUrl ?? pullRequestUrl
     }
-    note ??= holdReason(fields.hold)
+    // A captain hold waits on you whatever its worker last said, and its
+    // reason is the question.
+    note = isHeld
+      ? (holdReason(fields.hold) ?? worker?.status.note)
+      : (worker?.status.note ?? holdReason(fields.hold))
     if (entry.section === 'in-flight') {
-      order.state = worker ? worker.status.state : isCaptainHeld ? 'waiting' : 'working'
-      if (!worker && isCaptainHeld) note ??= 'Your decision; no colonist needed'
+      order.state = isHeld ? 'waiting' : (worker?.status.state ?? 'working')
+      if (!worker && isHeld) note ??= 'Your decision; no colonist needed'
     }
   }
   if (pullRequestUrl) order.pullRequestUrl = pullRequestUrl

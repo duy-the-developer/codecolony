@@ -41,6 +41,22 @@ describe('resolvePresence', () => {
     expect(resolvePresence(answered, live, true).status).toBe('working')
   })
 
+  it('waits on you while the backlog holds the task for the captain, live or not', () => {
+    const held = { ...task, captainHold: { reason: 'Approve the mockup' } }
+    expect(resolvePresence(held, [], true)).toEqual({
+      status: 'waiting',
+      session: 'none',
+      note: 'Approve the mockup',
+    })
+    const live = [{ cwd: '/c', status: 'working' as const }]
+    expect(resolvePresence(held, live, true)).toMatchObject({
+      status: 'waiting',
+      session: 'firstmate',
+    })
+    const failed = { ...taskWith('failed [at=1]: stopped'), captainHold: {} }
+    expect(resolvePresence(failed, [], true)).toMatchObject({ status: 'waiting', note: 'stopped' })
+  })
+
   it('takes the pull request from any status line', () => {
     const drafted = taskWith(`working [at=1]: draft at ${prUrl}`, 'working [at=2]: fixing review')
     expect(resolvePresence(drafted, [{ cwd: '/c' }], true)).toMatchObject({

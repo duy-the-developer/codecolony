@@ -16,12 +16,11 @@ export interface ColonistPresence {
   paneId?: string
 }
 
-// The colonist status a firstmate status log stands for: the build queue's
-// state for the same task, with a failed task shown as an error.
-// TODO(#44): captain holds live in the firstmate backlog, not in status
-// logs; map a held task to 'waiting' (waiting on you) through the
-// build-queue module's backlog.
+// The colonist status a firstmate task stands for: the build queue's state
+// for the same task, so a task held for the captain waits on you whatever its
+// status log says, and a failed task shows as an error.
 function statusFromTask(task: FirstmateTask): ColonistStatus | undefined {
+  if (task.captainHold) return 'waiting'
   if (!task.status) return undefined
   return task.status.failed ? 'error' : task.status.state
 }
@@ -39,7 +38,10 @@ export function resolvePresence(
 ): ColonistPresence {
   const isLive = sessions.length > 0 || (task !== undefined && !canSeeSessions)
   const presence: ColonistPresence = { status: 'idle', session: 'none' }
-  if (task?.status?.note) presence.note = task.status.note
+  const note = task?.captainHold
+    ? (task.captainHold.reason ?? task.status?.note)
+    : task?.status?.note
+  if (note) presence.note = note
   if (task?.status?.pullRequestUrl) presence.pr = task.status.pullRequestUrl
   const agent = sessions.find((session) => session.agent)?.agent
   if (agent) presence.agent = agent

@@ -5,7 +5,12 @@ import { git, makeRepo, makeTempDir } from '../indexing/testing/git-fixture.ts'
 import type { ColonistsResponse } from '../wire/api-types.ts'
 import { createColonistTracker } from './colonist-tracker.ts'
 import type { LiveSession } from './session-source.ts'
-import { makeFirstmateHome, writeTask } from './testing/firstmate-home-fixture.ts'
+import {
+  captainHoldLine,
+  makeFirstmateHome,
+  writeBacklog,
+  writeTask,
+} from './testing/firstmate-home-fixture.ts'
 
 // Your clone of the repository is on the map. Firstmate works from its own
 // clone, with a worktree per task in a pool of slots.
@@ -74,6 +79,34 @@ describe('createColonistTracker', () => {
       session: 'none',
       changes: [{ path: 'src/b.ts', kind: 'modified', units: 1 }],
     })
+    tracker.close()
+  })
+
+  it('shows a task held for the captain as waiting on you with no live session', async () => {
+    const { mine, home, slot } = makeColony()
+    const held = slot(1)
+    writeFileSync(join(held, 'src', 'a.ts'), 'a2\n')
+    writeTask(home, {
+      id: 'task-1',
+      meta: { worktree: held, kind: 'ship', branch: 'fm/task-1' },
+      status: ['paused [at=1]: waiting on the captain'],
+    })
+    writeBacklog(home, `## In flight\n${captainHoldLine('task-1', 'Approve the mockup')}\n`)
+    const tracker = createColonistTracker({
+      listRepos: repos(mine),
+      sessions: [{ name: 'fake', listSessions: () => Promise.resolve([]) }],
+      firstmateHome: home,
+      home: '/nowhere',
+    })
+    await tracker.refresh({ discover: true })
+    expect(tracker.snapshot.colonists).toEqual([
+      expect.objectContaining({
+        task: 'task-1',
+        status: 'waiting',
+        session: 'none',
+        note: 'Approve the mockup',
+      }),
+    ])
     tracker.close()
   })
 

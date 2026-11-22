@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { holdReason, parseBacklog } from './parse-backlog.ts'
+import { holdReason, isCaptainHeld, parseBacklog } from './parse-backlog.ts'
 import { FAKE_BACKLOG } from './testing/firstmate-home-fixture.ts'
 
 describe('parseBacklog', () => {
@@ -37,6 +37,23 @@ describe('parseBacklog', () => {
       since: '2026-11-19',
       hold: 'Held until you approve the mockup',
     })
+  })
+})
+
+describe('isCaptainHeld', () => {
+  it('holds open items held for the captain, not answered or other holds', () => {
+    const held = parseBacklog(
+      [
+        '## In flight',
+        '- [ ] a - Waits on you (hold: fm-hold-v1:eA==) (hold-kind: captain)',
+        '- [ ] b - Held for a dependency (hold: until #44 lands)',
+        '## Queued',
+        '- [ ] c - Queued for you (hold-kind: captain)',
+        '## Done',
+        '- [x] d - Answered (hold-kind: captain) (done 2026-11-22)',
+      ].join('\n'),
+    ).filter(isCaptainHeld)
+    expect(held.map((entry) => entry.id)).toEqual(['a', 'c'])
   })
 })
 
