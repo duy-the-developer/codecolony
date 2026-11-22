@@ -1,7 +1,12 @@
 import { GitPullRequestArrowIcon, SquareTerminalIcon, XIcon } from 'lucide-react'
 import type { PlacedColonist } from '../../../modules/scene/colonist-places.ts'
 import { COLONIST_STATUS_TEXT } from '../../../modules/theme/colonist-glyphs.ts'
-import { CHANGE_COLORS, COLONIST_COLORS } from '../../../modules/theme/palette.ts'
+import {
+  CHANGE_COLORS,
+  COLONIST_CHIP,
+  COLONIST_COLORS,
+  CONFLICT_COLOR,
+} from '../../../modules/theme/palette.ts'
 import type { ChangeKind } from '../../../modules/wire/api-types.ts'
 import { ColonistIcon } from '../colonist-icon/colonist-icon.tsx'
 import { Button } from '../ui/button.tsx'
@@ -57,7 +62,16 @@ export function ColonistCard({
           <p className="font-semibold text-[11px] text-primary uppercase tracking-wider">
             Colonist
           </p>
-          <h3 className="break-all font-mono font-semibold text-sm">{colonist.label}</h3>
+          <h3 className="flex items-center gap-2 font-mono font-semibold text-sm">
+            <span
+              title="Its pins on the map"
+              className="shrink-0 rounded-full px-1.5 font-bold font-sans text-[10px] leading-4"
+              style={{ background: color, color: COLONIST_CHIP }}
+            >
+              {placed.initials}
+            </span>
+            <span className="min-w-0 break-all">{colonist.label}</span>
+          </h3>
           <p className="text-xs" style={{ color }}>
             ● {COLONIST_STATUS_TEXT[colonist.status]}
           </p>
@@ -156,6 +170,15 @@ export function ColonistCard({
                 >
                   {shortPath(change.path)}
                 </span>
+                {change.sharedWith && (
+                  <span
+                    className="shrink-0 text-[11px]"
+                    title={`Also changed by ${change.sharedWith.length} other ${change.sharedWith.length === 1 ? 'colonist' : 'colonists'}`}
+                    style={{ color: CONFLICT_COLOR }}
+                  >
+                    possible conflict
+                  </span>
+                )}
                 {change.placeholder && (
                   <span className="shrink-0 text-[11px]" style={{ color: CHANGE_COLORS.added }}>
                     placeholder
@@ -171,8 +194,9 @@ export function ColonistCard({
       </section>
 
       <p className="text-muted-foreground text-xs">
-        Diff since this copy forked from {colonist.base}: committed and uncommitted changes. Added
-        files show as dashed green placeholders in their folder until merged.
+        Diff since this copy forked from {colonist.base}: committed and uncommitted changes. Each
+        file carries a pin with these initials on the map. Added files show as dashed green
+        placeholders in their folder until merged.
       </p>
     </div>
   )

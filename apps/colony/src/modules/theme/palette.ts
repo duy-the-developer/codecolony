@@ -65,6 +65,8 @@ export const CHANGE_COLORS = {
 export const CHANGE_CASING = 'rgba(8, 16, 26, 0.85)'
 // The veil over a removed file.
 export const REMOVED_VEIL = 'rgba(8, 16, 26, 0.45)'
-// The colonist marker's chip and its hover label.
+// The colonist pins' outline and initials, and their hover label.
 export const COLONIST_CHIP = '#0b1724'
 export const COLONIST_INK = '#e4edf6'
+// The badge on a file two or more colonists change: a possible conflict.
+export const CONFLICT_COLOR = '#ff5fa2'

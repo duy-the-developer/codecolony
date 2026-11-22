@@ -24,6 +24,8 @@ export interface RightPanelProps {
   selection: readonly WorldNode[]
   // The picked colonist: the Inspector shows its card instead of the selection.
   colonist: PlacedColonist | undefined
+  // Every colonist, for the Inspector to list those changing the selection.
+  colonists: readonly PlacedColonist[]
   canOpenTerminal: boolean
   workerCount: number
   // Receives the element the terminal dock mounts into.
@@ -34,6 +36,7 @@ export interface RightPanelProps {
   onOpen(id: string): void
   onTraceCalls(file: WorldNode): Promise<void>
   onCloseColonist(): void
+  onPickColonist(id: string): void
   onOpenTerminal(paneId: string): void
 }
 
@@ -43,6 +46,7 @@ export function RightPanel({
   selected,
   selection,
   colonist,
+  colonists,
   canOpenTerminal,
   workerCount,
   dockRef,
@@ -52,6 +56,7 @@ export function RightPanel({
   onOpen,
   onTraceCalls,
   onCloseColonist,
+  onPickColonist,
   onOpenTerminal,
 }: RightPanelProps) {
   return (
@@ -101,7 +106,9 @@ export function RightPanel({
           <Inspector
             scene={scene}
             selection={selection}
+            colonists={colonists}
             onPick={onPick}
+            onPickColonist={onPickColonist}
             onOpen={onOpen}
             onTraceCalls={onTraceCalls}
           />

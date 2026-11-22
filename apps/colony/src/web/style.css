@@ -61,7 +61,7 @@
   --radius-lg: calc(var(--radius) + 2px);
   --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: ui-monospace, Menlo, monospace;
-  /* A working colonist's robot bobs, as on the map. */
+  /* A working colonist's robot bobs. */
   --animate-colonist-bob: colonist-bob 1.4s ease-in-out infinite;
 }
 

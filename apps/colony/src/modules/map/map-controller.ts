@@ -2,7 +2,7 @@ import type { PlacedColonist } from '../scene/colonist-places.ts'
 import type { Scene } from '../scene/scene.ts'
 import type { WorldNode } from '../world/world-types.ts'
 import { Camera, type Viewport } from './camera.ts'
-import { ColonistLayer } from './colonist-layer.ts'
+import { ColonistLayer, keyOfHit, type PinHit } from './colonist-layer.ts'
 import { buildFocus, type Focus, NO_FOCUS } from './focus.ts'
 import { LaneLayer } from './lanes/lane-layer.ts'
 import { createLaneRouter } from './lanes/lane-router.ts'
@@ -39,10 +39,10 @@ export interface MapControllerOptions {
   onDraw(camera: Camera): void
   // A file or symbol was double-clicked: show its file.
   onOpen(id: string): void
-  // A colonist was picked or let go, by its marker or a caller.
+  // A colonist was picked or let go, by one of its pins or a caller.
   onSelectColonist(id: string | undefined): void
-  // The canvas over the map that colonist markers are drawn on, so they can
-  // move without redrawing the map.
+  // The canvas over the map that colonist pins are drawn on, so they can
+  // pulse without redrawing the map.
   markerCanvas?: HTMLCanvasElement
 }
 
@@ -123,13 +123,13 @@ export function createMapController(
     })
   }
 
-  // Markers redraw on their own canvas, every frame while one moves.
+  // Pins redraw on their own canvas, every frame while one moves.
   function requestMarkerDraw(): void {
     if (!markerCtx || markerFrame !== undefined) return
     markerFrame = requestAnimationFrame((now) => {
       markerFrame = undefined
       const isStill = stillness?.matches ?? false
-      colonists.drawMarkers(markerCtx, view, now, isStill)
+      colonists.drawPins(markerCtx, view, now, isStill)
       if (colonists.isAnimated && !isStill) requestMarkerDraw()
     })
   }
@@ -247,10 +247,18 @@ export function createMapController(
     requestDraw()
   }
 
-  function hoverColonist(id: string | undefined): void {
-    if (id === colonists.hovered) return
-    colonists.hovered = id
+  function hoverPin(hit: PinHit | undefined): void {
+    const before = colonists.hovered
+    if ((hit && keyOfHit(hit)) === (before && keyOfHit(before))) return
+    colonists.hovered = hit
     requestMarkerDraw()
+  }
+
+  // A pin picks its colonist; a possible-conflict badge selects its block,
+  // so the Inspector lists the colonists changing it.
+  function clickPin(hit: PinHit, fly: boolean): void {
+    if (hit.kind === 'pin') selectColonist(hit.colonistId, fly)
+    else select(hit.badge.nodeId, fly)
   }
 
   function setScene(next: Scene): void {
@@ -286,6 +294,7 @@ export function createMapController(
     camera.zoomAt(event.offsetX, event.offsetY, Math.exp(-event.deltaY * unit * speed))
     // The blocks move under the pointer; the next move names the new one.
     showTooltip(undefined)
+    hoverPin(undefined)
     requestDraw()
   }
 
@@ -300,10 +309,10 @@ export function createMapController(
   const onPointerMove = (event: PointerEvent) => {
     const last = pointers.get(event.pointerId)
     if (!last) {
-      const marker = colonists.hitMarker(event.offsetX, event.offsetY)
-      hoverColonist(marker)
-      const hit = marker ? undefined : hitTest(drawn, event.offsetX, event.offsetY)
-      canvas.style.cursor = marker || hit ? 'pointer' : 'default'
+      const pin = colonists.hitPin(event.offsetX, event.offsetY)
+      hoverPin(pin)
+      const hit = pin ? undefined : hitTest(drawn, event.offsetX, event.offsetY)
+      canvas.style.cursor = pin || hit ? 'pointer' : 'default'
       const target = scene && hit ? hoverTarget(scene, hit) : undefined
       // A symbol names itself in the tooltip; other blocks only where they
       // would put themselves in focus.
@@ -332,9 +341,9 @@ export function createMapController(
   const onPointerUp = (event: PointerEvent) => {
     if (!pointers.delete(event.pointerId)) return
     if (pointers.size === 0 && dragDistance < CLICK_SLOP) {
-      const marker = colonists.hitMarker(event.offsetX, event.offsetY)
-      if (marker) {
-        selectColonist(marker, true)
+      const pin = colonists.hitPin(event.offsetX, event.offsetY)
+      if (pin) {
+        clickPin(pin, false)
         return
       }
       const id = hitTest(drawn, event.offsetX, event.offsetY)?.node.id
@@ -347,12 +356,12 @@ export function createMapController(
   }
   const onPointerLeave = () => {
     hover(undefined)
-    hoverColonist(undefined)
+    hoverPin(undefined)
   }
   const onDoubleClick = (event: MouseEvent) => {
-    const marker = colonists.hitMarker(event.offsetX, event.offsetY)
-    if (marker) {
-      selectColonist(marker, true)
+    const pin = colonists.hitPin(event.offsetX, event.offsetY)
+    if (pin) {
+      clickPin(pin, true)
       return
     }
     const hit = hitTest(drawn, event.offsetX, event.offsetY)

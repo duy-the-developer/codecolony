@@ -359,6 +359,7 @@ export function App() {
               selected={selected}
               selection={selection}
               colonist={selectedColonist}
+              colonists={placed}
               canOpenTerminal={workers.some(
                 (worker) => worker.paneId === selectedColonist?.colonist.paneId,
               )}
@@ -370,6 +371,7 @@ export function App() {
               onOpen={openFile}
               onTraceCalls={traceCalls}
               onCloseColonist={() => mapRef.current?.selectColonist(undefined)}
+              onPickColonist={pickColonist}
               onOpenTerminal={openTerminal}
             />
           </PanelContent>

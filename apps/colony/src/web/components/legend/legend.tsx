@@ -5,6 +5,9 @@ import { listTreeChildren, listTreeRoots } from '../../../modules/scene/tree-ent
 import { COLONIST_STATUS_TEXT } from '../../../modules/theme/colonist-glyphs.ts'
 import {
   CHANGE_COLORS,
+  COLONIST_CHIP,
+  COLONIST_COLORS,
+  CONFLICT_COLOR,
   hueOf,
   SELECTION_COLOR,
   SYMBOL_COLORS,
@@ -98,6 +101,30 @@ export function Legend({ scene }: LegendProps) {
             label={COLONIST_STATUS_TEXT[status]}
           />
         ))}
+        <LegendRow
+          mark={
+            <span
+              className="rounded-full px-1.5 font-bold text-[10px] leading-4"
+              style={{ background: COLONIST_COLORS.working, color: COLONIST_CHIP }}
+            >
+              CP
+            </span>
+          }
+          label="Pin"
+          detail="on every file a colonist touches, with its initials; one per folder with a count when zoomed out"
+        />
+        <LegendRow
+          mark={
+            <span
+              className="flex size-3.5 items-center justify-center rounded-full font-extrabold text-[10px]"
+              style={{ background: CONFLICT_COLOR, color: COLONIST_CHIP }}
+            >
+              !
+            </span>
+          }
+          label="Possible conflict"
+          detail="a file two or more colonists change in different copies"
+        />
       </LegendSection>
 
       <LegendSection title="Changes" note="each colonist's diff since its copy forked">

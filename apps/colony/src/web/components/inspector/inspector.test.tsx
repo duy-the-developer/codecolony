@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { PlacedColonist } from '../../../modules/scene/colonist-places.ts'
 import { Scene } from '../../../modules/scene/scene.ts'
 import type { Edge, World, WorldNode } from '../../../modules/world/world-types.ts'
 import { Inspector } from './inspector.tsx'
@@ -55,7 +56,9 @@ describe('Inspector', () => {
       <Inspector
         scene={SCENE}
         selection={[node('api.ts')]}
+        colonists={[]}
         onPick={() => {}}
+        onPickColonist={() => {}}
         onOpen={() => {}}
         onTraceCalls={() => Promise.resolve()}
       />,
@@ -71,7 +74,9 @@ describe('Inspector', () => {
       <Inspector
         scene={SCENE}
         selection={[node('api.ts')]}
+        colonists={[]}
         onPick={onPick}
+        onPickColonist={() => {}}
         onOpen={() => {}}
         onTraceCalls={() => Promise.resolve()}
       />,
@@ -86,7 +91,9 @@ describe('Inspector', () => {
       <Inspector
         scene={SCENE}
         selection={[node('api.ts')]}
+        colonists={[]}
         onPick={() => {}}
+        onPickColonist={() => {}}
         onOpen={onOpen}
         onTraceCalls={() => Promise.resolve()}
       />,
@@ -100,7 +107,9 @@ describe('Inspector', () => {
       <Inspector
         scene={SCENE}
         selection={[]}
+        colonists={[]}
         onPick={() => {}}
+        onPickColonist={() => {}}
         onOpen={() => {}}
         onTraceCalls={() => Promise.resolve()}
       />,
@@ -114,7 +123,9 @@ describe('Inspector', () => {
       <Inspector
         scene={SCENE}
         selection={[node('api.ts'), node('model.ts')]}
+        colonists={[]}
         onPick={onPick}
+        onPickColonist={() => {}}
         onOpen={() => {}}
         onTraceCalls={() => Promise.resolve()}
       />,
@@ -136,5 +147,53 @@ describe('Inspector', () => {
     expect(headings).toEqual(['Imported by1', 'Called by1'])
     fireEvent.click(items[1] as HTMLElement)
     expect(onPick).toHaveBeenCalledWith('model.ts')
+  })
+
+  it('lists the colonists changing a file and flags a possible conflict', () => {
+    const colonist = (id: string, label: string, initials: string, other: string) => ({
+      colonist: {
+        id,
+        repoId: 'world',
+        label,
+        status: 'working' as const,
+        session: 'firstmate' as const,
+        copy: id,
+        head: 'abc1234',
+        base: 'main',
+        changes: [{ path: 'api.ts', kind: 'modified' as const, units: 1 }],
+        omitted: 0,
+      },
+      initials,
+      changes: [
+        { path: 'api.ts', kind: 'modified' as const, nodeId: 'api.ts', sharedWith: [other] },
+      ],
+      folders: [],
+    })
+    const colonists: PlacedColonist[] = [
+      colonist('/one', 'colonist-pins', 'CP', '/two'),
+      colonist('/two', 'build-queue', 'BQ', '/one'),
+    ]
+    const onPickColonist = vi.fn()
+    render(
+      <Inspector
+        scene={SCENE}
+        selection={[node('api.ts')]}
+        colonists={colonists}
+        onPick={() => {}}
+        onPickColonist={onPickColonist}
+        onOpen={() => {}}
+        onTraceCalls={() => Promise.resolve()}
+      />,
+    )
+    expect(screen.getByText(/Possible conflict/)).toBeTruthy()
+    const rows = within(screen.getByRole('list', { name: 'Colonists changing it' })).getAllByRole(
+      'button',
+    )
+    expect(rows.map((row) => row.textContent)).toEqual([
+      'CPcolonist-pinsworking',
+      'BQbuild-queueworking',
+    ])
+    fireEvent.click(rows[1] as HTMLElement)
+    expect(onPickColonist).toHaveBeenCalledWith('/two')
   })
 })

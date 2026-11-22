@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Colonist } from '../wire/api-types.ts'
 import type { Rect, World, WorldNode } from '../world/world-types.ts'
-import { placeColonists } from './colonist-places.ts'
+import { pickInitials, placeColonists } from './colonist-places.ts'
 import { Scene } from './scene.ts'
 
 function node(id: string, kind: WorldNode['kind'], rect: Rect, parent?: string): WorldNode {
@@ -127,8 +127,51 @@ describe('placeColonists', () => {
     ])
     expect(placed).toEqual({
       colonist: expect.anything(),
+      initials: 'TA',
       changes: [{ path: 'a.ts', kind: 'modified' }],
       folders: [],
     })
+  })
+
+  it('names the other colonists changing the same file in the same repository', () => {
+    const one = { ...colonist([{ path: 'src/a.ts', kind: 'modified', units: 1 }]), id: '/one' }
+    const two = {
+      ...colonist([
+        { path: 'src/a.ts', kind: 'modified', units: 1 },
+        { path: 'src/b.ts', kind: 'modified', units: 1 },
+      ]),
+      id: '/two',
+    }
+    const away = { ...colonist([{ path: 'src/a.ts', kind: 'modified', units: 1 }], 'x'), id: '/x' }
+    const [first, second, third] = placeColonists(new Scene(WORLD), [one, two, away])
+    expect(first?.changes[0]?.sharedWith).toEqual(['/two'])
+    expect(second?.changes.map((change) => change.sharedWith)).toEqual([['/one'], undefined])
+    expect(third?.changes[0]?.sharedWith).toBeUndefined()
+  })
+
+  it('gives every colonist different initials', () => {
+    const placed = placeColonists(new Scene(WORLD), [
+      { ...colonist([]), id: '/1', label: 'colonist-pins' },
+      { ...colonist([]), id: '/2', label: 'colonist-panel' },
+      { ...colonist([]), id: '/3', label: 'build-queue' },
+    ])
+    expect(placed.map((item) => item.initials)).toEqual(['CP', 'CO', 'BQ'])
+  })
+})
+
+describe('pickInitials', () => {
+  const repo = { ...WORLD.nodes[1], name: 'codecolony' } as WorldNode
+
+  it('leaves out the repository name a firstmate task id starts with', () => {
+    expect(pickInitials('codecolony-colonist-pins', repo, new Set())).toBe('CP')
+  })
+
+  it('reads a copy label by its place', () => {
+    expect(pickInitials('codecolony-d64159/5 · detached', repo, new Set())).toBe('D5')
+    expect(pickInitials('p/codecolony · production', repo, new Set())).toBe('PC')
+  })
+
+  it('takes the first two letters of a single word', () => {
+    expect(pickInitials('scout', repo, new Set())).toBe('SC')
   })
 })
