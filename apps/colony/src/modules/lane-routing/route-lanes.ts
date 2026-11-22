@@ -75,7 +75,7 @@ interface Pass {
 // How many links pass each channel, for sizing gutters.
 export function countChannelLoad(graph: ChannelGraph, links: readonly Link[]): Int32Array {
   const load = new Int32Array(graph.channels.length)
-  for (const path of findPaths(graph, buildSearchGraph(graph), links)) {
+  for (const path of findPaths(graph, resolveSearchGraph(graph), links)) {
     if (!path) continue
     for (let step = 0; step + 1 < path.length; step++) {
       const c = channelBetween(graph.attachments, path[step] as number, path[step + 1] as number)
@@ -92,7 +92,7 @@ export function routeLanes(
 ): LaneRouting {
   const { channels, attachments } = graph
   // Per link: the attachments it crosses, first and last on block sides.
-  const paths = findPaths(graph, buildSearchGraph(graph), links)
+  const paths = findPaths(graph, resolveSearchGraph(graph), links)
   // Per link, a coordinate per line: the first port, the lane in each
   // channel it passes, the last port.
   const coords = paths.map((path) => (path ? new Float64Array(path.length + 1) : undefined))
@@ -427,6 +427,19 @@ interface SearchGraph {
   offsets: Int32Array
   targets: Int32Array
   costs: Float64Array
+}
+
+// Each channel graph's search graph, built on first use: a level routes the
+// same graph again for every new focus.
+const searchGraphs = new WeakMap<ChannelGraph, SearchGraph>()
+
+function resolveSearchGraph(graph: ChannelGraph): SearchGraph {
+  let search = searchGraphs.get(graph)
+  if (!search) {
+    search = buildSearchGraph(graph)
+    searchGraphs.set(graph, search)
+  }
+  return search
 }
 
 function buildSearchGraph(graph: ChannelGraph): SearchGraph {

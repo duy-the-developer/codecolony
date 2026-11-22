@@ -51,6 +51,42 @@ describe('buildRouteBoxes', () => {
     expect(boxes.blockOf('r/root.ts#f')).toBe(looseId('r'))
   })
 
+  it('keeps files inside their block until their holder opens', () => {
+    expect(buildRouteBoxes(NODES).hasFileBlocks).toBe(false)
+  })
+
+  it('makes each file of an open module a block of its own', () => {
+    const boxes = buildRouteBoxes(
+      NODES,
+      () => true,
+      (id) => id === 'r/p/a',
+    )
+    expect(listIds(boxes.root)).toEqual([
+      'world/',
+      'r/',
+      'r/p/',
+      'r/p/a/',
+      'r/p/a/1.ts',
+      'r/p/b/',
+      'r/p/b/c',
+      looseId('r/p/b'),
+      looseId('r'),
+    ])
+    expect(boxes.blockOf('r/p/a/1.ts')).toBe('r/p/a/1.ts')
+    expect(boxes.blockOf('r/p/b/2.ts')).toBe(looseId('r/p/b'))
+    expect(boxes.hasFileBlocks).toBe(true)
+  })
+
+  it('opens the files directly in a container by their group id', () => {
+    const boxes = buildRouteBoxes(
+      NODES,
+      () => true,
+      (id) => id === looseId('r'),
+    )
+    expect(listIds(boxes.root).slice(-2)).toEqual([`${looseId('r')}/`, 'r/root.ts'])
+    expect(boxes.blockOf('r/root.ts#f')).toBe('r/root.ts')
+  })
+
   it('treats a closed container as one block', () => {
     const boxes = buildRouteBoxes(NODES, (id) => id !== 'r/p')
     expect(listIds(boxes.root)).toEqual(['world/', 'r/', 'r/p', looseId('r')])

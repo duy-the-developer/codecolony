@@ -139,12 +139,25 @@ export function buildChannelGraph(root: RouteBox): ChannelGraph {
   const placeContainer = (box: RouteBox, nb: Neighbours, depth: number) => {
     const band = toBand(box.rect)
     const items: Item[] = []
-    const header = box.header ?? 0
-    if (header > 0) {
-      items.push({ band: { ...band, y1: Math.min(band.y0 + header, band.y1) }, box: undefined })
-    }
     for (const kid of box.kids ?? []) items.push({ band: toBand(kid.rect), box: kid })
-    split(band, items, 'y', nb, box.id, depth, false)
+    const header = box.header ?? 0
+    const headerEnd = Math.min(band.y0 + header, band.y1)
+    // Children flush under the label strip are cut off it first, so that the
+    // cut never has to fall where the strip merely touches them, which would
+    // also split them at every edge that lines up with it.
+    if (
+      header > 0 &&
+      items.length > 0 &&
+      items.every((item) => item.band.y0 >= headerEnd) &&
+      Math.min(...items.map((item) => item.band.y0)) === headerEnd
+    ) {
+      const below: Neighbours = [...nb]
+      below[TOP] = -1
+      split({ ...band, y0: headerEnd }, items, 'y', below, box.id, depth)
+      return
+    }
+    if (header > 0) items.unshift({ band: { ...band, y1: headerEnd }, box: undefined })
+    split(band, items, 'y', nb, box.id, depth)
   }
 
   const place = (item: Item, nb: Neighbours, depth: number) => {
@@ -156,30 +169,27 @@ export function buildChannelGraph(root: RouteBox): ChannelGraph {
 
   // Cuts a band across `across` (y: into horizontal strips) between groups of
   // items that do not overlap on that axis, then each group the other way.
+  // When the items do not part that way, it cuts the other way instead.
   const split = (
     band: Band,
     items: Item[],
-    across: Axis,
+    preferred: Axis,
     nb: Neighbours,
     container: string,
     depth: number,
-    isRetry: boolean,
   ): void => {
     if (items.length === 0) return
     if (items.length === 1) {
       place(items[0] as Item, nb, depth)
       return
     }
-    const groups = groupItems(items, across)
-    if (groups.length === 1) {
-      if (isRetry) {
-        // Not a row layout: leave these boxes without lanes.
-        graph.stuck += items.length
-        return
-      }
-      split(band, items, across === 'y' ? 'x' : 'y', nb, container, depth, true)
+    const cut = cutItems(items, preferred)
+    if (!cut) {
+      // Not a row layout: leave these boxes without lanes.
+      graph.stuck += items.length
       return
     }
+    const { across, groups } = cut
     const [lowSide, highSide, startSide, endSide] = CUT_SIDES[across]
     const [start, end] = across === 'y' ? [band.x0, band.x1] : [band.y0, band.y1]
     // The channel after each group, or -1 when the next group touches it.
@@ -241,7 +251,7 @@ export function buildChannelGraph(root: RouteBox): ChannelGraph {
       const pieceNb: Neighbours = [...nb]
       pieceNb[lowSide] = g === 0 ? nb[lowSide] : (between[g - 1] as number)
       pieceNb[highSide] = g === groups.length - 1 ? nb[highSide] : (between[g] as number)
-      split(piece, group.items, across === 'y' ? 'x' : 'y', pieceNb, container, depth + 1, false)
+      split(piece, group.items, across === 'y' ? 'x' : 'y', pieceNb, container, depth + 1)
     })
   }
 
@@ -304,15 +314,31 @@ interface Group {
   items: Item[]
 }
 
-// Items in runs that overlap on one axis; touching runs stay apart.
-function groupItems(items: Item[], across: Axis): Group[] {
+// Where to cut a set of items: across the preferred axis or else the other,
+// between groups with a real gap first. Only when no gap parts them, at edges
+// that merely touch: such a cut holds no channel, so the block sides along it
+// get no lanes and the channels on either side cannot reach each other.
+function cutItems(items: Item[], preferred: Axis): { across: Axis; groups: Group[] } | undefined {
+  const other: Axis = preferred === 'y' ? 'x' : 'y'
+  for (const isTouchingApart of [false, true]) {
+    for (const across of [preferred, other]) {
+      const groups = groupItems(items, across, isTouchingApart)
+      if (groups.length > 1) return { across, groups }
+    }
+  }
+  return undefined
+}
+
+// Items in runs that overlap on one axis. Touching runs join, unless
+// isTouchingApart.
+function groupItems(items: Item[], across: Axis, isTouchingApart: boolean): Group[] {
   const sorted = [...items].sort((a, b) => lowEdge(a.band, across) - lowEdge(b.band, across))
   const groups: Group[] = []
   for (const item of sorted) {
     const lo = lowEdge(item.band, across)
     const hi = highEdge(item.band, across)
     const last = groups[groups.length - 1]
-    if (last && lo < last.end) {
+    if (last && (lo < last.end || (!isTouchingApart && lo === last.end))) {
       last.end = Math.max(last.end, hi)
       last.items.push(item)
     } else {

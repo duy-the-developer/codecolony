@@ -3,7 +3,7 @@ import { Scene } from '../scene/scene.ts'
 import { PROVEN_PROVENANCES } from '../world/facts.ts'
 import type { Edge, NodeKind, Rect, World, WorldNode } from '../world/world-types.ts'
 import { LINK_LEVELS_PER_OCTAVE, LinkCache, MIN_LINK_ALPHA } from './link-cache.ts'
-import { MIN_VISIBLE_PX, openness } from './lod.ts'
+import { FILE_LANES_PX, MIN_VISIBLE_PX, openness } from './lod.ts'
 
 function node(id: string, kind: NodeKind, parent: string | undefined, rect: Rect): WorldNode {
   const base = { id, kind, name: id, lines: 1, complexity: 0, rect }
@@ -180,6 +180,31 @@ describe('LinkCache', () => {
       'import|r/a|r/b|true|2|hot',
       'call|r/a|r/b|true|1',
       'call|r/a|r/b|false|1',
+    ])
+  })
+
+  it('opens no file holders below FILE_LANES_PX', () => {
+    const scene = new Scene(makeWorld(EDGES))
+    const cache = new LinkCache(scene)
+    const scale = FILE_LANES_PX * 0.99
+    const holders = listHolders(scene, scale, WHOLE_WORLD).map((node) => ({ node }))
+    expect(cache.listOpenContainers(scale, holders).ids).toEqual(['world', 'r'])
+  })
+
+  it('opens the holders of the files on screen from FILE_LANES_PX', () => {
+    const scene = new Scene(makeWorld(EDGES))
+    const cache = new LinkCache(scene)
+    const window = { x: 1, y: 1, w: 20, h: 20 }
+    const holders = listHolders(scene, FILE_LANES_PX, window).map((node) => ({ node }))
+    const open = cache.listOpenContainers(FILE_LANES_PX, holders)
+    expect(open.ids).toEqual(['world', 'r', 'r/a'])
+    expect(open.key).not.toBe(cache.listOpenContainers(FILE_LANES_PX).key)
+    const everything = listHolders(scene, FILE_LANES_PX, WHOLE_WORLD).map((node) => ({ node }))
+    expect(cache.listOpenContainers(FILE_LANES_PX, everything).ids).toEqual([
+      'world',
+      'r',
+      'r/a',
+      'r/b',
     ])
   })
 

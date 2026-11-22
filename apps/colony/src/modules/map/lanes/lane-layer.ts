@@ -11,7 +11,8 @@ import type { LaneEdge, LaneLevel, LaneRoutes } from './lane-world.ts'
 // the worker, and kept for levels with the same open containers. With the
 // overlay on, every link of the level is routed; with it off, only the links
 // of the hovered or selected nodes. Until a level's routes arrive, the last
-// ones routed are drawn.
+// ones routed are drawn. Zoomed in far enough, the files on screen open, so
+// panning there moves to new levels as files come into view.
 
 export interface LaneFrame {
   // Every link of the level, with the overlay on.
@@ -51,6 +52,7 @@ export class LaneLayer {
   private readonly allRoutes = new Map<string, LaneRoutes>()
   private readonly focusRoutes = new Map<string, LaneRoutes>()
   private lastAll: { key: string; routes: LaneRoutes } | undefined
+  private lastFocus: { focus: string; routes: LaneRoutes } | undefined
   private hot: { key: string; focus: Focus; links: Uint8Array | undefined } | undefined
   private busy: Job | undefined
   private wanted: Job | undefined
@@ -73,7 +75,7 @@ export class LaneLayer {
   // The lanes to draw at this scale. holders: the drawn nodes that can hold
   // a link end; focus: the hovered or selected nodes, if any.
   frame(scale: number, holders: readonly Holder[], focus: Focus, isOverlayOn: boolean): LaneFrame {
-    const open = this.links.listOpenContainers(scale)
+    const open = this.links.listOpenContainers(scale, holders)
     const level = this.levels.get(open.key)
     let job: Job | undefined
     const frame: LaneFrame = {
@@ -96,6 +98,10 @@ export class LaneLayer {
       if (!frame.focus && only.length > 0) {
         job = { kind: 'focus', key: open.key, open: open.ids, focus: focus.key, only }
       }
+    }
+    // While the focus's lanes at this level are on their way, its last ones.
+    if (!isOverlayOn && !frame.focus && job && this.lastFocus?.focus === focus.key) {
+      frame.focus = this.lastFocus.routes
     }
     if (isOverlayOn) {
       const routed = this.allRoutes.get(open.key)
@@ -177,6 +183,7 @@ export class LaneLayer {
           this.lastAll = { key: job.key, routes }
         } else {
           keep(this.focusRoutes, `${job.key}\n${job.focus}`, routes)
+          this.lastFocus = { focus: job.focus, routes }
         }
         done()
       }, failed)

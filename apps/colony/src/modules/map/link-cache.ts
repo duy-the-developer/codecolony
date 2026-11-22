@@ -1,7 +1,8 @@
+import { looseId } from '../lane-routing/route-boxes.ts'
 import type { Scene } from '../scene/scene.ts'
 import { PROVEN_PROVENANCES } from '../world/facts.ts'
 import type { Edge, EdgeKind, WorldNode } from '../world/world-types.ts'
-import { MIN_VISIBLE_PX, openness } from './lod.ts'
+import { FILE_LANES_PX, MIN_VISIBLE_PX, openness } from './lod.ts'
 
 // Links join the deepest drawn nodes that hold each edge's ends, so they merge
 // as you zoom out and split as you zoom in. Working that out walks every edge,
@@ -17,6 +18,12 @@ import { MIN_VISIBLE_PX, openness } from './lod.ts'
 //    survives only if the two children of its ends' common ancestor are both
 //    drawn; otherwise one end would land on an ancestor of the other. That check
 //    is two array reads, so off-screen links cost almost nothing.
+//
+// Lanes are routed between blocks: closed containers, and modules of files
+// (lanes/lane-world.ts). Once a unit is FILE_LANES_PX wide, the modules whose
+// files are on screen open too, so lanes run between their files. Only those
+// on screen open: a large world has far too many links between files to route
+// at once.
 
 export const LINK_LEVELS_PER_OCTAVE = 4
 // Nodes this faint are drawn, but links pass them to their parent.
@@ -47,6 +54,9 @@ interface LevelLinks {
 
 export interface OpenContainers {
   readonly key: string
+  // Containers that show their folders, then holders of files on screen
+  // (route-boxes.ts: a container of only files, or the looseId of a
+  // container's own files).
   readonly ids: readonly string[]
 }
 
@@ -85,6 +95,8 @@ export class LinkCache {
   private edgeCode = new Int32Array(0)
   private kinds: EdgeKind[] = []
   private readonly levels = new Map<number, LevelLinks>()
+  // The open containers last listed with file holders, reused while the same.
+  private lastOpen: OpenContainers | undefined
   private hotSubtree: ReadonlySet<string> | undefined
   private edgeHot = new Uint8Array(0)
   private hotLinks = new WeakMap<LevelLinks, Uint8Array>()
@@ -206,9 +218,32 @@ export class LinkCache {
     return { count, from, to, kind, proven, edges, hot, sameFile }
   }
 
-  // The containers open at the level a scale falls in.
-  listOpenContainers(scale: number): OpenContainers {
-    return this.resolveLevel(scale).open
+  // The containers open at the level a scale falls in and, from FILE_LANES_PX,
+  // the holders of the files among the drawn nodes.
+  listOpenContainers(
+    scale: number,
+    holders: readonly { readonly node: WorldNode }[] = [],
+  ): OpenContainers {
+    const open = this.resolveLevel(scale).open
+    if (scale < FILE_LANES_PX) return open
+    const fileHolders = new Set<number>()
+    for (const { node } of holders) {
+      const i = node.kind === 'file' ? this.index.get(node.id) : undefined
+      if (i === undefined) continue
+      const p = this.parent[i] as number
+      if (p >= 0) fileHolders.add(p)
+    }
+    if (fileHolders.size === 0) return open
+    const sorted = [...fileHolders].sort((a, b) => a - b)
+    const key = `${open.key}|${sorted.join(',')}`
+    if (this.lastOpen?.key === key) return this.lastOpen
+    const ids = [...open.ids]
+    for (const p of sorted) {
+      const id = (this.nodes[p] as WorldNode).id
+      ids.push(this.hasFolders[p] ? looseId(id) : id)
+    }
+    this.lastOpen = { key, ids }
+    return this.lastOpen
   }
 
   // The links of the level a scale falls in, aggregated on first use.

@@ -315,8 +315,9 @@ function ellipsize(ctx: CanvasRenderingContext2D, text: string, width: number): 
   return lo === 0 ? '' : `${text.slice(0, lo)}…`
 }
 
-// Lanes sit one grid unit apart, so lines scale with the unit up to these
-// widths, in pixels. Arrowheads show once a unit is ARROW_MIN_PX wide.
+// Lines scale with the space between lanes (a grid unit, or less where lanes
+// run between files) up to these widths, in pixels. Arrowheads show once
+// lanes are ARROW_MIN_PX apart.
 const LANE_WIDTH_PX: readonly [number, number] = [0.75, 2]
 const ARROW_PX: readonly [number, number] = [3, 8]
 const ARROW_MIN_PX = 2
@@ -384,9 +385,10 @@ function buildLanePaths(routes: LaneRoutes, pick: (i: number) => boolean): LaneP
 
 // Each lane is a polyline from the importer's side to the imported block's
 // side, where an arrowhead points into the block. With a focus, every lane is
-// dimmed and the focus's lanes drawn bright on top. Paths are built once per
-// routing and drawn in world units, so a frame only strokes the buckets on
-// screen.
+// dimmed and the focus's lanes drawn bright on top. Lanes between files are
+// too many to read one by one, so they are always dimmed. Paths are built
+// once per routing and drawn in world units, so a frame only strokes the
+// buckets on screen.
 function drawLanes(
   ctx: CanvasRenderingContext2D,
   frame: LaneFrame,
@@ -401,7 +403,7 @@ function drawLanes(
       paths = buildLanePaths(all, () => true)
       allPaths.set(all, paths)
     }
-    layers.push([all, paths, hot ? 'dim' : 'normal'])
+    layers.push([all, paths, hot || all.pitch > 1 ? 'dim' : 'normal'])
     if (hot) {
       let held = hotPaths.get(hot)
       if (held?.routes !== all) {
@@ -425,8 +427,6 @@ function drawLanes(
   if (layers.length === 0) return
 
   const unit = camera.scale
-  const width = Math.min(Math.max(unit * 0.25, LANE_WIDTH_PX[0]), LANE_WIDTH_PX[1])
-  const arrow = Math.min(Math.max(unit * 0.8, ARROW_PX[0]), ARROW_PX[1])
   const [left, top] = camera.toWorld(0, 0)
   const [right, bottom] = camera.toWorld(view.width, view.height)
   const isOnScreen = (b: LaneBucket) =>
@@ -438,6 +438,9 @@ function drawLanes(
   ctx.lineJoin = 'miter'
   for (const [routes, paths, emphasis] of layers) {
     const shown = paths.buckets.filter(isOnScreen)
+    const apart = unit / routes.pitch
+    const width = Math.min(Math.max(apart * 0.25, LANE_WIDTH_PX[0]), LANE_WIDTH_PX[1])
+    const arrow = Math.min(Math.max(apart * 0.8, ARROW_PX[0]), ARROW_PX[1])
     ctx.globalAlpha = LANE_ALPHA[emphasis]
     ctx.setTransform(
       base.a * unit,
@@ -450,7 +453,7 @@ function drawLanes(
     ctx.lineWidth = (emphasis === 'hot' ? width + 0.75 : width) / unit
     for (const bucket of shown) ctx.stroke(bucket.path)
     ctx.setTransform(base)
-    if (unit < ARROW_MIN_PX) continue
+    if (apart < ARROW_MIN_PX) continue
     ctx.beginPath()
     for (const bucket of shown) {
       for (const i of bucket.lanes) {
