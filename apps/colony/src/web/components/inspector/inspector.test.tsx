@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Scene } from '../../../modules/scene/scene.ts'
 import type { Edge, World, WorldNode } from '../../../modules/world/world-types.ts'
@@ -41,6 +41,12 @@ const SCENE = new Scene({
   ],
 } satisfies World)
 
+function node(id: string): WorldNode {
+  const found = SCENE.byId.get(id)
+  if (!found) throw new Error(id)
+  return found
+}
+
 describe('Inspector', () => {
   afterEach(cleanup)
 
@@ -48,7 +54,7 @@ describe('Inspector', () => {
     render(
       <Inspector
         scene={SCENE}
-        selected={SCENE.byId.get('api.ts')}
+        selection={[node('api.ts')]}
         onPick={() => {}}
         onOpen={() => {}}
         onTraceCalls={() => Promise.resolve()}
@@ -64,7 +70,7 @@ describe('Inspector', () => {
     render(
       <Inspector
         scene={SCENE}
-        selected={SCENE.byId.get('api.ts')}
+        selection={[node('api.ts')]}
         onPick={onPick}
         onOpen={() => {}}
         onTraceCalls={() => Promise.resolve()}
@@ -79,7 +85,7 @@ describe('Inspector', () => {
     render(
       <Inspector
         scene={SCENE}
-        selected={SCENE.byId.get('api.ts')}
+        selection={[node('api.ts')]}
         onPick={() => {}}
         onOpen={onOpen}
         onTraceCalls={() => Promise.resolve()}
@@ -93,12 +99,42 @@ describe('Inspector', () => {
     render(
       <Inspector
         scene={SCENE}
-        selected={undefined}
+        selection={[]}
         onPick={() => {}}
         onOpen={() => {}}
         onTraceCalls={() => Promise.resolve()}
       />,
     )
     expect(screen.getByText('Click anything on the map to inspect it.')).toBeTruthy()
+  })
+
+  it('shows several selected nodes combined', () => {
+    const onPick = vi.fn()
+    render(
+      <Inspector
+        scene={SCENE}
+        selection={[node('api.ts'), node('model.ts')]}
+        onPick={onPick}
+        onOpen={() => {}}
+        onTraceCalls={() => Promise.resolve()}
+      />,
+    )
+    expect(screen.getByText('2 selected')).toBeTruthy()
+    const items = within(screen.getByRole('list', { name: 'Selected' })).getAllByRole('button')
+    expect(items.map((item) => item.textContent)).toEqual(['fileapi.ts', 'filemodel.ts'])
+    const facts = [...document.querySelectorAll('dt')].map((dt) => [
+      dt.textContent,
+      dt.nextSibling?.textContent,
+    ])
+    expect(facts).toEqual([
+      ['Files', '2'],
+      ['Imports between them', '1'],
+      ['Imports out', '0'],
+      ['Imported by others', '1'],
+    ])
+    const headings = screen.getAllByRole('heading', { level: 4 }).map((h) => h.textContent)
+    expect(headings).toEqual(['Imported by1', 'Called by1'])
+    fireEvent.click(items[1] as HTMLElement)
+    expect(onPick).toHaveBeenCalledWith('model.ts')
   })
 })
