@@ -92,6 +92,35 @@ describe('placeColonists', () => {
     expect(y).toEqual({ x: 2, y: 5, w: 2, h: 2 })
   })
 
+  it('names the first folder that is new, past folders merged into a subfolder', () => {
+    // a holds only a/b, which holds only a/b/c: the map shows a and a/b/c.
+    const withPath = (made: WorldNode, path: string) => ({ ...made, path })
+    const world: World = {
+      ...WORLD,
+      nodes: [
+        node('world', 'world', { x: 0, y: 0, w: 20, h: 20 }),
+        node('r', 'repo', { x: 0, y: 0, w: 20, h: 20 }, 'world'),
+        withPath(node('r/a', 'module', { x: 1, y: 2, w: 12, h: 10 }, 'r'), 'a'),
+        withPath(node('r/a/b/c', 'module', { x: 2, y: 3, w: 4, h: 4 }, 'r/a'), 'a/b/c'),
+        withPath(node('r/a/b/c/f.ts', 'file', { x: 2, y: 4, w: 2, h: 2 }, 'r/a/b/c'), 'a/b/c/f.ts'),
+      ],
+    }
+    const [placed] = placeColonists(new Scene(world), [
+      colonist([
+        { path: 'a/b/x/new.ts', kind: 'added', units: 1 },
+        { path: 'a/b/loose.ts', kind: 'added', units: 1 },
+      ]),
+    ])
+    expect(placed?.folders.map(({ name, holderId }) => ({ name, holderId }))).toEqual([
+      { name: 'x', holderId: 'r/a' },
+    ])
+    expect(placed?.changes.map(({ path, holderId }) => ({ path, holderId }))).toEqual([
+      { path: 'a/b/x/new.ts', holderId: 'r/a' },
+      { path: 'a/b/loose.ts', holderId: 'r/a' },
+    ])
+    expect(placed?.changes[1]?.placeholder).toBeDefined()
+  })
+
   it('lists the changes of a repository that is not on the map', () => {
     const [placed] = placeColonists(new Scene(WORLD), [
       colonist([{ path: 'a.ts', kind: 'modified', units: 1 }], 'elsewhere'),

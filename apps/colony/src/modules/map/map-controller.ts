@@ -334,7 +334,7 @@ export function createMapController(
     if (pointers.size === 0 && dragDistance < CLICK_SLOP) {
       const marker = colonists.hitMarker(event.offsetX, event.offsetY)
       if (marker) {
-        selectColonist(marker)
+        selectColonist(marker, true)
         return
       }
       const id = hitTest(drawn, event.offsetX, event.offsetY)?.node.id

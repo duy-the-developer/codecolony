@@ -28,6 +28,26 @@ describe('resolvePresence', () => {
     })
   })
 
+  it.each([
+    ['done', 'https://github.com/o/r/pull/7', 'pr-ready'],
+    ['blocked', undefined, 'blocked'],
+    ['failed', undefined, 'error'],
+    ['needs-decision', undefined, 'waiting'],
+  ] as const)('keeps a task that ended %s as %s with no live session', (state, pr, expected) => {
+    const ended = { id: 't', status: { state, text: 'stopped' }, ...(pr ? { pr } : {}) }
+    expect(resolvePresence(ended, [], true)).toEqual({
+      status: expected,
+      session: 'none',
+      note: 'stopped',
+      ...(pr ? { pr } : {}),
+    })
+  })
+
+  it('is idle for a task that finished without a pull request and no live session', () => {
+    const done = { id: 't', status: { state: 'done', text: 'merged by hand' } }
+    expect(resolvePresence(done, [], true).status).toBe('idle')
+  })
+
   it('trusts a firstmate task when no session source answered', () => {
     expect(resolvePresence(task, [], false)).toMatchObject({
       status: 'working',

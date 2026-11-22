@@ -11,12 +11,10 @@ export function useColonists(): Colonist[] {
   const [colonists, setColonists] = useState<Colonist[]>(NONE)
   useEffect(() => {
     let isDisposed = false
-    let version = -1
     let queue: Promise<void> = Promise.resolve()
     async function load(): Promise<void> {
       const next = await fetchColonists()
-      if (isDisposed || next.version === version) return
-      version = next.version
+      if (isDisposed) return
       setColonists(next.colonists)
     }
     const unsubscribe = subscribeServerEvent('colonists', () => {

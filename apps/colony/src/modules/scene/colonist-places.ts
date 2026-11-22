@@ -64,7 +64,10 @@ function placeColonist(
     return placed
   }
   // Added files not on the map, by holder and the new folder they start.
-  const groups = new Map<string, { holder: WorldNode; folder?: string; changes: PlacedChange[] }>()
+  const groups = new Map<
+    string,
+    { holder: WorldNode; folder?: { name: string; dir: string }; changes: PlacedChange[] }
+  >()
   const pending: { change: PlacedChange; units: number }[] = []
   for (const { path, kind, units } of colonist.changes) {
     const change: PlacedChange = { path, kind }
@@ -78,7 +81,7 @@ function placeColonist(
     if (kind !== 'added') continue
     const { holder, folder } = findHolder(scene, repo, path)
     change.holderId = holder.id
-    const key = `${holder.id}\0${folder ?? ''}`
+    const key = `${holder.id}\0${folder?.dir ?? ''}`
     let group = groups.get(key)
     if (!group) {
       group = { holder, changes: [], ...(folder ? { folder } : {}) }
@@ -98,7 +101,7 @@ function placeColonist(
   for (const group of groups.values()) {
     if (!group.folder) continue
     const box = placeFolder(scene, group.holder, group.changes, taken)
-    if (box) placed.folders.push({ name: group.folder, holderId: group.holder.id, ...box })
+    if (box) placed.folders.push({ name: group.folder.name, holderId: group.holder.id, ...box })
   }
 
   const rects = [
@@ -115,23 +118,37 @@ function placeColonist(
 }
 
 // The deepest folder on the map that holds the path, and the first folder
-// of the path below it that is not on the map yet.
+// of the path below it that is not in the repository yet, by name and by
+// path. A folder with no node of its own (merged into its one subfolder's
+// module) is in the repository when the holder has a node under it.
 function findHolder(
   scene: Scene,
   repo: WorldNode,
   path: string,
-): { holder: WorldNode; folder?: string } {
+): { holder: WorldNode; folder?: { name: string; dir: string } } {
   const parts = path.split('/').slice(0, -1)
-  for (let depth = parts.length; depth > 0; depth--) {
-    const dir = parts.slice(0, depth).join('/')
-    const holder = [`${repo.id}/package:${dir}`, `${repo.id}/${dir}`]
+  let holder = repo
+  let depth = 0
+  for (let d = parts.length; d > 0; d--) {
+    const dir = parts.slice(0, d).join('/')
+    const found = [`${repo.id}/package:${dir}`, `${repo.id}/${dir}`]
       .map((id) => scene.byId.get(id))
       .find((node) => node?.kind === 'package' || node?.kind === 'module')
-    const folder = parts[depth]
-    if (holder) return folder ? { holder, folder } : { holder }
+    if (found) {
+      holder = found
+      depth = d
+      break
+    }
   }
-  const folder = parts[0]
-  return folder ? { holder: repo, folder } : { holder: repo }
+  const inside = (scene.children.get(holder.id) ?? []).flatMap((child) =>
+    child.path ? [child.path] : [],
+  )
+  for (let d = depth; d < parts.length; d++) {
+    const dir = parts.slice(0, d + 1).join('/')
+    if (!inside.some((known) => known === dir || known.startsWith(`${dir}/`)))
+      return { holder, folder: { name: parts[d] as string, dir } }
+  }
+  return { holder }
 }
 
 // Lays a new folder's files out as small squares in a box, and finds the box

@@ -51,7 +51,7 @@ export interface SearchMatches {
 
 // working, paused: a session is on it. waiting: it needs you. blocked, error:
 // it stopped. pr-ready: its pull request is open. idle: changes, but no live
-// session in the copy.
+// session in the copy and no task saying how it ended.
 export const COLONIST_STATUSES = [
   'working',
   'paused',

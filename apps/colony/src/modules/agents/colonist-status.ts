@@ -38,8 +38,12 @@ export function statusFromTask(task: FirstmateTask): ColonistStatus | undefined 
   }
 }
 
+// Statuses a firstmate task can end in, which hold with no live session.
+const SETTLED: ReadonlySet<ColonistStatus> = new Set(['waiting', 'blocked', 'error', 'pr-ready'])
+
 // sessions: the live sessions in the copy. canSeeSessions: some session
 // source answered; when none did, a firstmate task alone counts as live.
+// With no live session the copy is idle unless its task ended settled.
 export function resolvePresence(
   task: FirstmateTask | undefined,
   sessions: readonly LiveSession[],
@@ -51,7 +55,11 @@ export function resolvePresence(
   if (task?.pr) presence.pr = task.pr
   const agent = sessions.find((session) => session.agent)?.agent
   if (agent) presence.agent = agent
-  if (!isLive) return presence
+  if (!isLive) {
+    const settled = task && statusFromTask(task)
+    if (settled && SETTLED.has(settled)) presence.status = settled
+    return presence
+  }
   const paneId = sessions.find((session) => session.paneId)?.paneId
   if (paneId) presence.paneId = paneId
   presence.session = task ? 'firstmate' : 'own'
