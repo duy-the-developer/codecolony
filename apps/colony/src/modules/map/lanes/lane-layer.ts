@@ -1,7 +1,7 @@
 import type { RouteNode } from '../../lane-routing/route-boxes.ts'
 import type { Scene } from '../../scene/scene.ts'
 import type { WorldNode } from '../../world/world-types.ts'
-import { crossesFocus, type Focus } from '../focus.ts'
+import { DEPENDANT, DEPENDS_ON, type Focus, focusDirection } from '../focus.ts'
 import { LinkCache } from '../link-cache.ts'
 import type { LaneRouterHandle } from './lane-router.ts'
 import type { LaneEdge, LaneLevel, LaneRoutes } from './lane-world.ts'
@@ -17,14 +17,22 @@ import type { LaneEdge, LaneLevel, LaneRoutes } from './lane-world.ts'
 export interface LaneFrame {
   // Every link of the level, with the overlay on.
   all: LaneRoutes | undefined
-  // Per link of all's level, whether it stands out (1) because it carries an
-  // import of the focus; undefined when nothing in focus has such a link.
-  // Kept while the focus and level stay the same.
+  // Per link of all's level, the focus.ts direction bits of the focus's
+  // imports it carries, 0 for none; undefined when nothing in focus has such
+  // a link. Kept while the focus and level stay the same.
   hot: Uint8Array | undefined
-  // Only the focus's links, with the overlay off.
+  // Only the focus's links, with the overlay off, and their direction bits
+  // per link of their level.
   focus: LaneRoutes | undefined
-  // Drawn nodes at the other end of the focus's imports, by id.
-  partners: ReadonlySet<string>
+  focusHot: Uint8Array | undefined
+  // Drawn nodes at the other end of the focus's imports, by id, with the
+  // direction bits of the imports that reach them.
+  partners: ReadonlyMap<string, number>
+}
+
+interface FocusRoutes {
+  routes: LaneRoutes
+  hot: Uint8Array
 }
 
 interface Holder {
@@ -34,7 +42,14 @@ interface Holder {
 type Job =
   | { kind: 'level'; key: string; open: readonly string[] }
   | { kind: 'all'; key: string; open: readonly string[] }
-  | { kind: 'focus'; key: string; open: readonly string[]; focus: string; only: number[] }
+  | {
+      kind: 'focus'
+      key: string
+      open: readonly string[]
+      focus: string
+      only: number[]
+      hot: Uint8Array
+    }
 
 // Routed results kept per kind.
 const MAX_KEPT = 6
@@ -50,9 +65,9 @@ export class LaneLayer {
   private readonly edges: LaneEdge[] = []
   private readonly levels = new Map<string, LaneLevel>()
   private readonly allRoutes = new Map<string, LaneRoutes>()
-  private readonly focusRoutes = new Map<string, LaneRoutes>()
+  private readonly focusRoutes = new Map<string, FocusRoutes>()
   private lastAll: { key: string; routes: LaneRoutes } | undefined
-  private lastFocus: { focus: string; routes: LaneRoutes } | undefined
+  private lastFocus: { focus: string; routed: FocusRoutes } | undefined
   private hot: { key: string; focus: Focus; links: Uint8Array | undefined } | undefined
   private busy: Job | undefined
   private wanted: Job | undefined
@@ -82,7 +97,8 @@ export class LaneLayer {
       all: undefined,
       hot: undefined,
       focus: undefined,
-      partners: new Set(),
+      focusHot: undefined,
+      partners: new Map(),
     }
     if (!level) {
       job = { kind: 'level', key: open.key, open: open.ids }
@@ -91,17 +107,20 @@ export class LaneLayer {
     } else if (focus.ids.length > 0) {
       const hot = this.listHot(open.key, level, focus)
       const only: number[] = []
-      hot?.forEach((isHot, link) => {
-        if (isHot) only.push(link)
+      hot?.forEach((direction, link) => {
+        if (direction) only.push(link)
       })
-      frame.focus = this.focusRoutes.get(`${open.key}\n${focus.key}`)
-      if (!frame.focus && only.length > 0) {
-        job = { kind: 'focus', key: open.key, open: open.ids, focus: focus.key, only }
+      const routed = this.focusRoutes.get(`${open.key}\n${focus.key}`)
+      frame.focus = routed?.routes
+      frame.focusHot = routed?.hot
+      if (!routed && hot && only.length > 0) {
+        job = { kind: 'focus', key: open.key, open: open.ids, focus: focus.key, only, hot }
       }
     }
     // While the focus's lanes at this level are on their way, its last ones.
     if (!isOverlayOn && !frame.focus && job && this.lastFocus?.focus === focus.key) {
-      frame.focus = this.lastFocus.routes
+      frame.focus = this.lastFocus.routed.routes
+      frame.focusHot = this.lastFocus.routed.hot
     }
     if (isOverlayOn) {
       const routed = this.allRoutes.get(open.key)
@@ -115,31 +134,35 @@ export class LaneLayer {
     this.want(job)
 
     if (focus.ids.length > 0) {
-      const partners = new Set<string>()
+      const partners = new Map<string, number>()
       const links = this.links.listLinks(scale, holders, focus.all)
+      const mark = (id: string | undefined, direction: number) => {
+        if (id && !focus.all.has(id)) partners.set(id, (partners.get(id) ?? 0) | direction)
+      }
       for (let r = 0; r < links.count; r++) {
         if (!links.hot[r] || links.kind[r] !== 'import') continue
-        const from = holders[links.from[r] as number]?.node.id
-        const to = holders[links.to[r] as number]?.node.id
-        if (from && !focus.all.has(from)) partners.add(from)
-        if (to && !focus.all.has(to)) partners.add(to)
+        // The focus imports what a link leads to, and is imported by where it
+        // starts.
+        mark(holders[links.from[r] as number]?.node.id, DEPENDANT)
+        mark(holders[links.to[r] as number]?.node.id, DEPENDS_ON)
       }
       frame.partners = partners
     }
     return frame
   }
 
-  // Which of a level's links carry an import into or out of a focused node,
-  // or undefined when none does. Imports inside one are left out, as in the
-  // inspector; imports between two focused nodes count.
+  // Which way each of a level's links carries imports into or out of a
+  // focused node, or undefined when none does. Imports inside one are left
+  // out, as in the inspector; imports between two focused nodes count.
   private listHot(key: string, level: LaneLevel, focus: Focus): Uint8Array | undefined {
     if (this.hot?.key === key && this.hot.focus === focus) return this.hot.links
     let links: Uint8Array | undefined
     this.edges.forEach(([from, to], e) => {
       const link = level.linkOfEdge[e] as number
-      if (link < 0 || !crossesFocus(focus, from, to)) return
+      const direction = link < 0 ? 0 : focusDirection(focus, from, to)
+      if (direction === 0) return
       links ??= new Uint8Array(level.links.length)
-      links[link] = 1
+      links[link] = (links[link] as number) | direction
     })
     this.hot = { key, focus, links }
     return links
@@ -182,8 +205,9 @@ export class LaneLayer {
           keep(this.allRoutes, job.key, routes)
           this.lastAll = { key: job.key, routes }
         } else {
-          keep(this.focusRoutes, `${job.key}\n${job.focus}`, routes)
-          this.lastFocus = { focus: job.focus, routes }
+          const routed = { routes, hot: job.hot }
+          keep(this.focusRoutes, `${job.key}\n${job.focus}`, routed)
+          this.lastFocus = { focus: job.focus, routed }
         }
         done()
       }, failed)

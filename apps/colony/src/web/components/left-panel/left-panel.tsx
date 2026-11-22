@@ -9,7 +9,6 @@ import type { BuildOrder, BuildQueueResponse } from '../../../modules/wire/api-t
 import type { WorldNode } from '../../../modules/world/world-types.ts'
 import { BuildQueue } from '../build-queue/build-queue.tsx'
 import { FileTree } from '../file-tree/file-tree.tsx'
-import { Legend } from '../legend/legend.tsx'
 import { PanelHeader } from '../panel-header/panel-header.tsx'
 import { Button } from '../ui/button.tsx'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs.tsx'
@@ -57,7 +56,6 @@ export function LeftPanel({
           <TabsTrigger value="queue">
             Build queue <span className="text-muted-foreground text-xs">{openOrders}</span>
           </TabsTrigger>
-          <TabsTrigger value="legend">Legend</TabsTrigger>
           <TabsTrigger value="files">Files</TabsTrigger>
         </TabsList>
         <Button
@@ -79,9 +77,6 @@ export function LeftPanel({
           onToggleSection={onToggleQueueSection}
           onShowOnMap={onShowOrderOnMap}
         />
-      </TabsContent>
-      <TabsContent value="legend" className="overflow-y-auto">
-        <Legend scene={scene} />
       </TabsContent>
       <TabsContent value="files" className="overflow-y-auto">
         <FileTree scene={scene} selected={selected} onPick={onPick} onOpen={onOpen} />

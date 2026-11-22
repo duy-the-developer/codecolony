@@ -25,7 +25,19 @@ export function buildFocus(scene: Scene, ids: readonly string[]): Focus {
   return { key: kept.join('\n'), ids: kept, subtrees, all }
 }
 
-// True when an edge from one id to the other enters or leaves a focused node.
-export function crossesFocus(focus: Focus, from: string, to: string): boolean {
-  return focus.subtrees.some((subtree) => subtree.has(from) !== subtree.has(to))
+// Which way an edge runs relative to the focus, as bits: DEPENDS_ON when it
+// leaves a focused node (the focus imports across it), DEPENDANT when it
+// enters one (it imports the focus). An edge between two focused nodes is
+// both; one inside a single focused node or outside all of them is 0.
+export const DEPENDS_ON = 1
+export const DEPENDANT = 2
+
+export function focusDirection(focus: Focus, from: string, to: string): number {
+  let direction = 0
+  for (const subtree of focus.subtrees) {
+    const hasFrom = subtree.has(from)
+    if (hasFrom === subtree.has(to)) continue
+    direction |= hasFrom ? DEPENDS_ON : DEPENDANT
+  }
+  return direction
 }

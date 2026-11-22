@@ -7,7 +7,7 @@ import type {
 } from 'react-resizable-panels'
 import { logError } from '../../../modules/logging/log.ts'
 import { type MapHandle, ZOOM_STEP } from '../../../modules/map/map-controller.ts'
-import type { OverlayId } from '../../../modules/map/overlays.ts'
+import type { DrawnLines, OverlayId } from '../../../modules/map/overlays.ts'
 import {
   fitPanelWidths,
   MIN_MAP_PERCENT,
@@ -33,6 +33,7 @@ import { AppHeader } from '../app-header/app-header.tsx'
 import { ColonistRoster } from '../colonist-roster/colonist-roster.tsx'
 import { LeftPanel } from '../left-panel/left-panel.tsx'
 import { MapBreadcrumb } from '../map-breadcrumb/map-breadcrumb.tsx'
+import { MapLegend } from '../map-legend/map-legend.tsx'
 import { MapView } from '../map-view/map-view.tsx'
 import { RightPanel } from '../right-panel/right-panel.tsx'
 import { SearchPalette } from '../search-palette/search-palette.tsx'
@@ -40,6 +41,8 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '../ui/resi
 import { ZoomControls } from '../zoom-controls/zoom-controls.tsx'
 
 type PanelSide = 'left' | 'right'
+
+const NO_LINES: DrawnLines = { overlays: [], isDirected: false }
 
 // The page: header, left panel | map | right panel.
 export function App() {
@@ -62,6 +65,12 @@ export function App() {
       return next
     })
   }, [])
+  // The kinds of line the map draws, for its legend.
+  const [lines, setLines] = useState<DrawnLines>(NO_LINES)
+  const toggleLegend = useCallback(
+    () => updatePreferences((current) => ({ ...current, isLegendOpen: !current.isLegendOpen })),
+    [updatePreferences],
+  )
   const [dockElement, setDockElement] = useState<HTMLDivElement | null>(null)
   const { dock, workers } = useDock(dockElement)
   const colonists = useColonists()
@@ -242,7 +251,7 @@ export function App() {
     }
   }
 
-  // Page-wide keys: ⌘K search, [ and ] toggle the panels. Ctrl+K opens the
+  // Page-wide keys: ⌘K search, [ and ] toggle the panels, L the legend. Ctrl+K opens the
   // search too, except in a text field or the terminal, where it edits text.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -255,12 +264,13 @@ export function App() {
       if (event.metaKey || event.ctrlKey || event.altKey || isTyping) return
       if (event.key === '[') togglePanel('left')
       else if (event.key === ']') togglePanel('right')
+      else if (event.key.toLowerCase() === 'l') toggleLegend()
       else return
       event.preventDefault()
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [togglePanel])
+  }, [togglePanel, toggleLegend])
 
   return (
     <div className="flex h-full flex-col">
@@ -321,9 +331,17 @@ export function App() {
             onSelect={setSelectedIds}
             onSelectColonist={handleSelectColonist}
             onOpen={showFile}
+            onLines={setLines}
           >
             <div className="pointer-events-none absolute inset-x-3 top-3 flex items-start gap-2">
-              <MapBreadcrumb scene={scene} selected={selected} onPick={pick} />
+              <div className="flex min-w-0 flex-col items-start gap-2">
+                <MapBreadcrumb scene={scene} selected={selected} onPick={pick} />
+                <MapLegend
+                  lines={lines}
+                  isOpen={preferences.isLegendOpen}
+                  onToggle={toggleLegend}
+                />
+              </div>
               <div className="ml-auto flex min-w-0 justify-end">
                 <ColonistRoster
                   colonists={colonists}
