@@ -7,7 +7,11 @@ import type {
 } from 'react-resizable-panels'
 import { logError } from '../../../modules/logging/log.ts'
 import { type MapHandle, ZOOM_STEP } from '../../../modules/map/map-controller.ts'
-import type { DrawnLines, OverlayId } from '../../../modules/map/overlays.ts'
+import {
+  type DrawnLines,
+  type OverlayId,
+  resolveOverlayKey,
+} from '../../../modules/map/overlays.ts'
 import {
   fitPanelWidths,
   MIN_MAP_PERCENT,
@@ -42,7 +46,8 @@ import { ZoomControls } from '../zoom-controls/zoom-controls.tsx'
 
 type PanelSide = 'left' | 'right'
 
-const NO_LINES: DrawnLines = { overlays: [], isDirected: false }
+const NO_LINES: DrawnLines = { overlays: [], isDirected: false, isSelected: false }
+const NO_OVERLAYS: ReadonlySet<OverlayId> = new Set()
 
 // The page: header, left panel | map | right panel.
 export function App() {
@@ -251,7 +256,8 @@ export function App() {
     }
   }
 
-  // Page-wide keys: ⌘K search, [ and ] toggle the panels, L the legend. Ctrl+K opens the
+  // Page-wide keys: ⌘K search, [ and ] toggle the panels, L the legend, 1-3
+  // the overlays and 0 switches them all off (#47). Ctrl+K opens the
   // search too, except in a text field or the terminal, where it edits text.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -265,7 +271,10 @@ export function App() {
       if (event.key === '[') togglePanel('left')
       else if (event.key === ']') togglePanel('right')
       else if (event.key.toLowerCase() === 'l') toggleLegend()
-      else return
+      else if (resolveOverlayKey(NO_OVERLAYS, event.key)) {
+        const { key } = event
+        setOverlays((current) => resolveOverlayKey(current, key) ?? current)
+      } else return
       event.preventDefault()
     }
     window.addEventListener('keydown', onKeyDown)
@@ -338,6 +347,10 @@ export function App() {
                 <MapBreadcrumb scene={scene} selected={selected} onPick={pick} />
                 <MapLegend
                   lines={lines}
+                  overlays={overlays}
+                  hasColonists={placed.length > 0}
+                  isColonistPicked={selectedColonist !== undefined}
+                  hasConflicts={placed.some((p) => p.changes.some((c) => c.sharedWith))}
                   isOpen={preferences.isLegendOpen}
                   onToggle={toggleLegend}
                 />

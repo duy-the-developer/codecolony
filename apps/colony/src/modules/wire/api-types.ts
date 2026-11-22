@@ -106,6 +106,9 @@ export interface Colonist {
   changes: ColonistChange[]
   // Changes left out past the cap.
   omitted: number
+  // The changed file it saved last: the one with the newest modification
+  // time in its copy. Where its robot stands on the map.
+  lastSaved?: string
 }
 
 export interface ColonistsResponse {

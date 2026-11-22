@@ -128,11 +128,10 @@ export function render(
     ctx.lineWidth = 1.5
     outline(ctx, focus, 1)
   }
-  if (state.selected.size > 0) {
-    ctx.strokeStyle = SELECTION_COLOR
-    ctx.lineWidth = 2
-    for (const item of drawn) if (state.selected.has(item.node.id)) outline(ctx, item, 0.5)
-  }
+  const selection = drawn.filter((item) => state.selected.has(item.node.id))
+  ctx.strokeStyle = SELECTION_COLOR
+  ctx.lineWidth = 2
+  for (const item of selection) outline(ctx, item, 0.5)
   return {
     drawn,
     lines: {
@@ -141,6 +140,7 @@ export function render(
         isDirected &&
         frame !== undefined &&
         (!!frame.hot || !!frame.focus || frame.partners.size > 0),
+      isSelected: selection.length > 0,
     },
   }
 }

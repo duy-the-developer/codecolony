@@ -8,6 +8,7 @@ import {
   type CopyDiff,
   readCopyDiff,
   readCopySignature,
+  readLastSaved,
   resolveBaseRef,
 } from './copy-diff.ts'
 import { type FirstmateTask, listFirstmateClones, readFirstmateTasks } from './firstmate-tasks.ts'
@@ -72,6 +73,7 @@ interface CopyState {
   signature?: string
   diff?: CopyDiff
   base?: BaseRef
+  lastSaved?: string
 }
 
 export function createColonistTracker(options: ColonistTrackerOptions): ColonistTrackerHandle {
@@ -145,7 +147,12 @@ export function createColonistTracker(options: ColonistTrackerOptions): Colonist
     await forEachLimited([...copies.values()], GIT_LANES, async (copy) => {
       const signature = await readCopySignature(copy.path)
       if (signature === undefined) return
-      if (!force && signature === copy.signature && copy.diff) return
+      // Saving a file that is already changed leaves the status as it was,
+      // so the last-saved file is read on every poll, diff or not.
+      if (!force && signature === copy.signature && copy.diff) {
+        setLastSaved(copy, await readLastSaved(copy.path, copy.diff.changes))
+        return
+      }
       const base = await baseOf(copy.clone)
       try {
         copy.diff = await readCopyDiff(copy.path, base)
@@ -157,6 +164,7 @@ export function createColonistTracker(options: ColonistTrackerOptions): Colonist
         if (branch && branch !== '(detached)') copy.branch = branch
         else delete copy.branch
         if (head) copy.head = head
+        setLastSaved(copy, await readLastSaved(copy.path, copy.diff.changes))
       } catch (error) {
         logError('Could not diff a copy', { copy: copy.path, error })
       }
@@ -227,6 +235,7 @@ export function createColonistTracker(options: ColonistTrackerOptions): Colonist
       if (task) colonist.task = task.id
       if (presence.agent) colonist.agent = presence.agent
       if (copy.branch) colonist.branch = copy.branch
+      if (copy.lastSaved) colonist.lastSaved = copy.lastSaved
       if (presence.pr) colonist.pr = presence.pr
       if (presence.paneId) colonist.paneId = presence.paneId
       colonists.push(colonist)
@@ -288,4 +297,9 @@ function realPath(path: string): string {
   } catch {
     return path
   }
+}
+
+function setLastSaved(copy: CopyState, path: string | undefined): void {
+  if (path) copy.lastSaved = path
+  else delete copy.lastSaved
 }

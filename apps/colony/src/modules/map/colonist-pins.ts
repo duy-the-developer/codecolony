@@ -4,13 +4,14 @@ import type { Rect } from '../world/world-types.ts'
 import type { Camera, Viewport } from './camera.ts'
 import type { Drawn } from './render.ts'
 
-// Where colonist pins go on screen. Every file a colonist changes gets a pin
-// over the top right corner of its block: the file itself, or an added
-// file's placeholder (its folder, when there was no room for one), at every
-// zoom, so the pins match the colonist's files one for one. Pins on the
-// same block sit side by side in roster order, right to left. A block
-// holding a file two or more colonists change also gets a possible-conflict
-// badge, left of its pins. A row that would cover another block's pins is
+// Where colonist pins go on screen, for the Owners overlay. Every file a
+// colonist changes gets a pin over the top right corner of its block: the
+// file itself, or an added file's placeholder (its folder, when there was no
+// room for one), at every zoom, so the pins match the colonist's files one
+// for one. Pins on the same block sit side by side in roster order, right to
+// left. A block holding a file two or more colonists change also gets a
+// possible-conflict badge, left of its pins; with the overlay off the badge
+// stays, alone, on a stem of its own down to the block. A row that would cover another block's pins, or a robot, is
 // lifted above them, on a longer stem, so every pin still points at its own
 // block.
 
@@ -41,6 +42,8 @@ export interface ConflictBadge {
   paths: string[]
   x: number
   y: number
+  // Where its stem touches the block, when it stands with no pins.
+  tipY?: number
 }
 
 export interface PinLayout {
@@ -50,9 +53,10 @@ export interface PinLayout {
 
 export const PIN_HEIGHT_PX = 16
 export const BADGE_RADIUS_PX = 7
-export const POINTER_PX = 4
+// The stem: a thin line from the pin down to its block.
+export const POINTER_PX = 8
 // A row of pins lifts at most this many times to clear the others.
-const MAX_LIFTS = 4
+const MAX_LIFTS = 8
 const GAP_PX = 2
 const PIN_PAD_PX = 5
 // The width of a character of the pin's 9px bold text, near enough.
@@ -67,12 +71,15 @@ interface Group {
 
 // colonists: in roster order. drawn: the frame's blocks, as render returns
 // them.
+// withPins: false keeps only the possible-conflict badges (the Owners
+// overlay is off). obstacles: robots on screen the rows must clear.
 export function layoutPins(
   colonists: readonly PlacedColonist[],
   scene: Scene,
   camera: Camera,
   view: Viewport,
   drawn: readonly Drawn[],
+  { withPins = true, obstacles = [] }: { withPins?: boolean; obstacles?: readonly Rect[] } = {},
 ): PinLayout {
   const byId = new Map(drawn.map((item) => [item.node.id, item]))
   const groups = new Map<string, Group>()
@@ -115,7 +122,7 @@ export function layoutPins(
     const { rect } = group
     if (rect.x > view.width || rect.y > view.height || rect.x + rect.w < 0 || rect.y + rect.h < 0)
       continue
-    const tipY = rect.y + 2
+    const tipY = rect.y + 1
     const top = tipY - POINTER_PX - PIN_HEIGHT_PX
     let right = rect.x + rect.w
     const pins: Pin[] = []
@@ -123,16 +130,17 @@ export function layoutPins(
     const sharedPaths = new Set<string>()
     const entries = [...group.entries].sort(([a], [b]) => a - b)
     for (const [, { placed, change }] of entries) {
-      const text = placed.initials
-      const w = Math.max(PIN_HEIGHT_PX, PIN_PAD_PX * 2 + text.length * PIN_CHAR_PX)
-      const head = { x: right - w, y: top, w, h: PIN_HEIGHT_PX }
-      right -= w + GAP_PX
       const isShared = Boolean(change.sharedWith)
       if (change.sharedWith) {
         shared.add(placed.colonist.id)
         sharedPaths.add(change.path)
         for (const id of change.sharedWith) shared.add(id)
       }
+      if (!withPins) continue
+      const text = placed.initials
+      const w = Math.max(PIN_HEIGHT_PX, PIN_PAD_PX * 2 + text.length * PIN_CHAR_PX)
+      const head = { x: right - w, y: top, w, h: PIN_HEIGHT_PX }
+      right -= w + GAP_PX
       pins.push({
         colonistId: placed.colonist.id,
         status: placed.colonist.status,
@@ -145,28 +153,37 @@ export function layoutPins(
         tipY,
       })
     }
-    const badge =
+    if (pins.length === 0 && shared.size === 0) continue
+    const badge: ConflictBadge | undefined =
       shared.size > 0
         ? {
             nodeId: group.nodeId,
             colonistIds: [...shared],
             paths: [...sharedPaths].sort(),
-            x: right - BADGE_RADIUS_PX,
+            // Alone, it stands over the block, even a narrow one.
+            x:
+              pins.length > 0
+                ? right - BADGE_RADIUS_PX
+                : Math.max(right - BADGE_RADIUS_PX, rect.x + rect.w / 2),
             y: top + PIN_HEIGHT_PX / 2,
+            ...(pins.length > 0 ? {} : { tipY }),
           }
         : undefined
     const left = badge ? badge.x - BADGE_RADIUS_PX : right + GAP_PX
     const box = { x: left, y: top, w: rect.x + rect.w - left, h: PIN_HEIGHT_PX }
     rows.push({ pins, box, ...(badge ? { badge } : {}) })
   }
-  return { pins: rows.flatMap((row) => row.pins), badges: liftRows(rows) }
+  return { pins: rows.flatMap((row) => row.pins), badges: liftRows(rows, obstacles) }
 }
 
 // Lifts each row of pins that would cover one already placed, top to
 // bottom, by a pin's height at a time, so it stands on a longer stem over
 // its block instead. Returns the badges, lifted with their rows.
-function liftRows(rows: { pins: Pin[]; badge?: ConflictBadge; box: Rect }[]): ConflictBadge[] {
-  const placed: Rect[] = []
+function liftRows(
+  rows: { pins: Pin[]; badge?: ConflictBadge; box: Rect }[],
+  obstacles: readonly Rect[],
+): ConflictBadge[] {
+  const placed: Rect[] = [...obstacles]
   const badges: ConflictBadge[] = []
   rows.sort((a, b) => a.box.y - b.box.y || b.box.x - a.box.x)
   for (const row of rows) {

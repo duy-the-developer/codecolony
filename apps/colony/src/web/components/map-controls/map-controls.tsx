@@ -17,6 +17,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu.tsx'
+import { Kbd } from '../ui/kbd.tsx'
 
 export interface MapControlsProps {
   isLeftCollapsed: boolean
@@ -66,6 +67,7 @@ export function MapControls({
             >
               <span className="h-0.5 w-4 rounded-full" style={{ background: overlay.color }} />
               {overlay.name}
+              <Kbd className="ml-auto h-4 min-w-4 text-[10px]">{overlay.key}</Kbd>
             </DropdownMenuCheckboxItem>
           ))}
           {PLANNED_OVERLAYS.map((name) => (
@@ -76,7 +78,8 @@ export function MapControls({
           ))}
           <DropdownMenuSeparator />
           <p className="px-2 py-1.5 text-muted-foreground text-xs">
-            With no overlay on, hover a module or file to see its connections.
+            With no overlay on, hover a module or file to see its connections. 0 switches every
+            overlay off.
           </p>
         </DropdownMenuContent>
       </DropdownMenu>

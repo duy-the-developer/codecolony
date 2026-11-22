@@ -91,7 +91,7 @@ describe('layoutPins', () => {
     // and points just inside its top.
     const [first] = pins
     expect(first?.head.x).toBeCloseTo(60 - (first?.head.w ?? 0))
-    expect(first?.tipY).toBe(32)
+    expect(first?.tipY).toBe(31)
     expect(badges).toEqual([])
   })
 
@@ -255,6 +255,6 @@ describe('layoutPins', () => {
       }
     }
     // Every pin still points at the top of its own file.
-    expect(new Set(pins.map((pin) => pin.tipY))).toEqual(new Set([17]))
+    expect(new Set(pins.map((pin) => pin.tipY))).toEqual(new Set([16]))
   })
 })

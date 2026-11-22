@@ -194,9 +194,10 @@ export function ColonistCard({
       </section>
 
       <p className="text-muted-foreground text-xs">
-        Diff since this copy forked from {colonist.base}: committed and uncommitted changes. Each
-        file carries a pin with these initials on the map. Added files show as dashed green
-        placeholders in their folder until merged.
+        Diff since this copy forked from {colonist.base}: committed and uncommitted changes. Its
+        robot stands on the file it saved last; with the Owners overlay on (3), each file carries a
+        pin with these initials. Added files show as dashed green placeholders in their folder until
+        merged.
       </p>
     </div>
   )
