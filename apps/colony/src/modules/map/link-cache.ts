@@ -1,8 +1,7 @@
-import { looseId } from '../lane-routing/route-boxes.ts'
 import type { Scene } from '../scene/scene.ts'
 import { PROVEN_PROVENANCES } from '../world/facts.ts'
-import type { Edge, EdgeKind, WorldNode } from '../world/world-types.ts'
-import { FILE_LANES_PX, MIN_VISIBLE_PX, openness } from './lod.ts'
+import type { Edge, EdgeKind, Rect, WorldNode } from '../world/world-types.ts'
+import { MIN_VISIBLE_PX, openness } from './lod.ts'
 
 // Links join the deepest drawn nodes that hold each edge's ends, so they merge
 // as you zoom out and split as you zoom in. Working that out walks every edge,
@@ -19,11 +18,8 @@ import { FILE_LANES_PX, MIN_VISIBLE_PX, openness } from './lod.ts'
 //    drawn; otherwise one end would land on an ancestor of the other. That check
 //    is two array reads, so off-screen links cost almost nothing.
 //
-// Lanes are routed between blocks: closed containers, and modules of files
-// (lanes/lane-world.ts). Once a unit is FILE_LANES_PX wide, the modules whose
-// files are on screen open too, so lanes run between their files. Only those
-// on screen open: a large world has far too many links between files to route
-// at once.
+// The Dependency overlay draws fixed lanes (lanes/lane-world.ts); a level only
+// says which nodes are drawn, so lanes can end on the closed ones.
 
 export const LINK_LEVELS_PER_OCTAVE = 4
 // Nodes this faint are drawn, but links pass them to their parent.
@@ -47,17 +43,17 @@ interface LevelLinks {
   readonly toTop: Int32Array
   // The link each edge was merged into, or -1.
   readonly linkOfEdge: Int32Array
-  // The containers holding folders that show their children at this level,
-  // and a key that is the same for every level with the same ones.
-  readonly open: OpenContainers
+  readonly drawn: DrawnLevel
 }
 
-export interface OpenContainers {
-  readonly key: string
-  // Containers that show their folders, then holders of files on screen
-  // (route-boxes.ts: a container of only files, or the looseId of a
-  // container's own files).
-  readonly ids: readonly string[]
+// The nodes drawn at a zoom level, as if the whole world were on screen, by
+// index (LinkCache.indexOf).
+export interface DrawnLevel {
+  readonly level: number
+  // Drawn with enough alpha to hold a link.
+  readonly visible: Uint8Array
+  // A container holding folders that shows its children.
+  readonly isOpen: Uint8Array
 }
 
 // The links to draw this frame. Backed by scratch space: valid until the next
@@ -95,8 +91,6 @@ export class LinkCache {
   private edgeCode = new Int32Array(0)
   private kinds: EdgeKind[] = []
   private readonly levels = new Map<number, LevelLinks>()
-  // The open containers last listed with file holders, reused while the same.
-  private lastOpen: OpenContainers | undefined
   private hotSubtree: ReadonlySet<string> | undefined
   private edgeHot = new Uint8Array(0)
   private hotLinks = new WeakMap<LevelLinks, Uint8Array>()
@@ -218,32 +212,22 @@ export class LinkCache {
     return { count, from, to, kind, proven, edges, hot, sameFile }
   }
 
-  // The containers open at the level a scale falls in and, from FILE_LANES_PX,
-  // the holders of the files among the drawn nodes.
-  listOpenContainers(
-    scale: number,
-    holders: readonly { readonly node: WorldNode }[] = [],
-  ): OpenContainers {
-    const open = this.resolveLevel(scale).open
-    if (scale < FILE_LANES_PX) return open
-    const fileHolders = new Set<number>()
-    for (const { node } of holders) {
-      const i = node.kind === 'file' ? this.index.get(node.id) : undefined
-      if (i === undefined) continue
-      const p = this.parent[i] as number
-      if (p >= 0) fileHolders.add(p)
-    }
-    if (fileHolders.size === 0) return open
-    const sorted = [...fileHolders].sort((a, b) => a - b)
-    const key = `${open.key}|${sorted.join(',')}`
-    if (this.lastOpen?.key === key) return this.lastOpen
-    const ids = [...open.ids]
-    for (const p of sorted) {
-      const id = (this.nodes[p] as WorldNode).id
-      ids.push(this.hasFolders[p] ? looseId(id) : id)
-    }
-    this.lastOpen = { key, ids }
-    return this.lastOpen
+  // The nodes drawn at the level a scale falls in.
+  getDrawnLevel(scale: number): DrawnLevel {
+    return this.resolveLevel(scale).drawn
+  }
+
+  // A node's index, its parent's (-1 for the root) and its rectangle.
+  indexOf(id: string): number | undefined {
+    return this.index.get(id)
+  }
+
+  parentIndex(i: number): number {
+    return this.parent[i] ?? -1
+  }
+
+  rectAt(i: number): Rect {
+    return (this.nodes[i] as WorldNode).rect
   }
 
   // The links of the level a scale falls in, aggregated on first use.
@@ -255,7 +239,7 @@ export class LinkCache {
       this.levels.delete(level)
     } else {
       // Rounding slack, so the level never misses a node visible at `scale`.
-      links = this.buildLevel(2 ** ((level + 1) / LINK_LEVELS_PER_OCTAVE) * (1 + 1e-9))
+      links = this.buildLevel(level, 2 ** ((level + 1) / LINK_LEVELS_PER_OCTAVE) * (1 + 1e-9))
       if (this.levels.size >= MAX_CACHED_LEVELS) {
         const oldest = this.levels.keys().next().value
         if (oldest !== undefined) this.levels.delete(oldest)
@@ -359,7 +343,7 @@ export class LinkCache {
     return visible
   }
 
-  private buildLevel(scale: number): LevelLinks {
+  private buildLevel(level: number, scale: number): LevelLinks {
     const visible = this.listVisible(scale)
     const { parent, depth, edgeFrom, edgeTo, edgeCode, linkEdges } = this
     const holder = (start: number): number => {
@@ -374,12 +358,6 @@ export class LinkCache {
     for (let i = 0; i < visible.length; i++) {
       const p = parent[i] as number
       if (visible[i] && p >= 0 && this.hasFolders[p]) isOpen[p] = 1
-    }
-    const openIndices: number[] = []
-    for (let i = 0; i < isOpen.length; i++) if (isOpen[i]) openIndices.push(i)
-    const open = {
-      key: openIndices.join(','),
-      ids: openIndices.map((i) => (this.nodes[i] as WorldNode).id),
     }
     const edgeCount = this.edges.length
     const linkOfEdge = new Int32Array(edgeCount).fill(-1)
@@ -421,7 +399,7 @@ export class LinkCache {
       fromTop: fromTop.slice(0, count),
       toTop: toTop.slice(0, count),
       linkOfEdge,
-      open,
+      drawn: { level, visible: visible.slice(), isOpen },
     }
   }
 

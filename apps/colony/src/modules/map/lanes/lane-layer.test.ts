@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { Scene } from '../../scene/scene.ts'
 import type { Edge, NodeKind, Rect, World, WorldNode } from '../../world/world-types.ts'
 import { buildFocus, DEPENDANT, DEPENDS_ON, NO_FOCUS } from '../focus.ts'
+import { MIN_LINK_ALPHA } from '../link-cache.ts'
+import { MIN_VISIBLE_PX, openness } from '../lod.ts'
 import { type LaneFrame, LaneLayer } from './lane-layer.ts'
 import { createLaneRouter } from './lane-router.ts'
 import type { LaneRoutes } from './lane-world.ts'
@@ -52,16 +54,21 @@ function listLanes(frame: LaneFrame): Lane[] {
       if (points.length > 0) lanes.push({ points, emphasis: emphasisOf(link) })
     })
   }
-  const { all, hot, focus } = frame
+  const { all, hot, focus, focusHot } = frame
   if (all) add(all, (link) => (hot ? (hot[link] ? 'hot' : 'dim') : 'normal'))
-  if (focus) add(focus, () => 'hot')
+  if (focus) {
+    focus.links.forEach((link, i) => {
+      const points = focus.points.subarray(focus.offsets[i], focus.offsets[i + 1])
+      if (focusHot?.[link] && points.length > 0) lanes.push({ points, emphasis: 'hot' })
+    })
+  }
   return lanes
 }
 
 // Draws frames until the routes asked for have arrived.
 async function settle(draw: () => LaneFrame): Promise<LaneFrame> {
   let frame = draw()
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 20; i++) {
     await new Promise((resolve) => setTimeout(resolve, 0))
     frame = draw()
   }
@@ -69,6 +76,68 @@ async function settle(draw: () => LaneFrame): Promise<LaneFrame> {
 }
 
 const SCALE = 40
+
+// world > two repositories side by side, each with one module: r1/a's two
+// files import r2/b's one.
+function makeTwoRepos(): Scene {
+  const nodes = [
+    node('world', 'world', undefined, { x: 0, y: 0, w: 46, h: 20 }),
+    node('r1', 'repo', 'world', { x: 0, y: 0, w: 20, h: 20 }),
+    node('r1/a', 'module', 'r1', { x: 1, y: 3, w: 10, h: 10 }),
+    node('r1/a/f.ts', 'file', 'r1/a', { x: 2, y: 5, w: 2, h: 2 }),
+    node('r1/a/f2.ts', 'file', 'r1/a', { x: 5, y: 5, w: 2, h: 2 }),
+    node('r2', 'repo', 'world', { x: 26, y: 0, w: 20, h: 20 }),
+    node('r2/b', 'module', 'r2', { x: 27, y: 3, w: 10, h: 10 }),
+    node('r2/b/g.ts', 'file', 'r2/b', { x: 28, y: 5, w: 2, h: 2 }),
+  ]
+  const edges = [importEdge('r1/a/f.ts', 'r2/b/g.ts'), importEdge('r1/a/f2.ts', 'r2/b/g.ts')]
+  return new Scene({ version: 1, indexedAt: '', languages: {}, nodes, edges } satisfies World)
+}
+
+// The nodes the renderer draws with enough alpha to hold a link, with the
+// camera showing `window` of the world.
+function listHolders(scene: Scene, scale: number, window: Rect): { node: WorldNode }[] {
+  const holders: { node: WorldNode }[] = []
+  const visit = (n: WorldNode, alpha: number) => {
+    const { x, y, w, h } = n.rect
+    if (x > window.x + window.w || y > window.y + window.h) return
+    if (x + w < window.x || y + h < window.y) return
+    const side = Math.min(w, h) * scale
+    if (n.kind !== 'world' && side < MIN_VISIBLE_PX) return
+    const kids = scene.children.get(n.id)
+    const open = kids ? openness(n.kind, side) : 0
+    if (n.kind !== 'world' && alpha >= MIN_LINK_ALPHA) holders.push({ node: n })
+    if (open > 0.01 && kids) for (const kid of kids) visit(kid, alpha * open)
+  }
+  if (scene.root) visit(scene.root, 1)
+  return holders
+}
+
+// Every lane a frame draws, highways and lanes inside holders, as numbers.
+function listGeometry(frame: LaneFrame): number[][] {
+  const lanes = listLanes(frame).map((lane) => [...lane.points])
+  for (const files of frame.files) {
+    files.routes.links.forEach((_, i) => {
+      lanes.push([
+        ...files.routes.points.subarray(files.routes.offsets[i], files.routes.offsets[i + 1]),
+      ])
+    })
+  }
+  return lanes
+}
+
+// Whether (x, y) lies on the polyline.
+function isOnRoute(points: Float64Array, x: number, y: number): boolean {
+  for (let k = 0; k + 3 < points.length; k += 2) {
+    const [x0, y0, x1, y1] = [points[k], points[k + 1], points[k + 2], points[k + 3]] as number[]
+    const inX =
+      x >= Math.min(x0 as number, x1 as number) && x <= Math.max(x0 as number, x1 as number)
+    const inY =
+      y >= Math.min(y0 as number, y1 as number) && y <= Math.max(y0 as number, y1 as number)
+    if (inX && inY) return true
+  }
+  return false
+}
 
 describe('LaneLayer', () => {
   it('draws no lanes with the overlay off and nothing in focus', async () => {
@@ -158,5 +227,75 @@ describe('LaneLayer', () => {
       const onTopOrBottom = (y === 16 || y === 26) && x > 1 && x < 11
       expect(onSide || onTopOrBottom).toBe(true)
     }
+  })
+
+  it('never moves a lane as the map pans', async () => {
+    const scene = makeTwoRepos()
+    const layer = new LaneLayer(scene, createLaneRouter(), () => {})
+    const scale = 16
+    const windows: Rect[] = [
+      { x: 0, y: 0, w: 46, h: 20 },
+      { x: 0, y: 0, w: 12, h: 12 },
+      { x: 26, y: 0, w: 12, h: 12 },
+      { x: 10, y: 0, w: 20, h: 8 },
+    ]
+    const frames: LaneFrame[] = []
+    for (const window of windows) {
+      const holders = listHolders(scene, scale, window)
+      frames.push(await settle(() => layer.frame(scale, holders, NO_FOCUS, true)))
+    }
+    const [whole, ...panned] = frames as [LaneFrame, ...LaneFrame[]]
+    expect(whole.files.length).toBe(2)
+    for (const frame of panned) {
+      expect(listLanes(frame).map((lane) => [...lane.points])).toEqual(
+        listLanes(whole).map((lane) => [...lane.points]),
+      )
+      // A holder's lanes on screen are the very ones drawn with the whole map.
+      for (const files of frame.files) {
+        expect(whole.files.some((other) => other.routes === files.routes)).toBe(true)
+      }
+    }
+    expect(listGeometry(frames[1] as LaneFrame).length).toBeGreaterThan(listLanes(whole).length)
+  })
+
+  it("keeps a highway's corners at every zoom step that draws both its ends", async () => {
+    const scene = makeTwoRepos()
+    const layer = new LaneLayer(scene, createLaneRouter(), () => {})
+    const window: Rect = { x: 0, y: 0, w: 46, h: 20 }
+    const drawnAt = async (scale: number) => {
+      const holders = listHolders(scene, scale, window)
+      return listLanes(await settle(() => layer.frame(scale, holders, NO_FOCUS, true)))
+    }
+    // From the level where both modules show to well past FILE_LANES_PX.
+    const [first] = await drawnAt(2 ** (9 / 4))
+    expect(first).toBeDefined()
+    for (let step = 10; step <= 20; step++) {
+      expect((await drawnAt(2 ** (step / 4))).map((lane) => [...lane.points])).toEqual([
+        [...(first?.points ?? [])],
+      ])
+    }
+  })
+
+  it('cuts a highway where it enters the closed containers drawn for its ends', async () => {
+    const scene = makeTwoRepos()
+    const layer = new LaneLayer(scene, createLaneRouter(), () => {})
+    const window: Rect = { x: 0, y: 0, w: 46, h: 20 }
+    const near = 2 ** (12 / 4)
+    const far = 1
+    const full = listLanes(
+      await settle(() => layer.frame(near, listHolders(scene, near, window), NO_FOCUS, true)),
+    )[0]?.points as Float64Array
+    const cut = listLanes(
+      await settle(() => layer.frame(far, listHolders(scene, far, window), NO_FOCUS, true)),
+    )
+    expect(cut).toHaveLength(1)
+    const points = cut[0]?.points as Float64Array
+    // Every corner left lies on the full route, from r1's right side to r2's
+    // left side.
+    for (let k = 0; k < points.length; k += 2) {
+      expect(isOnRoute(full, points[k] as number, points[k + 1] as number)).toBe(true)
+    }
+    expect(points[0]).toBe(20)
+    expect(points[points.length - 2]).toBe(26)
   })
 })

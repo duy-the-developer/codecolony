@@ -3,11 +3,11 @@ import { readdirSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import type { ColonyConfig, ProjectConfig } from '../config/load-config.ts'
 import { findAdapter, LANGUAGE_ADAPTERS, RULES_VERSION } from '../language/registry.ts'
-import { emptyLayout, layoutWorld } from '../layout/world-layout.ts'
+import { emptyLayout, type LayoutStore, layoutWorld } from '../layout/world-layout.ts'
 import { logError } from '../logging/log.ts'
 import type { FileResponse } from '../wire/api-types.ts'
 import { type Edge, qualifiedName } from '../world/facts.ts'
-import type { World } from '../world/world-types.ts'
+import { WORLD_ID, type World, type WorldNode } from '../world/world-types.ts'
 import { buildWorld, type ProjectIndex, repoId } from './build-world.ts'
 import { FactCache } from './fact-cache.ts'
 import { isGitRepo, readBlobs, readHeadCommits } from './git.ts'
@@ -71,6 +71,8 @@ export class Colony extends EventEmitter<{ update: [World] }> {
   private timer: NodeJS.Timeout | undefined
   private settleTimer: NodeJS.Timeout | undefined
   private relayout: boolean
+  // The window shape the saved layout's top level was made for, if any.
+  private layoutAspect: number | undefined
   private readonly config: ColonyConfig
 
   constructor(config: ColonyConfig, { relayout = false }: ColonyOptions = {}) {
@@ -166,8 +168,7 @@ export class Colony extends EventEmitter<{ update: [World] }> {
     const { nodes, edges } = buildWorld(projects)
     const store = this.relayout ? emptyLayout() : loadLayout(this.layoutPath)
     this.relayout = false
-    layoutWorld(nodes, edges, store)
-    saveLayout(this.layoutPath, store)
+    this.layOut(nodes, edges, store)
     this.deep.clear()
     this.current = {
       version: this.current.version + 1,
@@ -180,6 +181,31 @@ export class Colony extends EventEmitter<{ update: [World] }> {
     }
     this.emit('update', this.current)
     return { changed, stats }
+  }
+
+  // Fits the top level to the shape of a page's window (width over height,
+  // side panels included) when the saved layout has none yet: once after a
+  // fresh layout, never on a resize. Lays the projects out afresh in their
+  // rows; everything inside them keeps its place.
+  fitWindow(aspect: number): void {
+    if (this.layoutAspect !== undefined || this.current.version === 0) return
+    if (!Number.isFinite(aspect) || aspect <= 0) return
+    const store = loadLayout(this.layoutPath)
+    store.aspect = aspect
+    store.rows.delete(WORLD_ID)
+    const nodes: WorldNode[] = this.current.nodes.map((node) => ({
+      ...node,
+      rect: { ...node.rect },
+    }))
+    this.layOut(nodes, this.current.edges, store)
+    this.current = { ...this.current, version: this.current.version + 1, nodes }
+    this.emit('update', this.current)
+  }
+
+  private layOut(nodes: WorldNode[], edges: readonly Edge[], store: LayoutStore): void {
+    layoutWorld(nodes, edges, store)
+    saveLayout(this.layoutPath, store)
+    this.layoutAspect = store.aspect
   }
 
   // Re-indexes a repository soon after its HEAD moves: watches git's HEAD

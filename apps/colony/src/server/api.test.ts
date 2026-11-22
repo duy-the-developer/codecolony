@@ -52,6 +52,10 @@ class StubSource extends EventEmitter<{ update: [World] }> implements WorldSourc
     nodes: NODES,
     edges: [],
   }
+  readonly aspects: number[] = []
+  fitWindow(aspect: number): void {
+    this.aspects.push(aspect)
+  }
   deepIndex(fileId: string): Promise<Edge[]> {
     if (fileId === 'broken') return Promise.reject(new Error('server crashed'))
     return Promise.resolve([
@@ -145,6 +149,15 @@ describe('api', () => {
     const world = (await (await fetch(`${base}/api/world`)).json()) as WorldPayload
     expect(world).toMatchObject({ type: 'full', version: 1 })
     expect(world.nodes.map((row) => row[3])).toEqual(['world', 'p/r/a.ts'])
+  })
+
+  it("passes a page's window shape on, and ignores one that is no window's", async () => {
+    source.aspects.length = 0
+    await fetch(`${base}/api/world?aspect=1.7777`)
+    await fetch(`${base}/api/world?aspect=0`)
+    await fetch(`${base}/api/world?aspect=wide`)
+    await fetch(`${base}/api/world`)
+    expect(source.aspects).toEqual([1.7777])
   })
 
   it('sends a page that holds the current version an empty patch', async () => {

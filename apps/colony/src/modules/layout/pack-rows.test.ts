@@ -36,6 +36,25 @@ function expectApart(placed: Map<string, Rect>, gutter: number): void {
 }
 
 describe('packRows', () => {
+  it("fills rows to a window's shape: two similar items side by side on 16:9 and 21:9", () => {
+    // Two square-ish projects, which ASPECT alone would stack.
+    const two = [item('codecolony', 60, 64), item('side-projects', 58, 62)]
+    const stacked = packRows(two, [], { gutter: 4 })
+    expect(stacked.rows.length).toBe(2)
+    for (const aspect of [16 / 9, 21 / 9]) {
+      const packed = packRows(two, [], { gutter: 4, aspect })
+      expect(packed.rows.map((row) => row.slots.flat())).toEqual([['codecolony', 'side-projects']])
+    }
+    // A tall window stacks them.
+    expect(packRows(two, [], { gutter: 4, aspect: 9 / 16 }).rows.length).toBe(2)
+  })
+
+  it('keeps saved rows whatever shape it is asked to fill', () => {
+    const two = [item('a', 60, 64), item('b', 58, 62)]
+    const saved = packRows(two, [], { gutter: 4 }).rows
+    expect(packRows(two, saved, { gutter: 4, aspect: 21 / 9 }).rows).toEqual(saved)
+  })
+
   it('places every item on whole units, a gutter apart, inside the bounds', () => {
     const list = items(40)
     const { placed, width, height } = packRows(list, [], OPTIONS)

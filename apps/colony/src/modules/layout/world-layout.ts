@@ -34,6 +34,10 @@ export interface LayoutStore {
   // module id, or loose-file group id (see looseId) -> the order of its files
   // and the height they pack to.
   modules: Map<string, StoredModule>
+  // The width-to-height ratio of the app window the top level was laid out
+  // for; unset until a page reports one. Kept, so resizing the window never
+  // moves anything; only a fresh layout takes a new one.
+  aspect?: number
 }
 
 export interface StoredModule {
@@ -51,6 +55,8 @@ export interface LayoutOptions {
 }
 
 export const DEFAULT_LAYOUT: LayoutOptions = { gutter: 2 }
+// The top level's shape until a page reports its window's: a 16:9 screen.
+export const DEFAULT_WINDOW_ASPECT = 16 / 9
 const DEFAULT_MAX_GUTTER = 8
 // Times the gutters are measured and widened. Lanes still short after the
 // last round share lanes on the page.
@@ -176,9 +182,12 @@ function layOut(
     }
     const gap = node.kind === 'world' ? 2 * gutter : gutter
     const widen = widening.get(node.id)
+    // The top level fills the window's shape; containers inside it keep
+    // pack-rows.ts's own ratio.
     const packed = packRows(items, store.rows.get(node.id) ?? [], {
       gutter: gap,
       ...(widen ? { widen } : {}),
+      ...(node.kind === 'world' ? { aspect: store.aspect ?? DEFAULT_WINDOW_ASPECT } : {}),
     })
     rows.set(node.id, packed.rows)
     placed.set(node.id, packed.placed)
