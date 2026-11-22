@@ -2,8 +2,16 @@ import type { ReactNode } from 'react'
 import { OVERLAYS } from '../../../modules/map/overlays.ts'
 import type { Scene } from '../../../modules/scene/scene.ts'
 import { listTreeChildren, listTreeRoots } from '../../../modules/scene/tree-entries.ts'
-import { hueOf, SYMBOL_COLORS } from '../../../modules/theme/palette.ts'
+import { COLONIST_STATUS_TEXT } from '../../../modules/theme/colonist-glyphs.ts'
+import {
+  CHANGE_COLORS,
+  hueOf,
+  SELECTION_COLOR,
+  SYMBOL_COLORS,
+} from '../../../modules/theme/palette.ts'
+import { COLONIST_STATUSES } from '../../../modules/wire/api-types.ts'
 import type { SymbolKind, WorldNode } from '../../../modules/world/world-types.ts'
+import { ColonistIcon } from '../colonist-icon/colonist-icon.tsx'
 import { Kbd } from '../ui/kbd.tsx'
 
 export interface LegendProps {
@@ -26,6 +34,12 @@ const SYMBOL_NAMES: Record<SymbolKind, string> = {
 }
 
 const MAX_MODULES = 10
+
+const CHANGES: [keyof typeof CHANGE_COLORS, string, string][] = [
+  ['modified', 'Modified', 'a file a colonist changed'],
+  ['added', 'Added', 'a placeholder in the folder the new file goes to, sized by its lines'],
+  ['removed', 'Removed', 'a file a colonist deleted'],
+]
 
 const KEYS: [string, string][] = [
   ['⌘K', 'Search files and symbols'],
@@ -74,6 +88,37 @@ export function Legend({ scene }: LegendProps) {
             label={name}
           />
         ))}
+      </LegendSection>
+
+      <LegendSection title="Colonists" note="coding sessions changing a copy of a repository">
+        {COLONIST_STATUSES.map((status) => (
+          <LegendRow
+            key={status}
+            mark={<ColonistIcon status={status} />}
+            label={COLONIST_STATUS_TEXT[status]}
+          />
+        ))}
+      </LegendSection>
+
+      <LegendSection title="Changes" note="each colonist's diff since its copy forked">
+        {CHANGES.map(([kind, label, detail]) => (
+          <LegendRow
+            key={kind}
+            mark={<Dashed color={CHANGE_COLORS[kind]} />}
+            label={label}
+            detail={detail}
+          />
+        ))}
+        <LegendRow
+          mark={
+            <span
+              className="size-3 rounded-[2px] border-2"
+              style={{ borderColor: SELECTION_COLOR }}
+            />
+          }
+          label="Selected"
+          detail="always solid, never dashed"
+        />
       </LegendSection>
 
       <LegendSection title="Overlays" note="off by default; switch them on from Overlays">
@@ -156,6 +201,15 @@ function LegendRow({ mark, label, detail }: LegendRowProps) {
         {detail && <span className="block text-muted-foreground text-xs leading-4">{detail}</span>}
       </span>
     </li>
+  )
+}
+
+function Dashed({ color }: { color: string }) {
+  return (
+    <span
+      className="size-3 rounded-[2px] border-[1.5px] border-dashed"
+      style={{ borderColor: color }}
+    />
   )
 }
 

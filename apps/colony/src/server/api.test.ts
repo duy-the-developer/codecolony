@@ -2,9 +2,9 @@ import { EventEmitter } from 'node:events'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import type { FileResponse } from '../modules/wire/api-types.ts'
+import type { ColonistsResponse, FileResponse } from '../modules/wire/api-types.ts'
 import type { Edge, World, WorldNode, WorldPayload } from '../modules/world/world-types.ts'
-import { createApi, type WorldSource } from './api.ts'
+import { type ColonistSource, createApi, type WorldSource } from './api.ts'
 
 const RECT = { x: 0, y: 0, w: 4, h: 4 }
 
@@ -62,6 +62,35 @@ class StubSource extends EventEmitter<{ update: [World] }> implements WorldSourc
   }
 }
 
+class StubColonists implements ColonistSource {
+  snapshot: ColonistsResponse = {
+    version: 1,
+    colonists: [
+      {
+        id: '/work/copy',
+        repoId: 'p/r',
+        label: 'fix-a',
+        status: 'working',
+        session: 'own',
+        copy: '~/work/copy',
+        head: 'abc1234',
+        base: 'main',
+        changes: [{ path: 'a.ts', kind: 'modified', units: 1 }],
+        omitted: 0,
+      },
+    ],
+  }
+  private readonly listeners = new Set<(snapshot: ColonistsResponse) => void>()
+  onChange(listener: (snapshot: ColonistsResponse) => void): () => void {
+    this.listeners.add(listener)
+    return () => this.listeners.delete(listener)
+  }
+  publish(snapshot: ColonistsResponse): void {
+    this.snapshot = snapshot
+    for (const listener of this.listeners) listener(snapshot)
+  }
+}
+
 const TOKEN = 'secret'
 const AUTH = { authorization: `Bearer ${TOKEN}` }
 
@@ -69,6 +98,7 @@ describe('api', () => {
   let server: Server
   let base: string
   const source = new StubSource()
+  const colonists = new StubColonists()
 
   beforeAll(async () => {
     const api = createApi(
@@ -78,8 +108,11 @@ describe('api', () => {
         source: 'default',
         port: 0,
       },
-      source,
-      (req) => (req.headers.authorization === `Bearer ${TOKEN}` ? null : 401),
+      {
+        world: source,
+        colonists,
+        deny: (req) => (req.headers.authorization === `Bearer ${TOKEN}` ? null : 401),
+      },
     )
     server = createServer((req, res) => {
       if (!api(req, res)) res.writeHead(418).end()
@@ -174,6 +207,12 @@ describe('api', () => {
     expect((await fetch(`${base}/api/file`, { headers: AUTH })).status).toBe(400)
   })
 
+  it('serves the colonists with the token only', async () => {
+    const ok = await fetch(`${base}/api/colonists`, { headers: AUTH })
+    expect(await ok.json()).toEqual(colonists.snapshot)
+    expect((await fetch(`${base}/api/colonists`)).status).toBe(401)
+  })
+
   it('streams a world event now and on every update', async () => {
     const response = await fetch(`${base}/api/events`)
     expect(response.headers.get('content-type')).toBe('text/event-stream')
@@ -192,6 +231,9 @@ describe('api', () => {
     source.world = { ...source.world, version: 2 }
     source.emit('update', source.world)
     await readUntil('"version":2')
+    expect(text).toContain('event: colonists\ndata: {"version":1}')
+    colonists.publish({ version: 7, colonists: [] })
+    await readUntil('event: colonists\ndata: {"version":7}')
     await reader.cancel()
   })
 

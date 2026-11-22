@@ -1,8 +1,10 @@
 import { ChevronsRightIcon } from 'lucide-react'
 import { lazy, Suspense } from 'react'
 import { RIGHT_TABS, type RightTab } from '../../../modules/preferences/shell-preferences.ts'
+import type { PlacedColonist } from '../../../modules/scene/colonist-places.ts'
 import type { Scene } from '../../../modules/scene/scene.ts'
 import type { WorldNode } from '../../../modules/world/world-types.ts'
+import { ColonistCard } from '../colonist-card/colonist-card.tsx'
 import { Inspector } from '../inspector/inspector.tsx'
 import { PanelHeader } from '../panel-header/panel-header.tsx'
 import { Button } from '../ui/button.tsx'
@@ -17,6 +19,9 @@ export interface RightPanelProps {
   tab: RightTab
   scene: Scene | undefined
   selected: WorldNode | undefined
+  // The picked colonist: the Inspector shows its card instead of a node.
+  colonist: PlacedColonist | undefined
+  canOpenTerminal: boolean
   workerCount: number
   // Receives the element the terminal dock mounts into.
   dockRef(element: HTMLDivElement | null): void
@@ -25,12 +30,16 @@ export interface RightPanelProps {
   onPick(id: string): void
   onOpen(id: string): void
   onTraceCalls(file: WorldNode): Promise<void>
+  onCloseColonist(): void
+  onOpenTerminal(paneId: string): void
 }
 
 export function RightPanel({
   tab,
   scene,
   selected,
+  colonist,
+  canOpenTerminal,
   workerCount,
   dockRef,
   onTabChange,
@@ -38,6 +47,8 @@ export function RightPanel({
   onPick,
   onOpen,
   onTraceCalls,
+  onCloseColonist,
+  onOpenTerminal,
 }: RightPanelProps) {
   return (
     <Tabs
@@ -74,13 +85,23 @@ export function RightPanel({
         </Suspense>
       </TabsContent>
       <TabsContent value="inspector" className="overflow-y-auto">
-        <Inspector
-          scene={scene}
-          selected={selected}
-          onPick={onPick}
-          onOpen={onOpen}
-          onTraceCalls={onTraceCalls}
-        />
+        {colonist ? (
+          <ColonistCard
+            placed={colonist}
+            canOpenTerminal={canOpenTerminal}
+            onClose={onCloseColonist}
+            onOpenTerminal={onOpenTerminal}
+            onPick={onPick}
+          />
+        ) : (
+          <Inspector
+            scene={scene}
+            selected={selected}
+            onPick={onPick}
+            onOpen={onOpen}
+            onTraceCalls={onTraceCalls}
+          />
+        )}
       </TabsContent>
     </Tabs>
   )

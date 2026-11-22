@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { logError } from '../../modules/logging/log.ts'
 import { Scene } from '../../modules/scene/scene.ts'
 import type { WorldState } from '../../modules/wire/world-decoder.ts'
+import { subscribeServerEvent } from '../client/server-events.ts'
 import { fetchSymbols, fetchWorld } from '../client/world-client.ts'
 
 // The live world: loaded whenever the server announces a new version, as a
@@ -23,15 +24,14 @@ export function useWorld(): Scene | undefined {
       current = new Scene(next.world, { state: next, fetchSymbols }, current)
       setScene(current)
     }
-    const events = new EventSource('/api/events')
-    events.addEventListener('world', () => {
+    const unsubscribe = subscribeServerEvent('world', () => {
       queue = queue
         .then(loadWorld)
         .catch((error: unknown) => logError('Could not load the world', { error }))
     })
     return () => {
       isDisposed = true
-      events.close()
+      unsubscribe()
     }
   }, [])
   return scene

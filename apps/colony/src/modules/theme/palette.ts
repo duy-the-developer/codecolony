@@ -35,3 +35,33 @@ export function hueOf(node: WorldNode): number {
   }
   return hue
 }
+
+// Colonists, by status: blue while a session is on it (blue means "being
+// changed", like the modified outline), amber when it waits on you, red when
+// it stopped, green with a pull request, grey with no live session.
+export const COLONIST_COLORS = {
+  working: '#4f9fe8',
+  paused: '#4f9fe8',
+  waiting: '#f7a21b',
+  blocked: '#e05050',
+  error: '#e05050',
+  'pr-ready': '#3ecf8e',
+  idle: '#8a99a8',
+} as const satisfies Record<string, string>
+
+// Diff outlines: modified files, the placeholders of added ones, removed ones.
+export const CHANGE_COLORS = {
+  modified: '#4f9fe8',
+  added: '#3ecf8e',
+  removed: '#e05050',
+} as const satisfies Record<string, string>
+
+// The dark line under a diff outline, so it reads on any fill.
+export const CHANGE_CASING = 'rgba(8, 16, 26, 0.85)'
+// The veil over a removed file.
+export const REMOVED_VEIL = 'rgba(8, 16, 26, 0.45)'
+// The colonist marker's chip and its hover label.
+export const COLONIST_CHIP = '#0b1724'
+export const COLONIST_INK = '#e4edf6'
+// The selected node's outline: solid, never dashed like a diff.
+export const SELECTION_COLOR = '#ffd166'

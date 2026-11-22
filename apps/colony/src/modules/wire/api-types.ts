@@ -43,3 +43,72 @@ export interface SearchMatches {
   symbols: SearchEntry[]
   files: SearchEntry[]
 }
+
+// GET /api/colonists: the coding sessions at work in copies of the mapped
+// repositories. A colonist is one copy (a clone or worktree) whose files
+// differ from its main branch; sub-agents share their parent's copy, so they
+// never add one.
+
+// working, paused: a session is on it. waiting: it needs you. blocked, error:
+// it stopped. pr-ready: its pull request is open. idle: changes, but no live
+// session in the copy.
+export const COLONIST_STATUSES = [
+  'working',
+  'paused',
+  'waiting',
+  'blocked',
+  'error',
+  'pr-ready',
+  'idle',
+] as const
+export type ColonistStatus = (typeof COLONIST_STATUSES)[number]
+
+export const CHANGE_KINDS = ['modified', 'added', 'removed'] as const
+export type ChangeKind = (typeof CHANGE_KINDS)[number]
+
+// firstmate: a worker firstmate launched. own: any other session, such as
+// your own Claude Code. none: no live session.
+export type SessionKind = 'firstmate' | 'own' | 'none'
+
+// A file in a colonist's diff, by repository-relative path.
+export interface ColonistChange {
+  path: string
+  kind: ChangeKind
+  // Added files: the side of the square the file will take on the map, in
+  // grid units, from its line count.
+  units: number
+}
+
+export interface Colonist {
+  // The copy's absolute path; stable while the copy exists.
+  id: string
+  // The node id of the mapped repository the copy belongs to.
+  repoId: string
+  label: string
+  status: ColonistStatus
+  // The last status line it reported, when it reports one.
+  note?: string
+  // The firstmate task working in the copy.
+  task?: string
+  session: SessionKind
+  // The agent kind, such as `claude` or `codex`, when known.
+  agent?: string
+  // The copy's path, with the home folder shortened to `~`.
+  copy: string
+  // The checked-out branch, or undefined when detached.
+  branch?: string
+  head: string
+  // The branch the diff is taken against, such as `production`.
+  base: string
+  pr?: string
+  // The Herdr pane the session runs in, to focus it in the terminal.
+  paneId?: string
+  changes: ColonistChange[]
+  // Changes left out past the cap.
+  omitted: number
+}
+
+export interface ColonistsResponse {
+  version: number
+  colonists: Colonist[]
+}
