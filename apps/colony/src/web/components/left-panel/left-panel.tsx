@@ -53,7 +53,7 @@ export function LeftPanel({
       className="h-full bg-card"
     >
       <PanelHeader>
-        <TabsList>
+        <TabsList className="min-w-0 overflow-x-auto [scrollbar-width:none]">
           <TabsTrigger value="queue">
             Build queue <span className="text-muted-foreground text-xs">{openOrders}</span>
           </TabsTrigger>
@@ -63,7 +63,7 @@ export function LeftPanel({
         <Button
           variant="ghost"
           size="icon-sm"
-          className="ml-auto text-muted-foreground"
+          className="ml-auto shrink-0 text-muted-foreground"
           aria-label="Hide left panel"
           title="Hide left panel ( [ )"
           onClick={onCollapse}

@@ -50,7 +50,7 @@ export function RightPanel({
       className="h-full bg-card"
     >
       <PanelHeader>
-        <TabsList>
+        <TabsList className="min-w-0 overflow-x-auto [scrollbar-width:none]">
           <TabsTrigger value="terminal">
             Terminal <span className="text-muted-foreground text-xs">{workerCount}</span>
           </TabsTrigger>
@@ -60,7 +60,7 @@ export function RightPanel({
         <Button
           variant="ghost"
           size="icon-sm"
-          className="ml-auto text-muted-foreground"
+          className="ml-auto shrink-0 text-muted-foreground"
           aria-label="Hide right panel"
           title="Hide right panel ( ] )"
           onClick={onCollapse}
