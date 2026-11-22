@@ -128,7 +128,6 @@ describe('Inspector', () => {
     ])
     expect(facts).toEqual([
       ['Files', '2'],
-      ['Lines', '6'],
       ['Imports between them', '1'],
       ['Imports out', '0'],
       ['Imported by others', '1'],

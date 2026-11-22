@@ -145,7 +145,6 @@ function CombinedDetails({ scene, selection, onPick }: CombinedDetailsProps) {
   const summary = buildSelectionSummary(scene, selection)
   const facts: [string, number][] = [
     ['Files', summary.files],
-    ['Lines', summary.lines],
     ['Imports between them', summary.importsBetween],
     ['Imports out', summary.importsOut],
     ['Imported by others', summary.importedBy],

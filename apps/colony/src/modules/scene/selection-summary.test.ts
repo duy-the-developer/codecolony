@@ -3,8 +3,8 @@ import type { Edge, NodeKind, World, WorldNode } from '../world/world-types.ts'
 import { Scene } from './scene.ts'
 import { buildSelectionSummary } from './selection-summary.ts'
 
-function node(id: string, kind: NodeKind, parent?: string, lines = 10): WorldNode {
-  const base = { id, kind, name: id, lines, complexity: 0, rect: { x: 0, y: 0, w: 1, h: 1 } }
+function node(id: string, kind: NodeKind, parent?: string): WorldNode {
+  const base = { id, kind, name: id, lines: 10, complexity: 0, rect: { x: 0, y: 0, w: 1, h: 1 } }
   return parent === undefined ? base : { ...base, parent }
 }
 
@@ -20,11 +20,11 @@ const scene = new Scene({
   nodes: [
     node('w', 'world'),
     node('a', 'module', 'w'),
-    node('a/f.ts', 'file', 'a', 100),
-    node('a/h.ts', 'file', 'a', 20),
+    node('a/f.ts', 'file', 'a'),
+    node('a/h.ts', 'file', 'a'),
     node('b', 'module', 'w'),
-    node('b/g.ts', 'file', 'b', 7),
-    node('c.ts', 'file', 'w', 3),
+    node('b/g.ts', 'file', 'b'),
+    node('c.ts', 'file', 'w'),
   ],
   edges: [
     edge('import', 'a/f.ts', 'b/g.ts'),
@@ -43,11 +43,10 @@ function get(id: string): WorldNode {
 }
 
 describe('buildSelectionSummary', () => {
-  it('counts files, lines and imports between, out of and into the selection', () => {
+  it('counts files and imports between, out of and into the selection', () => {
     const summary = buildSelectionSummary(scene, [get('a'), get('b')])
     expect(summary).toMatchObject({
       files: 3,
-      lines: 127,
       importsBetween: 1,
       importsOut: 1,
       importedBy: 2,
@@ -66,7 +65,6 @@ describe('buildSelectionSummary', () => {
   it('counts a file once when selected nodes overlap', () => {
     const summary = buildSelectionSummary(scene, [get('a'), get('a/f.ts')])
     expect(summary.files).toBe(2)
-    expect(summary.lines).toBe(120)
     // f.ts to h.ts leaves f.ts, though both are inside a.
     expect(summary.importsBetween).toBe(1)
   })

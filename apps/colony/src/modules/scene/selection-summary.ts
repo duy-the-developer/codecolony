@@ -9,7 +9,6 @@ export interface SelectionSummary {
   // Files inside the selection, each counted once even when selected nodes
   // overlap.
   files: number
-  lines: number
   // Imports from one selected node into another.
   importsBetween: number
   // Imports from the selection to the rest of the map, and back.
@@ -23,13 +22,7 @@ export function buildSelectionSummary(scene: Scene, nodes: readonly WorldNode[])
   const subtrees = nodes.map((node) => scene.listSubtree(node))
   const all = new Set(subtrees.flatMap((subtree) => [...subtree]))
   let files = 0
-  let lines = 0
-  for (const id of all) {
-    const node = scene.byId.get(id)
-    if (node?.kind !== 'file') continue
-    files++
-    lines += node.lines
-  }
+  for (const id of all) if (scene.byId.get(id)?.kind === 'file') files++
   let importsBetween = 0
   let importsOut = 0
   let importedBy = 0
@@ -48,7 +41,6 @@ export function buildSelectionSummary(scene: Scene, nodes: readonly WorldNode[])
   }
   return {
     files,
-    lines,
     importsBetween,
     importsOut,
     importedBy,

@@ -100,11 +100,14 @@ export function MapView({ scene, handleRef, overlays, onSelect, onOpen, children
 // Pointer offset of the tooltip, in pixels.
 const TOOLTIP_GAP_PX = 14
 
-// Shows the hovered node's name beside the pointer, on the side with room.
+// Shows the hovered node's name and kind beside the pointer, on the side with
+// room.
 function placeTooltip(element: HTMLDivElement, hover: MapHover | undefined): void {
   element.hidden = !hover
   if (!hover) return
-  element.textContent = hover.node.name
+  const { node } = hover
+  const kind = node.kind === 'symbol' ? (node.symbolKind ?? 'symbol') : node.kind
+  element.textContent = `${node.name} · ${kind}`
   const parent = element.parentElement
   const isRight = !parent || hover.x < parent.clientWidth - element.offsetWidth - 2 * TOOLTIP_GAP_PX
   const isBelow =
