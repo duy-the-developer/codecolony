@@ -1,11 +1,18 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { loadBuildQueue, loadOrderChanges } from '../modules/build-queue/load-build-queue.ts'
 import type { ColonyConfig } from '../modules/config/load-config.ts'
 import {
   buildSearchIndex,
   listSearchMatches,
   type SearchIndex,
 } from '../modules/search/search-index.ts'
-import type { FileResponse, ProjectsResponse, SearchMatches } from '../modules/wire/api-types.ts'
+import type {
+  BuildQueueResponse,
+  FileResponse,
+  OrderChangesResponse,
+  ProjectsResponse,
+  SearchMatches,
+} from '../modules/wire/api-types.ts'
 import { createWorldEncoder } from '../modules/wire/world-encoder.ts'
 import type { DeepResponse, Edge, World } from '../modules/world/world-types.ts'
 
@@ -90,6 +97,10 @@ export function createApi(config: ColonyConfig, source: WorldSource, deny: DenyR
           (edges) => json(res, 200, { edges } satisfies DeepResponse),
           (error: unknown) => json(res, 502, { error: (error as Error).message }),
         )
+    } else if (pathname === '/api/build-queue') {
+      buildQueue(res, config)
+    } else if (pathname === '/api/build-queue/changes') {
+      orderChanges(res, config, url.searchParams.get('id'))
     } else if (pathname === '/api/file') {
       file(req, res, url.searchParams.get('id'), source, deny)
     } else {
@@ -116,6 +127,36 @@ function file(
       (body) => {
         if (body) json(res, 200, body satisfies FileResponse)
         else json(res, 404, { error: 'no such file on the map' })
+      },
+      (error: unknown) => json(res, 502, { error: (error as Error).message }),
+    )
+  }
+}
+
+// The firstmate home's orders for the projects on the map.
+function buildQueue(res: ServerResponse, config: ColonyConfig): void {
+  const home = config.firstmateHome
+  if (!home) {
+    json(res, 200, { isConnected: false } satisfies BuildQueueResponse)
+    return
+  }
+  loadBuildQueue(home, config.projects).then(
+    (orders) => json(res, 200, { isConnected: true, orders } satisfies BuildQueueResponse),
+    (error: unknown) => json(res, 502, { error: (error as Error).message }),
+  )
+}
+
+function orderChanges(res: ServerResponse, config: ColonyConfig, id: string | null): void {
+  const home = config.firstmateHome
+  if (!home) {
+    json(res, 404, { error: 'no firstmate home is configured' })
+  } else if (!id) {
+    json(res, 400, { error: 'id is required' })
+  } else {
+    loadOrderChanges(home, config.projects, id).then(
+      (body) => {
+        if (body) json(res, 200, body satisfies OrderChangesResponse)
+        else json(res, 404, { error: 'no worker copy for this order' })
       },
       (error: unknown) => json(res, 502, { error: (error as Error).message }),
     )

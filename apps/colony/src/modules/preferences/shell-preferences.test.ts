@@ -14,14 +14,16 @@ describe('shellPreferencesFrom', () => {
     expect(shellPreferencesFrom('[]')).toEqual(DEFAULT_SHELL_PREFERENCES)
   })
 
-  it('keeps valid fields, clamps widths and drops unknown tabs', () => {
+  it('keeps valid fields, clamps widths and drops unknown tabs and section states', () => {
     const raw = JSON.stringify({
       left: { widthPx: 9999, isCollapsed: true, tab: 'files' },
       right: { widthPx: 'wide', isCollapsed: 'no', tab: 'map' },
+      openQueueSections: { active: false, queued: 'yes', done: true },
     })
     expect(shellPreferencesFrom(raw)).toEqual({
       left: { widthPx: MAX_PANEL_PX, isCollapsed: true, tab: 'files' },
       right: DEFAULT_SHELL_PREFERENCES.right,
+      openQueueSections: { active: false, queued: true, done: true },
     })
   })
 })

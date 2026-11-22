@@ -97,6 +97,7 @@
                       "**/scene/**",
                       "**/map/**",
                       "**/preferences/**",
+                      "**/build-queue/**",
                       "**/server/**",
                       "**/web/**"
                     ],
@@ -148,6 +149,7 @@
                       "**/scene/**",
                       "**/map/**",
                       "**/preferences/**",
+                      "**/build-queue/**",
                       "**/server/**",
                       "**/web/**"
                     ],
@@ -198,6 +200,7 @@
                       "**/scene/**",
                       "**/map/**",
                       "**/preferences/**",
+                      "**/build-queue/**",
                       "**/server/**",
                       "**/web/**"
                     ],
@@ -248,6 +251,7 @@
                       "**/scene/**",
                       "**/map/**",
                       "**/preferences/**",
+                      "**/build-queue/**",
                       "**/server/**",
                       "**/web/**"
                     ],
@@ -297,6 +301,7 @@
                       "**/scene/**",
                       "**/map/**",
                       "**/preferences/**",
+                      "**/build-queue/**",
                       "**/server/**",
                       "**/web/**"
                     ],
@@ -346,6 +351,7 @@
                       "**/scene/**",
                       "**/map/**",
                       "**/preferences/**",
+                      "**/build-queue/**",
                       "**/server/**",
                       "**/web/**"
                     ],
@@ -396,6 +402,7 @@
                       "**/scene/**",
                       "**/map/**",
                       "**/preferences/**",
+                      "**/build-queue/**",
                       "**/server/**",
                       "**/web/**"
                     ],
@@ -444,6 +451,7 @@
                       "**/scene/**",
                       "**/map/**",
                       "**/preferences/**",
+                      "**/build-queue/**",
                       "**/server/**",
                       "**/web/**"
                     ],
@@ -495,6 +503,7 @@
                       "**/scene/**",
                       "**/map/**",
                       "**/preferences/**",
+                      "**/build-queue/**",
                       "**/server/**",
                       "**/web/**"
                     ],
@@ -536,6 +545,7 @@
                       "**/scene/**",
                       "**/map/**",
                       "**/preferences/**",
+                      "**/build-queue/**",
                       "**/server/**",
                       "**/web/**"
                     ],
@@ -573,6 +583,7 @@
                       "**/scene/**",
                       "**/map/**",
                       "**/preferences/**",
+                      "**/build-queue/**",
                       "**/server/**",
                       "**/web/**"
                     ],
@@ -581,6 +592,93 @@
                   {
                     "group": ["**/testing/**"],
                     "message": "testing/ is for tests only."
+                  },
+                  {
+                    "group": ["@codecolony/dock/web"],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "apps/colony/src/modules/build-queue/**",
+        "!**/*.test.ts",
+        "!apps/colony/src/modules/build-queue/testing/**"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "**/world/**",
+                      "**/theme/**",
+                      "**/lane-routing/**",
+                      "**/layout/**",
+                      "**/config/**",
+                      "**/language/**",
+                      "**/search/**",
+                      "**/indexing/**",
+                      "**/scene/**",
+                      "**/map/**",
+                      "**/preferences/**",
+                      "**/server/**",
+                      "**/web/**"
+                    ],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
+                  },
+                  {
+                    "group": ["**/testing/**"],
+                    "message": "testing/ is for tests only."
+                  },
+                  {
+                    "group": ["@codecolony/dock/web"],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "apps/colony/src/modules/build-queue/**/*.test.ts",
+        "apps/colony/src/modules/build-queue/testing/**"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "**/world/**",
+                      "**/theme/**",
+                      "**/lane-routing/**",
+                      "**/layout/**",
+                      "**/config/**",
+                      "**/language/**",
+                      "**/search/**",
+                      "**/indexing/**",
+                      "**/scene/**",
+                      "**/map/**",
+                      "**/preferences/**",
+                      "**/server/**",
+                      "**/web/**"
+                    ],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
                   },
                   {
                     "group": ["@codecolony/dock/web"],
@@ -614,6 +712,7 @@
                       "**/scene/**",
                       "**/map/**",
                       "**/preferences/**",
+                      "**/build-queue/**",
                       "**/server/**",
                       "**/web/**"
                     ],
@@ -654,6 +753,7 @@
                       "**/scene/**",
                       "**/map/**",
                       "**/preferences/**",
+                      "**/build-queue/**",
                       "**/server/**",
                       "**/web/**"
                     ],
@@ -690,6 +790,7 @@
                       "**/indexing/**",
                       "**/map/**",
                       "**/preferences/**",
+                      "**/build-queue/**",
                       "**/server/**",
                       "**/web/**"
                     ],
@@ -736,6 +837,7 @@
                       "**/search/**",
                       "**/indexing/**",
                       "**/preferences/**",
+                      "**/build-queue/**",
                       "**/server/**",
                       "**/web/**"
                     ],
@@ -787,6 +889,7 @@
                       "**/indexing/**",
                       "**/scene/**",
                       "**/map/**",
+                      "**/build-queue/**",
                       "**/server/**",
                       "**/web/**"
                     ],
@@ -898,6 +1001,7 @@
                     "group": [
                       "**/lane-routing/**",
                       "**/layout/**",
+                      "**/modules/build-queue/**",
                       "**/config/**",
                       "**/language/**",
                       "**/search/**",

@@ -10,10 +10,15 @@ import type { OverlayId } from '../../../modules/map/overlays.ts'
 import {
   MAX_PANEL_PX,
   MIN_PANEL_PX,
+  type QueueSection,
   type ShellPreferences,
 } from '../../../modules/preferences/shell-preferences.ts'
+import { findChangeTarget } from '../../../modules/scene/change-target.ts'
+import type { BuildOrder } from '../../../modules/wire/api-types.ts'
 import type { DeepResponse, WorldNode } from '../../../modules/world/world-types.ts'
+import { fetchOrderChanges } from '../../client/build-queue-client.ts'
 import { fetchSearchMatches } from '../../client/world-client.ts'
+import { useBuildQueue } from '../../hooks/use-build-queue.ts'
 import { useDock } from '../../hooks/use-dock.ts'
 import { useProjects } from '../../hooks/use-projects.ts'
 import { useSceneRevision } from '../../hooks/use-scene-revision.ts'
@@ -36,6 +41,7 @@ export function App() {
   // Symbols arrive after the scene; the panels re-render with them.
   useSceneRevision(scene)
   const projects = useProjects()
+  const queue = useBuildQueue()
   const [preferences, updatePreferences] = useShellPreferences()
   // In the order they were added; the last is the one the panels follow.
   const [selectedIds, setSelectedIds] = useState<readonly string[]>([])
@@ -115,6 +121,30 @@ export function App() {
       setEdgeVersion((version) => version + 1)
     },
     [scene],
+  )
+
+  const toggleQueueSection = useCallback(
+    (section: QueueSection) =>
+      updatePreferences((current) => ({
+        ...current,
+        openQueueSections: {
+          ...current.openQueueSections,
+          [section]: !current.openQueueSections[section],
+        },
+      })),
+    [updatePreferences],
+  )
+
+  // Flies to the files the order's worker changed. TODO(#43): once colonists
+  // are on the map, select the order's colonist (order.colonist) instead.
+  const showOrderOnMap = useCallback(
+    async (order: BuildOrder) => {
+      const changes = await fetchOrderChanges(order.id)
+      const target = changes && scene ? findChangeTarget(scene, changes) : undefined
+      if (target) pick(target.id)
+      return target !== undefined
+    },
+    [scene, pick],
   )
 
   const togglePanel = useCallback(
@@ -208,6 +238,11 @@ export function App() {
               tab={preferences.left.tab}
               scene={scene}
               selected={selected}
+              queue={queue}
+              queueScope={projects.length === 1 ? (projects[0]?.name ?? '') : 'All projects'}
+              openQueueSections={preferences.openQueueSections}
+              onToggleQueueSection={toggleQueueSection}
+              onShowOrderOnMap={showOrderOnMap}
               onTabChange={(tab) => updatePanel('left', { tab })}
               onCollapse={() => panelRefs.left.current?.collapse()}
               onPick={pick}

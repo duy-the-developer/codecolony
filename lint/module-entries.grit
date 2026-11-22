@@ -8,7 +8,7 @@ or {
   `import type $_ from $source`,
   `export $_ from $source`
 } where {
-  $source <: r"['\"].*/(wire|layout|config|language|search|indexing|map|preferences)/([^'\"]+)['\"]"($module, $file),
+  $source <: r"['\"].*/(wire|layout|config|language|search|build-queue|indexing|map|preferences)/([^'\"]+)['\"]"($module, $file),
   not or {
     and {
       $module <: "wire",
@@ -36,6 +36,15 @@ or {
       }
     },
     and { $module <: "search", $file <: "search-index.ts" },
+    // build-queue.tsx is the web component of the same name, not this module.
+    and {
+      $module <: "build-queue",
+      $file <: or {
+        "load-build-queue.ts",
+        "build-queue.tsx",
+        r"testing/.*"
+      }
+    },
     and {
       $module <: "indexing",
       $file <: or {

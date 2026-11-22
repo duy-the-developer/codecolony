@@ -23,6 +23,13 @@
   --input: #24405c;
   --ring: #4f8fd6;
   --radius: 0.375rem;
+  /* A worker's state, the same on the map's colonists and in the build queue.
+     Blue is kept for "being changed". */
+  --status-working: #4f9fe8;
+  --status-waiting: #f7a21b;
+  --status-blocked: #e05050;
+  --status-pr-ready: #3ecf8e;
+  --status-idle: #8a99a8;
 }
 
 @theme inline {
@@ -44,6 +51,11 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-status-working: var(--status-working);
+  --color-status-waiting: var(--status-waiting);
+  --color-status-blocked: var(--status-blocked);
+  --color-status-pr-ready: var(--status-pr-ready);
+  --color-status-idle: var(--status-idle);
   --radius-sm: calc(var(--radius) - 2px);
   --radius-md: var(--radius);
   --radius-lg: calc(var(--radius) + 2px);
