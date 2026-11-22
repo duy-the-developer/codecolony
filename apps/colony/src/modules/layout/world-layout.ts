@@ -7,7 +7,7 @@ import {
   type WorldNode,
 } from '../world/world-types.ts'
 import { type LaneWidening, resolveLaneWidening } from './lane-widening.ts'
-import { fileUnits, naturalHeight, packCells } from './pack-cells.ts'
+import { type CellPacking, fileUnits, naturalHeight, packCells } from './pack-cells.ts'
 import { packRows, type RowItem, type StoredRow } from './pack-rows.ts'
 import { symbolBand } from './symbol-band.ts'
 
@@ -16,8 +16,9 @@ export type { StoredRow } from './pack-rows.ts'
 import { rankItems } from './rank-items.ts'
 
 // Lays the world tree out on the unit grid, bottom-up. Files are squares on
-// their module's cell grid; modules, packages, repositories and projects sit
-// in rows inside their parent (see pack-rows.ts). A module with subfolders
+// their module's cell grid, a 1-unit street apart, so lanes can run between
+// them; modules, packages, repositories and projects sit in rows inside their
+// parent (see pack-rows.ts). A module with subfolders
 // lays its subfolders' modules out in rows the same way. Files directly in a
 // repository, package or such a module share one more cell grid in its rows,
 // with no border or label of its own. Every size, padding and gap is a whole
@@ -56,6 +57,9 @@ const WIDEN_ROUNDS = 2
 
 // Units of padding inside a container's left, right and bottom edges.
 const PAD = 1
+// Units of street between neighbouring files. It never widens, so files keep
+// their places whatever imports change.
+const FILE_STREET = 1
 // A module is at least this many cells across, so its label has room.
 const MIN_MODULE_CELLS = 2
 // A module keeps the height its files pack to until they need this many
@@ -142,7 +146,7 @@ function layOut(
     if (node.kind === 'module' && blocks.length === 0) {
       const { sizes, height } = packFiles(node.id, kids)
       const width = (h: number) =>
-        Math.max(packCells(sizes, h - top - PAD).width, MIN_MODULE_CELLS) + 2 * PAD
+        Math.max(packFileCells(sizes, h - top - PAD).width, MIN_MODULE_CELLS) + 2 * PAD
       return { w: width(height + top + PAD), h: height + top + PAD, fit: width }
     }
     const group = looseId(node.id)
@@ -158,7 +162,7 @@ function layOut(
     }
     if (loose.length > 0) {
       const { sizes, height } = packFiles(group, loose)
-      const width = (h: number) => packCells(sizes, h).width
+      const width = (h: number) => packFileCells(sizes, h).width
       items.push({
         id: group,
         rank: ranks.get(group) ?? 0,
@@ -186,7 +190,7 @@ function layOut(
   // Packs a module's or group's files into the area at x, y, height tall.
   const placeFiles = (id: string, x: number, y: number, height: number): void => {
     const order = files.get(id) ?? []
-    const { cells } = packCells(
+    const { cells } = packFileCells(
       order.map((file) => fileUnits(file.lines)),
       height,
     )
@@ -254,8 +258,20 @@ function liftFiles(
   return lifted
 }
 
+// Packs files into columns `height` tall with a street after each, trimmed at
+// the far edges, so files sit FILE_STREET apart and flush with the area.
+function packFileCells(sizes: readonly number[], height: number): CellPacking {
+  const packed = packCells(
+    sizes.map((size) => size + FILE_STREET),
+    height + FILE_STREET,
+  )
+  return { cells: packed.cells, width: Math.max(0, packed.width - FILE_STREET) }
+}
+
+// The height files pack to, with streets between them.
 function moduleHeight(sizes: readonly number[], saved: number | undefined): number {
-  const natural = naturalHeight(sizes)
+  const cells = sizes.map((size) => size + FILE_STREET)
+  const natural = Math.max(1, naturalHeight(cells) - FILE_STREET)
   if (saved === undefined || natural > MODULE_REGROW * saved || 2 * natural < saved) return natural
   return Math.max(saved, Math.max(1, ...sizes))
 }

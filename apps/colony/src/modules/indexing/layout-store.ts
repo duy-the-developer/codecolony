@@ -13,8 +13,9 @@ import { writeAtomic } from './atomic-write.ts'
 // Bumped when stored layouts can no longer be read as they are; older ones are
 // dropped and the world is laid out afresh. Version 3 keeps the files of a
 // repository's or package's own folder as loose files instead of a root module;
-// version 4 nests a folder's subfolders inside its module.
-const STORE_VERSION = 4
+// version 4 nests a folder's subfolders inside its module; version 5 puts a
+// street between files, which changes every module's height.
+const STORE_VERSION = 5
 
 interface StoredLayout {
   version: number

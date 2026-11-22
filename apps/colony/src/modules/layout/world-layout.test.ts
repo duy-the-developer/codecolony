@@ -119,7 +119,7 @@ describe('layoutWorld', () => {
     expect(sides).toContainEqual([900, 4, 4])
   })
 
-  it('keeps files from touching neighbours outside their cells, and modules a gutter apart', () => {
+  it('keeps files a street apart, and modules a gutter apart', () => {
     const nodes = makeNodes()
     layoutWorld(nodes, EDGES, emptyLayout(), { gutter: 3 })
     for (const group of siblings(nodes, 'module').values()) {
@@ -134,9 +134,24 @@ describe('layoutWorld', () => {
     for (const group of siblings(nodes, 'file').values()) {
       for (let i = 0; i < group.length; i++) {
         for (let j = i + 1; j < group.length; j++) {
-          expect(apart((group[i] as WorldNode).rect, (group[j] as WorldNode).rect, 0)).toBe(true)
+          expect(apart((group[i] as WorldNode).rect, (group[j] as WorldNode).rect, 1)).toBe(true)
         }
       }
+    }
+  })
+
+  it('trims the street at the edges of a module, so its files fill it', () => {
+    const nodes = makeNodes()
+    layoutWorld(nodes, EDGES, emptyLayout())
+    for (const [id, files] of siblings(nodes, 'file')) {
+      const module = nodes.find((n) => n.id === id) as WorldNode
+      if (module.kind !== 'module') continue
+      const right = Math.max(...files.map((f) => f.rect.x + f.rect.w))
+      const bottom = Math.max(...files.map((f) => f.rect.y + f.rect.h))
+      expect(Math.min(...files.map((f) => f.rect.x)), id).toBe(module.rect.x + 1)
+      expect(module.rect.y + module.rect.h - bottom, id).toBeGreaterThanOrEqual(1)
+      // Narrower modules are as wide as their label needs.
+      if (module.rect.w > 4) expect(module.rect.x + module.rect.w - right, id).toBe(1)
     }
   })
 

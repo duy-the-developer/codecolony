@@ -57,6 +57,27 @@ export function answerLaneRequest(
   }
 }
 
+// A reply ready to post with its buffers moved, not copied. Routes are built
+// for the reply and can move; a level stays with the world, which answers
+// with it again, so a copy of it moves instead.
+export function toTransfer(reply: LaneReply): { reply: LaneReply; transfer: ArrayBuffer[] } {
+  const transfer: ArrayBuffer[] = []
+  let sent = reply
+  if (reply.routes) {
+    transfer.push(
+      reply.routes.points.buffer as ArrayBuffer,
+      reply.routes.offsets.buffer as ArrayBuffer,
+      reply.routes.links.buffer as ArrayBuffer,
+    )
+  }
+  if (reply.level) {
+    const linkOfEdge = reply.level.linkOfEdge.slice()
+    sent = { ...reply, level: { ...reply.level, linkOfEdge } }
+    transfer.push(linkOfEdge.buffer)
+  }
+  return { reply: sent, transfer }
+}
+
 function createWorkerRouter(): LaneRouterHandle {
   const worker = new Worker(new URL('./lane-worker.ts', import.meta.url), { type: 'module' })
   const waiting = new Map<number, (reply: LaneReply) => void>()

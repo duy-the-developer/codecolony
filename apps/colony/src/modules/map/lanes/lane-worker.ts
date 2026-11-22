@@ -1,4 +1,4 @@
-import { answerLaneRequest, type LaneReply, type LaneRequest } from './lane-router.ts'
+import { answerLaneRequest, type LaneReply, type LaneRequest, toTransfer } from './lane-router.ts'
 import { LaneWorld } from './lane-world.ts'
 
 // The routing worker: holds one world version and answers level and route
@@ -18,14 +18,6 @@ self.onmessage = (event: MessageEvent<LaneRequest>) => {
   } catch (error) {
     reply = { id: request.id, error: error instanceof Error ? error.message : String(error) }
   }
-  const transfer: ArrayBuffer[] = []
-  if (reply.routes) {
-    transfer.push(
-      reply.routes.points.buffer as ArrayBuffer,
-      reply.routes.offsets.buffer as ArrayBuffer,
-      reply.routes.links.buffer as ArrayBuffer,
-    )
-  }
-  if (reply.level) transfer.push(reply.level.linkOfEdge.buffer as ArrayBuffer)
-  self.postMessage(reply, { transfer })
+  const sent = toTransfer(reply)
+  self.postMessage(sent.reply, { transfer: sent.transfer })
 }
