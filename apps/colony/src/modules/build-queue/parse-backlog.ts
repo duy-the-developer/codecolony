@@ -58,6 +58,12 @@ function parseItem(id: string, rest: string, section: BacklogSection): BacklogEn
   return { id, title, section, fields, ...(pullRequestUrl ? { pullRequestUrl } : {}) }
 }
 
+// Held for the captain: an open item firstmate holds until you decide. A done
+// item keeps its hold-kind after the answer, so it is no longer held.
+export function isCaptainHeld(entry: BacklogEntry): boolean {
+  return entry.section !== 'done' && entry.fields['hold-kind'] === 'captain'
+}
+
 // A firstmate hold field is `fm-hold-v1:<base64 reason>`; anything else is
 // taken as written.
 export function holdReason(hold: string | undefined): string | undefined {

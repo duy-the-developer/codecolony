@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { readFirstmateTasks } from './firstmate-tasks.ts'
-import { makeFirstmateHome } from './testing/firstmate-home-fixture.ts'
+import {
+  captainHoldLine,
+  makeFirstmateHome,
+  writeBacklog,
+} from './testing/firstmate-home-fixture.ts'
 
 describe('readFirstmateTasks', () => {
   it('reads each task record with its status log, as the build queue reads it', async () => {
@@ -30,6 +34,30 @@ describe('readFirstmateTasks', () => {
         },
       },
       { id: 'quiet', kind: 'scout' },
+    ])
+  })
+
+  it('marks the tasks the backlog holds for the captain', async () => {
+    const home = makeFirstmateHome([
+      { id: 'held', meta: { kind: 'ship' } },
+      { id: 'answered', meta: { kind: 'ship' } },
+      { id: 'free', meta: { kind: 'ship' } },
+    ])
+    writeBacklog(
+      home,
+      [
+        '## In flight',
+        captainHoldLine('held', 'Approve the mockup'),
+        '- [ ] free - Not held (repo: repo) (kind: ship)',
+        '## Done',
+        captainHoldLine('answered', 'Already answered'),
+      ].join('\n'),
+    )
+    const tasks = await readFirstmateTasks(home)
+    expect(tasks.map((task) => [task.id, task.captainHold])).toEqual([
+      ['answered', undefined],
+      ['free', undefined],
+      ['held', { reason: 'Approve the mockup' }],
     ])
   })
 

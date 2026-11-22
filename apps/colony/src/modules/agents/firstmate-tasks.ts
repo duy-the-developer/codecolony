@@ -1,12 +1,19 @@
 import { readdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { parseMeta, parseStatusLog, type WorkerStatus } from '../build-queue/load-build-queue.ts'
+import {
+  type CaptainHold,
+  loadCaptainHolds,
+  parseMeta,
+  parseStatusLog,
+  type WorkerStatus,
+} from '../build-queue/load-build-queue.ts'
 
 // Reads a firstmate home, read only: each running task's record in
 // `state/<task>.meta` (key=value lines: the worktree it works in, its kind,
 // branch) and its status log in `state/<task>.status`, read the way the build
-// queue reads it, plus the clones under `projects/`. A missing or unreadable
-// home reads as empty.
+// queue reads it, and whether the backlog (data/backlog.md) holds it for the
+// captain, plus the clones under `projects/`. A missing or unreadable home
+// reads as empty.
 
 export interface FirstmateTask {
   id: string
@@ -15,6 +22,8 @@ export interface FirstmateTask {
   branch?: string
   // Its status log, when it has written one.
   status?: WorkerStatus
+  // Set while the backlog holds the task for the captain.
+  captainHold?: CaptainHold
 }
 
 export async function readFirstmateTasks(home: string): Promise<FirstmateTask[]> {
@@ -25,6 +34,7 @@ export async function readFirstmateTasks(home: string): Promise<FirstmateTask[]>
   } catch {
     return []
   }
+  const holds = await loadCaptainHolds(home).catch(() => new Map<string, CaptainHold>())
   const tasks = await Promise.all(
     names
       .filter((name) => name.endsWith('.meta'))
@@ -40,6 +50,8 @@ export async function readFirstmateTasks(home: string): Promise<FirstmateTask[]>
         if (fields.branch) task.branch = fields.branch
         const log = await readText(join(state, `${id}.status`))
         if (log !== undefined) task.status = parseStatusLog(log)
+        const hold = holds.get(id)
+        if (hold) task.captainHold = hold
         return task
       }),
   )

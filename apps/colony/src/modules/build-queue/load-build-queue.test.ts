@@ -84,6 +84,19 @@ describe('loadBuildQueue', () => {
     })
   })
 
+  it("waits on you for a captain hold whatever its worker's status says", async () => {
+    const home = makeFirstmateHome({
+      backlog: FAKE_BACKLOG,
+      workers: { 'app-roadmap': { status: ['paused [at=1]: waiting on the captain'] } },
+    })
+    const orders = await loadBuildQueue(home, PROJECTS)
+    expect(orders.find((order) => order.id === 'app-roadmap')).toMatchObject({
+      state: 'waiting',
+      colonist: 'app-roadmap',
+      note: 'Approve the C1-C13 order',
+    })
+  })
+
   it('finds a repository inside a folder-of-repositories project', async () => {
     const root = mkdtempSync(join(tmpdir(), 'codecolony-org-'))
     mkdirSync(join(root, 'app'))
