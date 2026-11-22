@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
-import { logError } from '../../shared/log.ts'
-import type { WorldState } from '../../shared/world-decoder.ts'
-import { Scene } from '../scene.ts'
-import { fetchSymbols, fetchWorld } from '../world-client.ts'
+import { logError } from '../../modules/logging/log.ts'
+import { Scene } from '../../modules/scene/scene.ts'
+import type { WorldState } from '../../modules/wire/world-decoder.ts'
+import { fetchSymbols, fetchWorld } from '../client/world-client.ts'
 
 // The live world: loaded whenever the server announces a new version, as a
 // patch on the version the page holds.

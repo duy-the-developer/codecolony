@@ -1,0 +1,57 @@
+language js
+
+// Code outside a module imports it only through its entry files
+// (CONVENTIONS.md, Modules). Modules whose files are all entries (world,
+// logging, lane-routing, theme, scene) are not listed.
+or {
+  `import $_ from $source`,
+  `import type $_ from $source`,
+  `export $_ from $source`
+} where {
+  $source <: r"['\"].*/(wire|layout|config|language|search|indexing|map|preferences)/([^'\"]+)['\"]"($module, $file),
+  not or {
+    and {
+      $module <: "wire",
+      $file <: or {
+        "api-types.ts",
+        "world-encoder.ts",
+        "world-decoder.ts"
+      }
+    },
+    and {
+      $module <: "layout",
+      $file <: or {
+        "world-layout.ts",
+        "symbol-band.ts"
+      }
+    },
+    and { $module <: "config", $file <: "load-config.ts" },
+    and {
+      $module <: "language",
+      $file <: or {
+        "language-adapter.ts",
+        "registry.ts",
+        "parse.ts",
+        "lsp.ts"
+      }
+    },
+    and { $module <: "search", $file <: "search-index.ts" },
+    and {
+      $module <: "indexing",
+      $file <: or {
+        "colony.ts",
+        r"testing/.*"
+      }
+    },
+    and {
+      $module <: "map",
+      $file <: or {
+        "map-controller.ts",
+        "overlays.ts",
+        "camera.ts"
+      }
+    },
+    and { $module <: "preferences", $file <: "shell-preferences.ts" }
+  },
+  register_diagnostic(span=$source, message="Import a module only through its entry files (CONVENTIONS.md).")
+}

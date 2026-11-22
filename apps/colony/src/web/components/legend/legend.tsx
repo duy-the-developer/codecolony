@@ -1,9 +1,9 @@
 import type { ReactNode } from 'react'
-import type { SymbolKind, WorldNode } from '../../../shared/world-types.ts'
-import { OVERLAYS } from '../../overlays.ts'
-import { hueOf, SYMBOL_COLORS } from '../../render.ts'
-import type { Scene } from '../../scene.ts'
-import { listTreeChildren, listTreeRoots } from '../../tree-entries.ts'
+import { OVERLAYS } from '../../../modules/map/overlays.ts'
+import type { Scene } from '../../../modules/scene/scene.ts'
+import { listTreeChildren, listTreeRoots } from '../../../modules/scene/tree-entries.ts'
+import { hueOf, SYMBOL_COLORS } from '../../../modules/theme/palette.ts'
+import type { SymbolKind, WorldNode } from '../../../modules/world/world-types.ts'
 import { Kbd } from '../ui/kbd.tsx'
 
 export interface LegendProps {
@@ -106,7 +106,7 @@ export function Legend({ scene }: LegendProps) {
   )
 }
 
-// The packages and modules that hold files directly, in tree order: render.ts
+// The packages and modules that hold files directly, in tree order: the map
 // colours each file by the hue of its parent.
 function listColourGroups(scene: Scene): WorldNode[] {
   const groups: WorldNode[] = []

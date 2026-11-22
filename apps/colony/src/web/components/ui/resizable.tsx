@@ -1,6 +1,6 @@
 import type { ComponentProps } from 'react'
 import { Group, Panel, Separator } from 'react-resizable-panels'
-import { cn } from '../../class-names.ts'
+import { cn } from './class-names.ts'
 
 export function ResizablePanelGroup({ className, ...props }: ComponentProps<typeof Group>) {
   return (

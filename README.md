@@ -90,7 +90,7 @@ TypeScript and JavaScript are supported today, through tree-sitter and `typescri
 
 ## Layout
 
-- `apps/colony`: the app. A Vite-built page (`src/web`: React, Tailwind and shadcn/ui panels around a canvas map), a Node server (`src/server`), the indexer (`src/indexer`), the language-agnostic core (`src/core`) and the language adapters (`src/adapters`). See [ARCHITECTURE.md](ARCHITECTURE.md).
+- `apps/colony`: the app. A Node server (`src/server`) and a Vite-built page (`src/web`: React, Tailwind and shadcn/ui panels around a canvas map), over domain modules (`src/modules`): the fact model, the language adapters, the indexer, the layout, the canvas map engine and more. See [ARCHITECTURE.md](ARCHITECTURE.md).
 - `packages/dock`: the terminal dock. A Herdr socket client, the pty bridge and its HTTP and WebSocket routes (`src/server`), and `mountDock` for the page (`src/web`).
 
 ## Develop

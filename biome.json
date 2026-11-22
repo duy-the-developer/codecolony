@@ -62,6 +62,7 @@
       }
     }
   },
+  "plugins": ["./lint/module-entries.grit"],
   "overrides": [
     {
       "includes": ["packages/dock/src/server/index.ts"],
@@ -74,7 +75,7 @@
       }
     },
     {
-      "includes": ["apps/colony/src/core/**"],
+      "includes": ["apps/colony/src/modules/world/**"],
       "linter": {
         "rules": {
           "style": {
@@ -84,44 +85,38 @@
                 "patterns": [
                   {
                     "group": [
-                      "**/shared/**",
-                      "**/config/**",
-                      "**/adapters/**",
+                      "**/logging/**",
+                      "**/theme/**",
+                      "**/lane-routing/**",
                       "**/layout/**",
-                      "**/indexer/**",
-                      "**/server/**",
-                      "**/web/**",
-                      "**/testing/**"
-                    ],
-                    "message": "Imports follow the folder dependency direction in CONVENTIONS.md."
-                  }
-                ]
-              }
-            }
-          }
-        }
-      }
-    },
-    {
-      "includes": ["apps/colony/src/shared/**"],
-      "linter": {
-        "rules": {
-          "style": {
-            "noRestrictedImports": {
-              "level": "error",
-              "options": {
-                "patterns": [
-                  {
-                    "group": [
+                      "**/wire/**",
                       "**/config/**",
-                      "**/adapters/**",
-                      "**/layout/**",
-                      "**/indexer/**",
+                      "**/language/**",
+                      "**/search/**",
+                      "**/indexing/**",
+                      "**/scene/**",
+                      "**/map/**",
+                      "**/preferences/**",
                       "**/server/**",
-                      "**/web/**",
-                      "**/testing/**"
+                      "**/web/**"
                     ],
-                    "message": "Imports follow the folder dependency direction in CONVENTIONS.md."
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
+                  },
+                  {
+                    "group": ["**/testing/**"],
+                    "message": "testing/ is for tests only."
+                  },
+                  {
+                    "group": ["node:*"],
+                    "message": "This code runs in the browser: no Node built-ins."
+                  },
+                  {
+                    "group": ["@codecolony/dock/server"],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
+                  },
+                  {
+                    "group": ["@codecolony/dock/web"],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
                   }
                 ]
               }
@@ -131,7 +126,7 @@
       }
     },
     {
-      "includes": ["apps/colony/src/config/**"],
+      "includes": ["apps/colony/src/modules/logging/**"],
       "linter": {
         "rules": {
           "style": {
@@ -141,61 +136,38 @@
                 "patterns": [
                   {
                     "group": [
-                      "**/adapters/**",
+                      "**/world/**",
+                      "**/theme/**",
+                      "**/lane-routing/**",
                       "**/layout/**",
-                      "**/indexer/**",
-                      "**/server/**",
-                      "**/web/**",
-                      "**/testing/**"
-                    ],
-                    "message": "Imports follow the folder dependency direction in CONVENTIONS.md."
-                  }
-                ]
-              }
-            }
-          }
-        }
-      }
-    },
-    {
-      "includes": ["apps/colony/src/adapters/**", "!**/*.test.ts"],
-      "linter": {
-        "rules": {
-          "style": {
-            "noRestrictedImports": {
-              "level": "error",
-              "options": {
-                "patterns": [
-                  {
-                    "group": [
+                      "**/wire/**",
                       "**/config/**",
-                      "**/layout/**",
-                      "**/indexer/**",
+                      "**/language/**",
+                      "**/search/**",
+                      "**/indexing/**",
+                      "**/scene/**",
+                      "**/map/**",
+                      "**/preferences/**",
                       "**/server/**",
-                      "**/web/**",
-                      "**/testing/**"
+                      "**/web/**"
                     ],
-                    "message": "Imports follow the folder dependency direction in CONVENTIONS.md."
-                  }
-                ]
-              }
-            }
-          }
-        }
-      }
-    },
-    {
-      "includes": ["apps/colony/src/adapters/**/*.test.ts"],
-      "linter": {
-        "rules": {
-          "style": {
-            "noRestrictedImports": {
-              "level": "error",
-              "options": {
-                "patterns": [
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
+                  },
                   {
-                    "group": ["**/server/**", "**/web/**"],
-                    "message": "Imports follow the folder dependency direction in CONVENTIONS.md."
+                    "group": ["**/testing/**"],
+                    "message": "testing/ is for tests only."
+                  },
+                  {
+                    "group": ["node:*"],
+                    "message": "This code runs in the browser: no Node built-ins."
+                  },
+                  {
+                    "group": ["@codecolony/dock/server"],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
+                  },
+                  {
+                    "group": ["@codecolony/dock/web"],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
                   }
                 ]
               }
@@ -205,7 +177,7 @@
       }
     },
     {
-      "includes": ["apps/colony/src/layout/**"],
+      "includes": ["apps/colony/src/modules/theme/**"],
       "linter": {
         "rules": {
           "style": {
@@ -215,14 +187,37 @@
                 "patterns": [
                   {
                     "group": [
+                      "**/logging/**",
+                      "**/lane-routing/**",
+                      "**/layout/**",
+                      "**/wire/**",
                       "**/config/**",
-                      "**/adapters/**",
-                      "**/indexer/**",
+                      "**/language/**",
+                      "**/search/**",
+                      "**/indexing/**",
+                      "**/scene/**",
+                      "**/map/**",
+                      "**/preferences/**",
                       "**/server/**",
-                      "**/web/**",
-                      "**/testing/**"
+                      "**/web/**"
                     ],
-                    "message": "Imports follow the folder dependency direction in CONVENTIONS.md."
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
+                  },
+                  {
+                    "group": ["**/testing/**"],
+                    "message": "testing/ is for tests only."
+                  },
+                  {
+                    "group": ["node:*"],
+                    "message": "This code runs in the browser: no Node built-ins."
+                  },
+                  {
+                    "group": ["@codecolony/dock/server"],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
+                  },
+                  {
+                    "group": ["@codecolony/dock/web"],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
                   }
                 ]
               }
@@ -232,7 +227,7 @@
       }
     },
     {
-      "includes": ["apps/colony/src/indexer/**", "!**/*.test.ts"],
+      "includes": ["apps/colony/src/modules/lane-routing/**"],
       "linter": {
         "rules": {
           "style": {
@@ -241,8 +236,38 @@
               "options": {
                 "patterns": [
                   {
-                    "group": ["**/server/**", "**/web/**", "**/testing/**"],
-                    "message": "Imports follow the folder dependency direction in CONVENTIONS.md."
+                    "group": [
+                      "**/logging/**",
+                      "**/theme/**",
+                      "**/layout/**",
+                      "**/wire/**",
+                      "**/config/**",
+                      "**/language/**",
+                      "**/search/**",
+                      "**/indexing/**",
+                      "**/scene/**",
+                      "**/map/**",
+                      "**/preferences/**",
+                      "**/server/**",
+                      "**/web/**"
+                    ],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
+                  },
+                  {
+                    "group": ["**/testing/**"],
+                    "message": "testing/ is for tests only."
+                  },
+                  {
+                    "group": ["node:*"],
+                    "message": "This code runs in the browser: no Node built-ins."
+                  },
+                  {
+                    "group": ["@codecolony/dock/server"],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
+                  },
+                  {
+                    "group": ["@codecolony/dock/web"],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
                   }
                 ]
               }
@@ -252,7 +277,7 @@
       }
     },
     {
-      "includes": ["apps/colony/src/indexer/**/*.test.ts"],
+      "includes": ["apps/colony/src/modules/layout/**"],
       "linter": {
         "rules": {
           "style": {
@@ -261,8 +286,527 @@
               "options": {
                 "patterns": [
                   {
-                    "group": ["**/server/**", "**/web/**"],
-                    "message": "Imports follow the folder dependency direction in CONVENTIONS.md."
+                    "group": [
+                      "**/logging/**",
+                      "**/theme/**",
+                      "**/wire/**",
+                      "**/config/**",
+                      "**/language/**",
+                      "**/search/**",
+                      "**/indexing/**",
+                      "**/scene/**",
+                      "**/map/**",
+                      "**/preferences/**",
+                      "**/server/**",
+                      "**/web/**"
+                    ],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
+                  },
+                  {
+                    "group": ["**/testing/**"],
+                    "message": "testing/ is for tests only."
+                  },
+                  {
+                    "group": ["node:*"],
+                    "message": "This code runs in the browser: no Node built-ins."
+                  },
+                  {
+                    "group": ["@codecolony/dock/server"],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
+                  },
+                  {
+                    "group": ["@codecolony/dock/web"],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["apps/colony/src/modules/wire/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "**/logging/**",
+                      "**/theme/**",
+                      "**/lane-routing/**",
+                      "**/config/**",
+                      "**/language/**",
+                      "**/search/**",
+                      "**/indexing/**",
+                      "**/scene/**",
+                      "**/map/**",
+                      "**/preferences/**",
+                      "**/server/**",
+                      "**/web/**"
+                    ],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
+                  },
+                  {
+                    "group": ["**/testing/**"],
+                    "message": "testing/ is for tests only."
+                  },
+                  {
+                    "group": ["node:*"],
+                    "message": "This code runs in the browser: no Node built-ins."
+                  },
+                  {
+                    "group": ["@codecolony/dock/server"],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
+                  },
+                  {
+                    "group": ["@codecolony/dock/web"],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["apps/colony/src/modules/config/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "**/world/**",
+                      "**/logging/**",
+                      "**/theme/**",
+                      "**/lane-routing/**",
+                      "**/layout/**",
+                      "**/language/**",
+                      "**/search/**",
+                      "**/indexing/**",
+                      "**/scene/**",
+                      "**/map/**",
+                      "**/preferences/**",
+                      "**/server/**",
+                      "**/web/**"
+                    ],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
+                  },
+                  {
+                    "group": ["**/testing/**"],
+                    "message": "testing/ is for tests only."
+                  },
+                  {
+                    "group": ["@codecolony/dock/web"],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "apps/colony/src/modules/language/**",
+        "!**/*.test.ts",
+        "!apps/colony/src/modules/language/registry.ts",
+        "!apps/colony/src/modules/language/contract-samples.ts",
+        "!apps/colony/src/modules/language/adapters/**"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "**/logging/**",
+                      "**/theme/**",
+                      "**/lane-routing/**",
+                      "**/layout/**",
+                      "**/wire/**",
+                      "**/config/**",
+                      "**/search/**",
+                      "**/indexing/**",
+                      "**/scene/**",
+                      "**/map/**",
+                      "**/preferences/**",
+                      "**/server/**",
+                      "**/web/**"
+                    ],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
+                  },
+                  {
+                    "group": ["**/adapters/**"],
+                    "message": "Only registry.ts and contract-samples.ts import adapters/."
+                  },
+                  {
+                    "group": ["**/testing/**"],
+                    "message": "testing/ is for tests only."
+                  },
+                  {
+                    "group": ["@codecolony/dock/web"],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "apps/colony/src/modules/language/registry.ts",
+        "apps/colony/src/modules/language/contract-samples.ts",
+        "apps/colony/src/modules/language/adapters/**",
+        "!**/*.test.ts"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "**/logging/**",
+                      "**/theme/**",
+                      "**/lane-routing/**",
+                      "**/layout/**",
+                      "**/wire/**",
+                      "**/config/**",
+                      "**/search/**",
+                      "**/indexing/**",
+                      "**/scene/**",
+                      "**/map/**",
+                      "**/preferences/**",
+                      "**/server/**",
+                      "**/web/**"
+                    ],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
+                  },
+                  {
+                    "group": ["**/testing/**"],
+                    "message": "testing/ is for tests only."
+                  },
+                  {
+                    "group": ["@codecolony/dock/web"],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["apps/colony/src/modules/language/**/*.test.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "**/logging/**",
+                      "**/theme/**",
+                      "**/lane-routing/**",
+                      "**/layout/**",
+                      "**/wire/**",
+                      "**/config/**",
+                      "**/search/**",
+                      "**/scene/**",
+                      "**/map/**",
+                      "**/preferences/**",
+                      "**/server/**",
+                      "**/web/**"
+                    ],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
+                  },
+                  {
+                    "group": ["@codecolony/dock/web"],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["apps/colony/src/modules/search/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "**/logging/**",
+                      "**/theme/**",
+                      "**/lane-routing/**",
+                      "**/layout/**",
+                      "**/config/**",
+                      "**/language/**",
+                      "**/indexing/**",
+                      "**/scene/**",
+                      "**/map/**",
+                      "**/preferences/**",
+                      "**/server/**",
+                      "**/web/**"
+                    ],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
+                  },
+                  {
+                    "group": ["**/testing/**"],
+                    "message": "testing/ is for tests only."
+                  },
+                  {
+                    "group": ["@codecolony/dock/web"],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "apps/colony/src/modules/indexing/**",
+        "!**/*.test.ts",
+        "!apps/colony/src/modules/indexing/testing/**"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "**/theme/**",
+                      "**/lane-routing/**",
+                      "**/search/**",
+                      "**/scene/**",
+                      "**/map/**",
+                      "**/preferences/**",
+                      "**/server/**",
+                      "**/web/**"
+                    ],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
+                  },
+                  {
+                    "group": ["**/testing/**"],
+                    "message": "testing/ is for tests only."
+                  },
+                  {
+                    "group": ["@codecolony/dock/web"],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "apps/colony/src/modules/indexing/**/*.test.ts",
+        "apps/colony/src/modules/indexing/testing/**"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "**/theme/**",
+                      "**/lane-routing/**",
+                      "**/search/**",
+                      "**/scene/**",
+                      "**/map/**",
+                      "**/preferences/**",
+                      "**/server/**",
+                      "**/web/**"
+                    ],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
+                  },
+                  {
+                    "group": ["@codecolony/dock/web"],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["apps/colony/src/modules/scene/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "**/theme/**",
+                      "**/lane-routing/**",
+                      "**/layout/**",
+                      "**/config/**",
+                      "**/language/**",
+                      "**/search/**",
+                      "**/indexing/**",
+                      "**/map/**",
+                      "**/preferences/**",
+                      "**/server/**",
+                      "**/web/**"
+                    ],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
+                  },
+                  {
+                    "group": ["**/testing/**"],
+                    "message": "testing/ is for tests only."
+                  },
+                  {
+                    "group": ["node:*"],
+                    "message": "This code runs in the browser: no Node built-ins."
+                  },
+                  {
+                    "group": ["@codecolony/dock/server"],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
+                  },
+                  {
+                    "group": ["@codecolony/dock/web"],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["apps/colony/src/modules/map/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "**/layout/**",
+                      "**/wire/**",
+                      "**/config/**",
+                      "**/language/**",
+                      "**/search/**",
+                      "**/indexing/**",
+                      "**/preferences/**",
+                      "**/server/**",
+                      "**/web/**"
+                    ],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
+                  },
+                  {
+                    "group": ["**/testing/**"],
+                    "message": "testing/ is for tests only."
+                  },
+                  {
+                    "group": ["node:*"],
+                    "message": "This code runs in the browser: no Node built-ins."
+                  },
+                  {
+                    "group": ["@codecolony/dock/server"],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
+                  },
+                  {
+                    "group": ["@codecolony/dock/web"],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["apps/colony/src/modules/preferences/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "**/world/**",
+                      "**/logging/**",
+                      "**/theme/**",
+                      "**/lane-routing/**",
+                      "**/layout/**",
+                      "**/wire/**",
+                      "**/config/**",
+                      "**/language/**",
+                      "**/search/**",
+                      "**/indexing/**",
+                      "**/scene/**",
+                      "**/map/**",
+                      "**/server/**",
+                      "**/web/**"
+                    ],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
+                  },
+                  {
+                    "group": ["**/testing/**"],
+                    "message": "testing/ is for tests only."
+                  },
+                  {
+                    "group": ["node:*"],
+                    "message": "This code runs in the browser: no Node built-ins."
+                  },
+                  {
+                    "group": ["@codecolony/dock/server"],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
+                  },
+                  {
+                    "group": ["@codecolony/dock/web"],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
                   }
                 ]
               }
@@ -281,8 +825,25 @@
               "options": {
                 "patterns": [
                   {
-                    "group": ["**/web/**", "**/testing/**"],
-                    "message": "Imports follow the folder dependency direction in CONVENTIONS.md."
+                    "group": [
+                      "**/theme/**",
+                      "**/lane-routing/**",
+                      "**/layout/**",
+                      "**/language/**",
+                      "**/scene/**",
+                      "**/map/**",
+                      "**/preferences/**",
+                      "**/web/**"
+                    ],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
+                  },
+                  {
+                    "group": ["**/testing/**"],
+                    "message": "testing/ is for tests only."
+                  },
+                  {
+                    "group": ["@codecolony/dock/web"],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
                   }
                 ]
               }
@@ -301,8 +862,21 @@
               "options": {
                 "patterns": [
                   {
-                    "group": ["**/web/**"],
-                    "message": "Imports follow the folder dependency direction in CONVENTIONS.md."
+                    "group": [
+                      "**/theme/**",
+                      "**/lane-routing/**",
+                      "**/layout/**",
+                      "**/language/**",
+                      "**/scene/**",
+                      "**/map/**",
+                      "**/preferences/**",
+                      "**/web/**"
+                    ],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
+                  },
+                  {
+                    "group": ["@codecolony/dock/web"],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
                   }
                 ]
               }
@@ -322,15 +896,27 @@
                 "patterns": [
                   {
                     "group": [
-                      "**/core/**",
-                      "**/config/**",
-                      "**/adapters/**",
+                      "**/lane-routing/**",
                       "**/layout/**",
-                      "**/indexer/**",
-                      "**/server/**",
-                      "**/testing/**"
+                      "**/config/**",
+                      "**/language/**",
+                      "**/search/**",
+                      "**/indexing/**",
+                      "**/server/**"
                     ],
-                    "message": "Imports follow the folder dependency direction in CONVENTIONS.md."
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
+                  },
+                  {
+                    "group": ["**/testing/**"],
+                    "message": "testing/ is for tests only."
+                  },
+                  {
+                    "group": ["node:*"],
+                    "message": "This code runs in the browser: no Node built-ins."
+                  },
+                  {
+                    "group": ["@codecolony/dock/server"],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
                   }
                 ]
               }
@@ -340,7 +926,7 @@
       }
     },
     {
-      "includes": ["packages/dock/src/shared/**"],
+      "includes": ["packages/dock/src/protocol/**"],
       "linter": {
         "rules": {
           "style": {
@@ -349,28 +935,12 @@
               "options": {
                 "patterns": [
                   {
-                    "group": ["**/server/**", "**/web/**", "**/testing/**"],
-                    "message": "Imports follow the folder dependency direction in CONVENTIONS.md."
-                  }
-                ]
-              }
-            }
-          }
-        }
-      }
-    },
-    {
-      "includes": ["packages/dock/src/server/**", "!**/*.test.ts"],
-      "linter": {
-        "rules": {
-          "style": {
-            "noRestrictedImports": {
-              "level": "error",
-              "options": {
-                "patterns": [
+                    "group": ["**/server/**", "**/web/**"],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
+                  },
                   {
-                    "group": ["**/web/**", "**/testing/**"],
-                    "message": "Imports follow the folder dependency direction in CONVENTIONS.md."
+                    "group": ["**/testing/**"],
+                    "message": "testing/ is for tests only."
                   }
                 ]
               }
@@ -380,7 +950,11 @@
       }
     },
     {
-      "includes": ["packages/dock/src/server/**/*.test.ts"],
+      "includes": [
+        "packages/dock/src/server/**",
+        "!**/*.test.ts",
+        "!packages/dock/src/server/testing/**"
+      ],
       "linter": {
         "rules": {
           "style": {
@@ -390,7 +964,31 @@
                 "patterns": [
                   {
                     "group": ["**/web/**"],
-                    "message": "Imports follow the folder dependency direction in CONVENTIONS.md."
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
+                  },
+                  {
+                    "group": ["**/testing/**"],
+                    "message": "testing/ is for tests only."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/dock/src/server/**/*.test.ts", "packages/dock/src/server/testing/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["**/web/**"],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
                   }
                 ]
               }
@@ -409,8 +1007,12 @@
               "options": {
                 "patterns": [
                   {
-                    "group": ["**/server/**", "**/testing/**"],
-                    "message": "Imports follow the folder dependency direction in CONVENTIONS.md."
+                    "group": ["**/server/**"],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
+                  },
+                  {
+                    "group": ["**/testing/**"],
+                    "message": "testing/ is for tests only."
                   }
                 ]
               }

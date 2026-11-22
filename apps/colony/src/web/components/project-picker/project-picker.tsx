@@ -1,6 +1,6 @@
 import { ChevronDownIcon } from 'lucide-react'
-import type { ProjectSummary } from '../../../shared/api-types.ts'
-import type { Scene } from '../../scene.ts'
+import type { Scene } from '../../../modules/scene/scene.ts'
+import type { ProjectSummary } from '../../../modules/wire/api-types.ts'
 import { Button } from '../ui/button.tsx'
 import {
   DropdownMenu,

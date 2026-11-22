@@ -12,10 +12,10 @@ import {
   STATUS_PATH,
   SUBPROTOCOL,
   WORKERS_PATH,
-} from '../shared/protocol.ts'
-import { answerWorkerList, type FakeHerdr, startFakeHerdr } from '../testing/fake-herdr.ts'
+} from '../protocol/protocol.ts'
 import { createDock, type Dock, securityHeaders } from './dock-server.ts'
 import type { DockOptions } from './options.ts'
+import { answerWorkerList, type FakeHerdr, startFakeHerdr } from './testing/fake-herdr.ts'
 
 const TOKEN = 'test-token'
 

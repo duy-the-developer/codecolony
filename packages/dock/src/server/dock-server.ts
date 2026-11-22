@@ -11,7 +11,7 @@ import {
   SUBPROTOCOL,
   WORKERS_PATH,
   type WorkersResponse,
-} from '../shared/protocol.ts'
+} from '../protocol/protocol.ts'
 import {
   createToken,
   isAllowedHost,

@@ -1,9 +1,9 @@
 import { FileIcon } from 'lucide-react'
 import { type KeyboardEvent, useEffect, useState } from 'react'
-import type { SearchEntry, SearchMatches } from '../../../shared/api-types.ts'
-import { logError } from '../../../shared/log.ts'
-import { SYMBOL_COLORS } from '../../render.ts'
-import { SYMBOL_GLYPHS } from '../../symbol-glyphs.ts'
+import { logError } from '../../../modules/logging/log.ts'
+import { SYMBOL_COLORS } from '../../../modules/theme/palette.ts'
+import { SYMBOL_GLYPHS } from '../../../modules/theme/symbol-glyphs.ts'
+import type { SearchEntry, SearchMatches } from '../../../modules/wire/api-types.ts'
 import {
   Command,
   CommandEmpty,

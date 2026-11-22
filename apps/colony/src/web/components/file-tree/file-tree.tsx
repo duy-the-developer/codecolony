@@ -1,10 +1,10 @@
 import { ChevronRightIcon } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { WorldNode } from '../../../shared/world-types.ts'
-import { cn } from '../../class-names.ts'
-import { hueOf } from '../../render.ts'
-import type { Scene } from '../../scene.ts'
-import { listTreeChildren, listTreeRoots } from '../../tree-entries.ts'
+import type { Scene } from '../../../modules/scene/scene.ts'
+import { listTreeChildren, listTreeRoots } from '../../../modules/scene/tree-entries.ts'
+import { hueOf } from '../../../modules/theme/palette.ts'
+import type { WorldNode } from '../../../modules/world/world-types.ts'
+import { cn } from '../ui/class-names.ts'
 
 export interface FileTreeProps {
   scene: Scene | undefined

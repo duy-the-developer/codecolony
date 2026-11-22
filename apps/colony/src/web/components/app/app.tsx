@@ -5,16 +5,20 @@ import type {
   PanelImperativeHandle,
   PanelSize,
 } from 'react-resizable-panels'
-import type { DeepResponse, WorldNode } from '../../../shared/world-types.ts'
+import { type MapHandle, ZOOM_STEP } from '../../../modules/map/map-controller.ts'
+import type { OverlayId } from '../../../modules/map/overlays.ts'
+import {
+  MAX_PANEL_PX,
+  MIN_PANEL_PX,
+  type ShellPreferences,
+} from '../../../modules/preferences/shell-preferences.ts'
+import type { DeepResponse, WorldNode } from '../../../modules/world/world-types.ts'
+import { fetchSearchMatches } from '../../client/world-client.ts'
 import { useDock } from '../../hooks/use-dock.ts'
 import { useProjects } from '../../hooks/use-projects.ts'
 import { useSceneRevision } from '../../hooks/use-scene-revision.ts'
 import { useShellPreferences } from '../../hooks/use-shell-preferences.ts'
 import { useWorld } from '../../hooks/use-world.ts'
-import { type MapHandle, ZOOM_STEP } from '../../map-controller.ts'
-import type { OverlayId } from '../../overlays.ts'
-import { MAX_PANEL_PX, MIN_PANEL_PX, type ShellPreferences } from '../../shell-preferences.ts'
-import { fetchSearchMatches } from '../../world-client.ts'
 import { AppHeader } from '../app-header/app-header.tsx'
 import { LeftPanel } from '../left-panel/left-panel.tsx'
 import { MapBreadcrumb } from '../map-breadcrumb/map-breadcrumb.tsx'

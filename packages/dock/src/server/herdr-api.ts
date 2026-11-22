@@ -1,5 +1,5 @@
 import { createConnection } from 'node:net'
-import { type DockWorker, WORKER_STATUSES, type WorkerStatus } from '../shared/protocol.ts'
+import { type DockWorker, WORKER_STATUSES, type WorkerStatus } from '../protocol/protocol.ts'
 import { resolveWorkerLabel } from './worker-label.ts'
 
 // A client for the Herdr API socket. Each request opens the unix socket, writes

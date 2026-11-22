@@ -1,6 +1,6 @@
 import { readToken } from '@codecolony/dock/web'
 import { useEffect, useState } from 'react'
-import type { FileResponse } from '../../shared/api-types.ts'
+import type { FileResponse } from '../../modules/wire/api-types.ts'
 
 export type FileTextState =
   | { status: 'loading' }

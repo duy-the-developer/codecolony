@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
-import type { World, WorldNode } from '../../../shared/world-types.ts'
-import { Scene } from '../../scene.ts'
+import { Scene } from '../../../modules/scene/scene.ts'
+import type { World, WorldNode } from '../../../modules/world/world-types.ts'
 import { Legend } from './legend.tsx'
 
 const RECT = { x: 0, y: 0, w: 1, h: 1 }

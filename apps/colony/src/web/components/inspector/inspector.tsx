@@ -1,12 +1,16 @@
 import { FileCodeIcon } from 'lucide-react'
 import { useState } from 'react'
-import type { Provenance, WorldNode } from '../../../shared/world-types.ts'
-import { cn } from '../../class-names.ts'
-import { describeEdgeRow, type EdgeSection, listEdgeSections } from '../../edge-sections.ts'
-import { PROVEN_PROVENANCES } from '../../link-cache.ts'
-import { EDGE_COLORS } from '../../render.ts'
-import type { Scene } from '../../scene.ts'
+import {
+  describeEdgeRow,
+  type EdgeSection,
+  listEdgeSections,
+} from '../../../modules/scene/edge-sections.ts'
+import type { Scene } from '../../../modules/scene/scene.ts'
+import { EDGE_COLORS } from '../../../modules/theme/palette.ts'
+import { PROVEN_PROVENANCES } from '../../../modules/world/facts.ts'
+import type { Provenance, WorldNode } from '../../../modules/world/world-types.ts'
 import { Button } from '../ui/button.tsx'
+import { cn } from '../ui/class-names.ts'
 
 export interface InspectorProps {
   scene: Scene | undefined

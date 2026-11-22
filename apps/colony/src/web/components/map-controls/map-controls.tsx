@@ -6,9 +6,9 @@ import {
   PanelRightOpenIcon,
   Rotate3dIcon,
 } from 'lucide-react'
-import { cn } from '../../class-names.ts'
-import { OVERLAYS, type OverlayId, PLANNED_OVERLAYS } from '../../overlays.ts'
+import { OVERLAYS, type OverlayId, PLANNED_OVERLAYS } from '../../../modules/map/overlays.ts'
 import { Button } from '../ui/button.tsx'
+import { cn } from '../ui/class-names.ts'
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,

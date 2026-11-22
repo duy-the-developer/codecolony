@@ -1,8 +1,8 @@
 import { type ReactNode, type RefObject, useEffect, useRef } from 'react'
-import type { Camera } from '../../camera.ts'
-import { createMapController, type MapHandle } from '../../map-controller.ts'
-import type { OverlayId } from '../../overlays.ts'
-import type { Scene } from '../../scene.ts'
+import type { Camera } from '../../../modules/map/camera.ts'
+import { createMapController, type MapHandle } from '../../../modules/map/map-controller.ts'
+import type { OverlayId } from '../../../modules/map/overlays.ts'
+import type { Scene } from '../../../modules/scene/scene.ts'
 
 export interface MapViewProps {
   scene: Scene | undefined

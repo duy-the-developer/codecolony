@@ -10,7 +10,7 @@
     "check-types": "tsc",
     "test": "vitest run",
     "test:watch": "vitest",
-    "index": "tsx src/indexer/cli.ts"
+    "index": "tsx src/server/cli.ts"
   },
   "dependencies": {
     "@codecolony/dock": "workspace:*",

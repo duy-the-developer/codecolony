@@ -1,7 +1,7 @@
 import { ChevronRightIcon } from 'lucide-react'
 import { Fragment } from 'react'
-import type { WorldNode } from '../../../shared/world-types.ts'
-import type { Scene } from '../../scene.ts'
+import type { Scene } from '../../../modules/scene/scene.ts'
+import type { WorldNode } from '../../../modules/world/world-types.ts'
 
 export interface MapBreadcrumbProps {
   scene: Scene | undefined

@@ -1,6 +1,6 @@
 import { type IPty, spawn } from 'node-pty'
 import type { RawData, WebSocket } from 'ws'
-import { parseControlMessage } from '../shared/protocol.ts'
+import { parseControlMessage } from '../protocol/protocol.ts'
 
 export interface PtyCommand {
   file: string

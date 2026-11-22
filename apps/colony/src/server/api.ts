@@ -1,9 +1,13 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import type { ColonyConfig } from '../config/load-config.ts'
-import type { FileResponse, ProjectsResponse, SearchMatches } from '../shared/api-types.ts'
-import { createWorldEncoder } from '../shared/world-encoder.ts'
-import type { DeepResponse, Edge, World } from '../shared/world-types.ts'
-import { buildSearchIndex, listSearchMatches, type SearchIndex } from './search-index.ts'
+import type { ColonyConfig } from '../modules/config/load-config.ts'
+import {
+  buildSearchIndex,
+  listSearchMatches,
+  type SearchIndex,
+} from '../modules/search/search-index.ts'
+import type { FileResponse, ProjectsResponse, SearchMatches } from '../modules/wire/api-types.ts'
+import { createWorldEncoder } from '../modules/wire/world-encoder.ts'
+import type { DeepResponse, Edge, World } from '../modules/world/world-types.ts'
 
 // The part of the Colony the API reads; tests pass a stub.
 export interface WorldSource {
