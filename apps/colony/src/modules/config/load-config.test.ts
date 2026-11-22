@@ -84,7 +84,7 @@ describe('parseConfig', () => {
     })
   })
 
-  it('resolves an optional firstmate home against the config folder', () => {
+  it('resolves the firstmate home against the config folder', () => {
     const config = parseConfig(
       { projects: [{ name: 'a', root: '/a' }], firstmateHome: '../firstmate' },
       '/base/config',

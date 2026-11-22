@@ -112,3 +112,47 @@ export interface ColonistsResponse {
   version: number
   colonists: Colonist[]
 }
+
+// GET /api/build-queue: the configured firstmate home's orders for the
+// projects on the map, read only. Without a firstmate home in the config the
+// queue is not connected.
+export const ORDER_SECTIONS = ['active', 'queued', 'done'] as const
+export type OrderSection = (typeof ORDER_SECTIONS)[number]
+
+// waiting: needs your decision. Active orders sort in this order.
+export const ORDER_STATES = ['waiting', 'blocked', 'pr-ready', 'working', 'queued', 'done'] as const
+export type OrderState = (typeof ORDER_STATES)[number]
+
+export interface BuildOrder {
+  // The firstmate task id.
+  id: string
+  title: string
+  section: OrderSection
+  state: OrderState
+  // The project on the map the order belongs to (the backlog's repo).
+  project: string
+  // ship, scout, captain, task, ...
+  kind?: string
+  // The worker's task id while a worker runs it: the colonist.
+  colonist?: string
+  pullRequestUrl?: string
+  // The worker's latest status line, or why a queued order waits.
+  note?: string
+  // Done orders: when they finished. Others: since when they are open.
+  date?: string
+  // A worker's copy exists, so its changes can be shown on the map.
+  hasWorktree: boolean
+}
+
+export type BuildQueueResponse =
+  | { isConnected: false }
+  | { isConnected: true; orders: BuildOrder[] }
+
+// GET /api/build-queue/changes?id=<task id>: the files the order's worker
+// changed against its main branch, committed or not, repository-relative.
+export interface OrderChangesResponse {
+  project: string
+  // The backlog's repository name: the repository inside the project.
+  repo: string
+  paths: string[]
+}

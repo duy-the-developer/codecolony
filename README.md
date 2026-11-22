@@ -59,13 +59,15 @@ Code Colony reads the projects to map from a local file that is never committed:
 - `kind`: `repo` (one repository, the default), `repos` (a folder of repositories) or `monorepo` (one repository with workspace packages).
 - Relative paths resolve against the config file's folder; `~` is your home folder.
 - `cacheDir` (optional): where index data is cached, outside your repositories. Defaults to `~/.cache/codecolony`.
-- `firstmateHome` (optional): a firstmate home folder. Colonists then carry their firstmate task, status line and pull request, read only from its `state/` records, and firstmate's clones under `projects/` count as copies of your repositories.
+- `firstmateHome` (optional): a [firstmate](https://github.com/kunchenguid/firstmate) home whose orders fill the Build queue. Code Colony only reads it: the backlog (`data/backlog.md`) and each worker's `state/<id>.meta` and `state/<id>.status`. Without it the Build queue says it is not connected. Colonists then also carry their firstmate task, status line and pull request, and firstmate's clones under `projects/` count as copies of your repositories.
 
 See `codecolony.config.example.json`.
 
 ## Using the map
 
 The page has a header (project picker, search, map controls), the map, and a side panel on each side. The left panel holds the Build queue, the Legend and a Files tree; the right panel holds the Terminal, the File tab (the selected file, read only, as committed at the indexed commit) and the Inspector. Drag a panel's edge to resize it; widths, collapsed panels and the open tabs are remembered in the browser.
+
+The Build queue lists the firstmate orders for the projects on the map in three sections, as in VS Code's Source Control view: Active (waiting on you, blocked, PR ready, working), Queued and Done. Each section folds, scrolls on its own and is remembered open or closed. A card shows the order's state, its worker (the colonist), the worker's latest status, a link to its pull request and, while the worker has a copy, Show on map, which flies to the files it changed. The queue refreshes every few seconds.
 
 | Input                    | Action                                                                                                                                                                    |
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

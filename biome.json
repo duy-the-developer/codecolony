@@ -97,6 +97,7 @@
                       "**/scene/**",
                       "**/map/**",
                       "**/preferences/**",
+                      "**/build-queue/**",
                       "**/agents/**",
                       "**/server/**",
                       "**/web/**"
@@ -149,6 +150,7 @@
                       "**/scene/**",
                       "**/map/**",
                       "**/preferences/**",
+                      "**/build-queue/**",
                       "**/agents/**",
                       "**/server/**",
                       "**/web/**"
@@ -200,6 +202,7 @@
                       "**/scene/**",
                       "**/map/**",
                       "**/preferences/**",
+                      "**/build-queue/**",
                       "**/agents/**",
                       "**/server/**",
                       "**/web/**"
@@ -251,6 +254,7 @@
                       "**/scene/**",
                       "**/map/**",
                       "**/preferences/**",
+                      "**/build-queue/**",
                       "**/agents/**",
                       "**/server/**",
                       "**/web/**"
@@ -301,6 +305,7 @@
                       "**/scene/**",
                       "**/map/**",
                       "**/preferences/**",
+                      "**/build-queue/**",
                       "**/agents/**",
                       "**/server/**",
                       "**/web/**"
@@ -351,6 +356,7 @@
                       "**/scene/**",
                       "**/map/**",
                       "**/preferences/**",
+                      "**/build-queue/**",
                       "**/agents/**",
                       "**/server/**",
                       "**/web/**"
@@ -402,6 +408,7 @@
                       "**/scene/**",
                       "**/map/**",
                       "**/preferences/**",
+                      "**/build-queue/**",
                       "**/agents/**",
                       "**/server/**",
                       "**/web/**"
@@ -451,6 +458,7 @@
                       "**/scene/**",
                       "**/map/**",
                       "**/preferences/**",
+                      "**/build-queue/**",
                       "**/agents/**",
                       "**/server/**",
                       "**/web/**"
@@ -503,6 +511,7 @@
                       "**/scene/**",
                       "**/map/**",
                       "**/preferences/**",
+                      "**/build-queue/**",
                       "**/agents/**",
                       "**/server/**",
                       "**/web/**"
@@ -545,6 +554,7 @@
                       "**/scene/**",
                       "**/map/**",
                       "**/preferences/**",
+                      "**/build-queue/**",
                       "**/agents/**",
                       "**/server/**",
                       "**/web/**"
@@ -583,6 +593,7 @@
                       "**/scene/**",
                       "**/map/**",
                       "**/preferences/**",
+                      "**/build-queue/**",
                       "**/agents/**",
                       "**/server/**",
                       "**/web/**"
@@ -592,6 +603,95 @@
                   {
                     "group": ["**/testing/**"],
                     "message": "testing/ is for tests only."
+                  },
+                  {
+                    "group": ["@codecolony/dock/web"],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "apps/colony/src/modules/build-queue/**",
+        "!**/*.test.ts",
+        "!apps/colony/src/modules/build-queue/testing/**"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "**/world/**",
+                      "**/theme/**",
+                      "**/lane-routing/**",
+                      "**/layout/**",
+                      "**/config/**",
+                      "**/language/**",
+                      "**/search/**",
+                      "**/indexing/**",
+                      "**/scene/**",
+                      "**/map/**",
+                      "**/preferences/**",
+                      "**/agents/**",
+                      "**/server/**",
+                      "**/web/**"
+                    ],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
+                  },
+                  {
+                    "group": ["**/testing/**"],
+                    "message": "testing/ is for tests only."
+                  },
+                  {
+                    "group": ["@codecolony/dock/web"],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "apps/colony/src/modules/build-queue/**/*.test.ts",
+        "apps/colony/src/modules/build-queue/testing/**"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "**/world/**",
+                      "**/theme/**",
+                      "**/lane-routing/**",
+                      "**/layout/**",
+                      "**/config/**",
+                      "**/language/**",
+                      "**/search/**",
+                      "**/indexing/**",
+                      "**/scene/**",
+                      "**/map/**",
+                      "**/preferences/**",
+                      "**/agents/**",
+                      "**/server/**",
+                      "**/web/**"
+                    ],
+                    "message": "Imports follow the module rules in CONVENTIONS.md."
                   },
                   {
                     "group": ["@codecolony/dock/web"],
@@ -625,6 +725,7 @@
                       "**/scene/**",
                       "**/map/**",
                       "**/preferences/**",
+                      "**/build-queue/**",
                       "**/agents/**",
                       "**/server/**",
                       "**/web/**"
@@ -666,6 +767,7 @@
                       "**/scene/**",
                       "**/map/**",
                       "**/preferences/**",
+                      "**/build-queue/**",
                       "**/agents/**",
                       "**/server/**",
                       "**/web/**"
@@ -704,6 +806,7 @@
                       "**/config/**",
                       "**/language/**",
                       "**/search/**",
+                      "**/build-queue/**",
                       "**/indexing/**",
                       "**/scene/**",
                       "**/map/**",
@@ -748,6 +851,7 @@
                       "**/config/**",
                       "**/language/**",
                       "**/search/**",
+                      "**/build-queue/**",
                       "**/scene/**",
                       "**/map/**",
                       "**/preferences/**",
@@ -787,6 +891,7 @@
                       "**/indexing/**",
                       "**/map/**",
                       "**/preferences/**",
+                      "**/build-queue/**",
                       "**/agents/**",
                       "**/server/**",
                       "**/web/**"
@@ -834,6 +939,7 @@
                       "**/search/**",
                       "**/indexing/**",
                       "**/preferences/**",
+                      "**/build-queue/**",
                       "**/agents/**",
                       "**/server/**",
                       "**/web/**"
@@ -886,6 +992,7 @@
                       "**/indexing/**",
                       "**/scene/**",
                       "**/map/**",
+                      "**/build-queue/**",
                       "**/agents/**",
                       "**/server/**",
                       "**/web/**"
@@ -998,6 +1105,7 @@
                     "group": [
                       "**/lane-routing/**",
                       "**/layout/**",
+                      "**/modules/build-queue/**",
                       "**/config/**",
                       "**/language/**",
                       "**/search/**",

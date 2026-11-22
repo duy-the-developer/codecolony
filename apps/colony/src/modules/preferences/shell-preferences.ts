@@ -1,5 +1,5 @@
 // What the page remembers per browser: each side panel's width, whether it is
-// collapsed, and its active tab. Storage can be missing or full (private
+// collapsed, and its active tab, and which build queue sections are open. Storage can be missing or full (private
 // windows, blocked site data), so reads fall back to defaults and writes are
 // best effort.
 
@@ -14,9 +14,14 @@ export interface PanelPreferences<Tab extends string> {
   tab: Tab
 }
 
+// The build queue's sections, as in VS Code's Source Control view.
+export const QUEUE_SECTIONS = ['active', 'queued', 'done'] as const
+export type QueueSection = (typeof QUEUE_SECTIONS)[number]
+
 export interface ShellPreferences {
   left: PanelPreferences<LeftTab>
   right: PanelPreferences<RightTab>
+  openQueueSections: Record<QueueSection, boolean>
 }
 
 export const MIN_PANEL_PX = 220
@@ -25,6 +30,7 @@ export const MAX_PANEL_PX = 720
 export const DEFAULT_SHELL_PREFERENCES: ShellPreferences = {
   left: { widthPx: 280, isCollapsed: false, tab: 'queue' },
   right: { widthPx: 420, isCollapsed: false, tab: 'terminal' },
+  openQueueSections: { active: true, queued: true, done: false },
 }
 
 const STORAGE_KEY = 'codecolony.shell.v1'
@@ -72,7 +78,18 @@ export function shellPreferencesFrom(raw: string | null): ShellPreferences {
   return {
     left: panelFrom(record.left, DEFAULT_SHELL_PREFERENCES.left, LEFT_TABS),
     right: panelFrom(record.right, DEFAULT_SHELL_PREFERENCES.right, RIGHT_TABS),
+    openQueueSections: queueSectionsFrom(record.openQueueSections),
   }
+}
+
+function queueSectionsFrom(value: unknown): Record<QueueSection, boolean> {
+  const fallback = DEFAULT_SHELL_PREFERENCES.openQueueSections
+  if (!isRecord(value)) return fallback
+  const pick = (section: QueueSection) => {
+    const isOpen = value[section]
+    return typeof isOpen === 'boolean' ? isOpen : fallback[section]
+  }
+  return { active: pick('active'), queued: pick('queued'), done: pick('done') }
 }
 
 function panelFrom<Tab extends string>(
