@@ -12,6 +12,8 @@ import type {
 import { type BacklogEntry, holdReason, parseBacklog } from './parse-backlog.ts'
 import { parseStatusLog, type WorkerStatus } from './parse-status-log.ts'
 
+export { parseStatusLog, type WorkerStatus }
+
 // The build queue, read from a firstmate home and never written: the backlog
 // (data/backlog.md) gives the orders, and each running worker's records
 // (state/<id>.meta, state/<id>.status) give its state, note and PR.
@@ -133,7 +135,7 @@ async function loadWorker(home: string, id: string): Promise<Worker | undefined>
 }
 
 // key=value lines.
-function parseMeta(text: string): Record<string, string> {
+export function parseMeta(text: string): Record<string, string> {
   const fields: Record<string, string> = {}
   for (const line of text.split('\n')) {
     const at = line.indexOf('=')

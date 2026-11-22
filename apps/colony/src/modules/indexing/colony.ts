@@ -85,6 +85,14 @@ export class Colony extends EventEmitter<{ update: [World] }> {
     return this.current
   }
 
+  // The indexed repositories: each one's node id on the map and its folder.
+  listRepos(): { id: string; root: string }[] {
+    return [...this.indexes].map(([key, index]) => ({
+      id: repoId(key.slice(0, key.indexOf('\0')), index.name),
+      root: index.root,
+    }))
+  }
+
   // Checks every repository's HEAD and re-indexes the ones that moved.
   refresh(): Promise<RefreshResult> {
     return this.schedule('all')

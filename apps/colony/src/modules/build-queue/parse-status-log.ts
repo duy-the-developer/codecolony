@@ -16,6 +16,8 @@ export interface WorkerStatus {
   note?: string
   // The newest pull request link in any line.
   pullRequestUrl?: string
+  // A failed line decides the state: blocked for good, not on a question.
+  failed?: true
 }
 
 interface StatusEvent {
@@ -53,6 +55,7 @@ export function parseStatusLog(text: string): WorkerStatus {
   const deciding = waiting ?? blocked ?? last
   const status: WorkerStatus = { state: stateOf(deciding) }
   if (deciding?.text) status.note = deciding.text
+  if (deciding?.verb === 'failed') status.failed = true
   if (pullRequestUrl) status.pullRequestUrl = pullRequestUrl
   return status
 }

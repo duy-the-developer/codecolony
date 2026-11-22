@@ -1,6 +1,8 @@
+import type { PlacedColonist } from '../scene/colonist-places.ts'
 import type { Scene } from '../scene/scene.ts'
 import type { WorldNode } from '../world/world-types.ts'
 import { Camera, type Viewport } from './camera.ts'
+import { ColonistLayer } from './colonist-layer.ts'
 import { buildFocus, type Focus, NO_FOCUS } from './focus.ts'
 import { LaneLayer } from './lanes/lane-layer.ts'
 import { createLaneRouter } from './lanes/lane-router.ts'
@@ -37,6 +39,11 @@ export interface MapControllerOptions {
   onDraw(camera: Camera): void
   // A file or symbol was double-clicked: show its file.
   onOpen(id: string): void
+  // A colonist was picked or let go, by its marker or a caller.
+  onSelectColonist(id: string | undefined): void
+  // The canvas over the map that colonist markers are drawn on, so they can
+  // move without redrawing the map.
+  markerCanvas?: HTMLCanvasElement
 }
 
 export interface MapHandle {
@@ -45,6 +52,11 @@ export interface MapHandle {
   select(id: string | undefined, fly?: boolean): void
   // The overlays drawn over the map; none by default.
   setOverlays(overlays: ReadonlySet<OverlayId>): void
+  // The colonists to draw, placed on the current scene.
+  setColonists(colonists: readonly PlacedColonist[]): void
+  // Picks a colonist (or lets it go) and, with fly, frames all it touches.
+  // Picking a colonist clears the node selection, and the other way round.
+  selectColonist(id: string | undefined, fly?: boolean): void
   zoomBy(factor: number): void
   fitAll(): void
   // Redraws after the scene changed in place (edges merged).
@@ -66,6 +78,10 @@ export function createMapController(
   const context = canvas.getContext('2d')
   if (!context) throw new Error('2D canvas is not available')
   const ctx = context
+  const markerCtx = options.markerCanvas?.getContext('2d') ?? undefined
+  const colonists = new ColonistLayer()
+  const stillness = window.matchMedia?.('(prefers-reduced-motion: reduce)')
+  let markerFrame: number | undefined
   const camera = new Camera()
   let scene: Scene | undefined
   let drawn: Drawn[] = []
@@ -98,10 +114,23 @@ export function createMapController(
         selected: selectedSet,
         focus,
         overlays,
+        colonists,
         ...(lanes ? { lanes } : {}),
       })
       prefetchSymbols(scene)
+      requestMarkerDraw()
       options.onDraw(camera)
+    })
+  }
+
+  // Markers redraw on their own canvas, every frame while one moves.
+  function requestMarkerDraw(): void {
+    if (!markerCtx || markerFrame !== undefined) return
+    markerFrame = requestAnimationFrame((now) => {
+      markerFrame = undefined
+      const isStill = stillness?.matches ?? false
+      colonists.drawMarkers(markerCtx, view, now, isStill)
+      if (colonists.isAnimated && !isStill) requestMarkerDraw()
     })
   }
 
@@ -121,6 +150,11 @@ export function createMapController(
     canvas.width = Math.round(view.width * ratio)
     canvas.height = Math.round(view.height * ratio)
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0)
+    if (markerCtx && options.markerCanvas) {
+      options.markerCanvas.width = canvas.width
+      options.markerCanvas.height = canvas.height
+      markerCtx.setTransform(ratio, 0, 0, ratio, 0, 0)
+    }
     if (pendingFit && view.width > 0 && view.height > 0) frameFirstScene(pendingFit)
     requestDraw()
   }
@@ -193,12 +227,30 @@ export function createMapController(
     const changed = !sameSelection(next, selected)
     selected = next
     selectedSet = new Set(next)
+    if (next.length > 0 && colonists.selected) selectColonist(undefined)
     const target = fly ? current?.byId.get(fly) : undefined
     if (target) camera.flyTo(target.rect, view, requestDraw)
     if (next.length === 0) showTooltip(undefined)
     updateFocus()
     if (changed) options.onSelect(selected)
     requestDraw()
+  }
+
+  function selectColonist(id: string | undefined, fly = false): void {
+    const next = id && colonists.has(id) ? id : undefined
+    const changed = next !== colonists.selected
+    colonists.selected = next
+    if (next && selected.length > 0) select(undefined)
+    const bounds = next ? colonists.boundsOf(next) : undefined
+    if (bounds && fly) camera.flyTo(bounds, view, requestDraw)
+    if (changed) options.onSelectColonist(next)
+    requestDraw()
+  }
+
+  function hoverColonist(id: string | undefined): void {
+    if (id === colonists.hovered) return
+    colonists.hovered = id
+    requestMarkerDraw()
   }
 
   function setScene(next: Scene): void {
@@ -248,8 +300,10 @@ export function createMapController(
   const onPointerMove = (event: PointerEvent) => {
     const last = pointers.get(event.pointerId)
     if (!last) {
-      const hit = hitTest(drawn, event.offsetX, event.offsetY)
-      canvas.style.cursor = hit ? 'pointer' : 'default'
+      const marker = colonists.hitMarker(event.offsetX, event.offsetY)
+      hoverColonist(marker)
+      const hit = marker ? undefined : hitTest(drawn, event.offsetX, event.offsetY)
+      canvas.style.cursor = marker || hit ? 'pointer' : 'default'
       const target = scene && hit ? hoverTarget(scene, hit) : undefined
       // A symbol names itself in the tooltip; other blocks only where they
       // would put themselves in focus.
@@ -278,15 +332,29 @@ export function createMapController(
   const onPointerUp = (event: PointerEvent) => {
     if (!pointers.delete(event.pointerId)) return
     if (pointers.size === 0 && dragDistance < CLICK_SLOP) {
+      const marker = colonists.hitMarker(event.offsetX, event.offsetY)
+      if (marker) {
+        selectColonist(marker, true)
+        return
+      }
       const id = hitTest(drawn, event.offsetX, event.offsetY)?.node.id
       clickNode(id, isToggleClick(event, isMac) ? 'toggle' : 'replace')
+      if (colonists.selected) selectColonist(undefined)
     }
   }
   const onPointerCancel = (event: PointerEvent) => {
     pointers.delete(event.pointerId)
   }
-  const onPointerLeave = () => hover(undefined)
+  const onPointerLeave = () => {
+    hover(undefined)
+    hoverColonist(undefined)
+  }
   const onDoubleClick = (event: MouseEvent) => {
+    const marker = colonists.hitMarker(event.offsetX, event.offsetY)
+    if (marker) {
+      selectColonist(marker, true)
+      return
+    }
     const hit = hitTest(drawn, event.offsetX, event.offsetY)
     if (!hit || isToggleClick(event, isMac)) return
     select(hit.node.id, true)
@@ -324,6 +392,7 @@ export function createMapController(
         break
       case 'Escape':
         select(undefined)
+        selectColonist(undefined)
         break
       default:
         return
@@ -351,6 +420,13 @@ export function createMapController(
       overlays = next
       requestDraw()
     },
+    setColonists(next) {
+      const before = colonists.selected
+      colonists.setColonists(next)
+      if (before !== colonists.selected) options.onSelectColonist(colonists.selected)
+      requestDraw()
+    },
+    selectColonist,
     zoomBy(factor) {
       camera.zoomAt(...centre(), factor)
       requestDraw()
@@ -361,6 +437,7 @@ export function createMapController(
     redraw: requestDraw,
     dispose() {
       if (frame !== undefined) cancelAnimationFrame(frame)
+      if (markerFrame !== undefined) cancelAnimationFrame(markerFrame)
       unsubscribe?.()
       resizer.disconnect()
       window.removeEventListener('keydown', onKeyDown)

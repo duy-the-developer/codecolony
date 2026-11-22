@@ -8,6 +8,7 @@ import {
 } from '../modules/search/search-index.ts'
 import type {
   BuildQueueResponse,
+  ColonistsResponse,
   FileResponse,
   OrderChangesResponse,
   ProjectsResponse,
@@ -25,18 +26,30 @@ export interface WorldSource {
   off(event: 'update', listener: (world: World) => void): unknown
 }
 
+// The colonists the API serves; tests pass a stub.
+export interface ColonistSource {
+  readonly snapshot: ColonistsResponse
+  onChange(listener: (snapshot: ColonistsResponse) => void): () => void
+}
+
 // Refuses a request to a token-guarded route with a status, or lets it
 // through with null; the dock's own guard in the app.
 export type DenyRequest = (req: IncomingMessage) => number | null
+
+export interface ApiDeps {
+  world: WorldSource
+  colonists: ColonistSource
+  deny: DenyRequest
+}
 
 const HEARTBEAT_MS = 25_000
 const MAX_SEARCH_LIMIT = 50
 const MAX_SYMBOL_FILES = 500
 
 // Answers /api/* and returns true, or returns false to let the page handle it.
-// Source text is token-guarded; the map's shape is guarded by the loopback
-// Host check alone.
-export function createApi(config: ColonyConfig, source: WorldSource, deny: DenyRequest) {
+// Source text and colonists (folders, agent status lines) are token-guarded;
+// the map's shape is guarded by the loopback Host check alone.
+export function createApi(config: ColonyConfig, { world: source, colonists, deny }: ApiDeps) {
   const encoder = createWorldEncoder()
   let search: { world: World; index: SearchIndex } | undefined
   return (req: IncomingMessage, res: ServerResponse): boolean => {
@@ -87,8 +100,12 @@ export function createApi(config: ColonyConfig, source: WorldSource, deny: DenyR
         Number.isInteger(limit) ? Math.min(Math.max(limit, 1), MAX_SEARCH_LIMIT) : 8,
       )
       json(res, 200, body)
+    } else if (pathname === '/api/colonists') {
+      const denied = deny(req)
+      if (denied) json(res, denied, { error: deniedMessage(denied) })
+      else json(res, 200, colonists.snapshot satisfies ColonistsResponse)
     } else if (pathname === '/api/events') {
-      events(req, res, source)
+      events(req, res, source, colonists)
     } else if (pathname === '/api/deep') {
       const file = url.searchParams.get('file')
       if (!file) json(res, 400, { error: 'file is required' })
@@ -119,7 +136,7 @@ function file(
 ): void {
   const denied = deny(req)
   if (denied) {
-    json(res, denied, { error: denied === 401 ? 'missing or wrong token' : 'forbidden' })
+    json(res, denied, { error: deniedMessage(denied) })
   } else if (!id) {
     json(res, 400, { error: 'id is required' })
   } else {
@@ -163,8 +180,15 @@ function orderChanges(res: ServerResponse, config: ColonyConfig, id: string | nu
   }
 }
 
-// Server-sent events: one `world` event per new world version.
-function events(req: IncomingMessage, res: ServerResponse, source: WorldSource): void {
+// Server-sent events: one `world` event per new world version and one
+// `colonists` event per new colonists snapshot. Neither carries the data
+// itself, so the stream needs no token.
+function events(
+  req: IncomingMessage,
+  res: ServerResponse,
+  source: WorldSource,
+  colonists: ColonistSource,
+): void {
   res.writeHead(200, {
     'content-type': 'text/event-stream',
     'cache-control': 'no-store',
@@ -173,13 +197,23 @@ function events(req: IncomingMessage, res: ServerResponse, source: WorldSource):
   const send = (world: World) => {
     res.write(`event: world\ndata: ${JSON.stringify({ version: world.version })}\n\n`)
   }
+  const sendColonists = ({ version }: ColonistsResponse) => {
+    res.write(`event: colonists\ndata: ${JSON.stringify({ version })}\n\n`)
+  }
   send(source.world)
+  sendColonists(colonists.snapshot)
   const heartbeat = setInterval(() => res.write(': ping\n\n'), HEARTBEAT_MS)
   source.on('update', send)
+  const unsubscribe = colonists.onChange(sendColonists)
   req.on('close', () => {
     clearInterval(heartbeat)
     source.off('update', send)
+    unsubscribe()
   })
+}
+
+function deniedMessage(status: number): string {
+  return status === 401 ? 'missing or wrong token' : 'forbidden'
 }
 
 function json(res: ServerResponse, status: number, body: unknown): void {

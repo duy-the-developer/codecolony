@@ -59,7 +59,7 @@ Code Colony reads the projects to map from a local file that is never committed:
 - `kind`: `repo` (one repository, the default), `repos` (a folder of repositories) or `monorepo` (one repository with workspace packages).
 - Relative paths resolve against the config file's folder; `~` is your home folder.
 - `cacheDir` (optional): where index data is cached, outside your repositories. Defaults to `~/.cache/codecolony`.
-- `firstmateHome` (optional): a [firstmate](https://github.com/kunchenguid/firstmate) home whose orders fill the Build queue. Code Colony only reads it: the backlog (`data/backlog.md`) and each worker's `state/<id>.meta` and `state/<id>.status`. Without it the Build queue says it is not connected.
+- `firstmateHome` (optional): a [firstmate](https://github.com/kunchenguid/firstmate) home whose orders fill the Build queue. Code Colony only reads it: the backlog (`data/backlog.md`) and each worker's `state/<id>.meta` and `state/<id>.status`. Without it the Build queue says it is not connected. Colonists then also carry their firstmate task, status line and pull request, and firstmate's clones under `projects/` count as copies of your repositories.
 
 See `codecolony.config.example.json`.
 
@@ -85,6 +85,14 @@ The Build queue lists the firstmate orders for the projects on the map in three 
 By default the map shows only module blocks and file squares. Overlays draw connections over it, switched on from Overlays in the header; Dependency, the first, draws imports as arrows from the importing module to the imported one. The arrows run through the gutters between blocks, never across them, in lanes on the grid one unit apart, so they never overlap and only cross at right angles. Gutters widen, up to 8 units, to fit their lanes; in a gutter that is still full, arrows to the same module share a lane. Zoomed out, arrows join at the folders, packages and repositories you can see.
 
 With no overlay on, hovering a module or file shows its dependencies; with one on, all of them show and hovering highlights the module's own. Once something is selected, hovering leaves its highlight alone and only shows the name and kind of the block under the pointer, so you can pan along its connections; `⌘`-click (`Ctrl`-click off a Mac) selects several at once. The Inspector lists connections as Imports / Imported by, Calls / Called by, and HTTP requests / HTTP routes served, by route, with how each was proven. "Trace calls with the language server" proves the calls of a file's functions, including method calls the parser cannot resolve.
+
+### Colonists
+
+A colonist is a coding session at work in a copy of a mapped repository: a clone or worktree with the same origin (firstmate's worktrees, your own clone) whose files differ from its main branch. Its diff is taken from where the copy forked, committed and uncommitted changes plus new files, so a copy parked on an old commit is not a colonist. Sub-agents work in their parent's copy and never add one.
+
+Each colonist has one robot on the map, coloured by status: blue working (it bobs) or paused, amber waiting on you, red blocked or failed, green with a pull request ready, and grey with changes but no live session. Its files get dashed outlines: blue modified, red removed, and a green placeholder square in the target folder for each added file (one dashed box for a new folder). Zoomed out, a closed folder holding changes gets one outline. The roster at the top right lists the colonists; clicking a robot or a roster entry frames everything that colonist touches and shows its card in the Inspector: task, session, copy, branch, pull request and every file in its diff.
+
+Live sessions are found by the `claude`, `codex`, `opencode`, `gemini` and `cursor-agent` processes working in a copy, and, with Herdr on, by Herdr's agents, which also tell when a session waits on you and let Open terminal focus its pane. The colonists refresh every few seconds; nothing is ever written to the copies.
 
 The map updates live: commit to a mapped repository and it redraws within a few seconds. A repository created in place inside a mapped folder of repositories can take up to a minute to appear.
 

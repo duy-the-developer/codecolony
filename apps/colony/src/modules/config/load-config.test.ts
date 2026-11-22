@@ -90,6 +90,9 @@ describe('parseConfig', () => {
       '/base/config',
     )
     expect(config.firstmateHome).toBe('/base/firstmate')
+    expect(parseConfig({ projects: [{ name: 'a', root: '/a' }] }, '/base')).not.toHaveProperty(
+      'firstmateHome',
+    )
   })
 
   it.each([

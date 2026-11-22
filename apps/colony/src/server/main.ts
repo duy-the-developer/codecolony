@@ -3,10 +3,14 @@ import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
 import {
   createDock,
+  createHerdrApi,
   DOCK_CLI_OPTIONS,
   resolveDockOptions,
   securityHeaders,
 } from '@codecolony/dock/server'
+import { createColonistTracker } from '../modules/agents/colonist-tracker.ts'
+import { createHerdrSessions } from '../modules/agents/herdr-sessions.ts'
+import { createProcessSessions } from '../modules/agents/process-sessions.ts'
 import { loadConfig } from '../modules/config/load-config.ts'
 import { Colony } from '../modules/indexing/colony.ts'
 import { log } from '../modules/logging/log.ts'
@@ -27,7 +31,19 @@ await colony.refresh()
 await colony.watch()
 const dockOptions = resolveDockOptions(args)
 const dock = createDock(dockOptions)
-const api = createApi(config, colony, dock.deny)
+// Herdr is asked about sessions only when the dock may use it at all.
+const sessions = [createProcessSessions()]
+if (dockOptions.enabled) sessions.push(createHerdrSessions(createHerdrApi(dockOptions.socketPath)))
+const colonists = createColonistTracker({
+  listRepos: () => colony.listRepos(),
+  sessions,
+  ...(config.firstmateHome ? { firstmateHome: config.firstmateHome } : {}),
+})
+await colonists.refresh({ discover: true })
+colonists.watch()
+// The map's repositories moved: their copies may have too.
+colony.on('update', () => void colonists.refresh({ discover: true }))
+const api = createApi(config, { world: colony, colonists, deny: dock.deny })
 const headers = securityHeaders({ dev })
 
 let web: Handler
@@ -72,6 +88,7 @@ server.listen(config.port, HOST, () => {
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.once(signal, () => {
     dock.close()
+    colonists.close()
     server.close()
     colony.close().finally(() => process.exit(0))
   })

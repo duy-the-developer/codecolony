@@ -6,6 +6,7 @@ import {
   type MapHover,
 } from '../../../modules/map/map-controller.ts'
 import type { OverlayId } from '../../../modules/map/overlays.ts'
+import type { PlacedColonist } from '../../../modules/scene/colonist-places.ts'
 import type { Scene } from '../../../modules/scene/scene.ts'
 
 export interface MapViewProps {
@@ -13,8 +14,10 @@ export interface MapViewProps {
   // Filled with the map's handle while the view is mounted.
   handleRef: RefObject<MapHandle | null>
   overlays: ReadonlySet<OverlayId>
+  colonists: readonly PlacedColonist[]
   // The selected ids, in the order they were added.
   onSelect(ids: readonly string[]): void
+  onSelectColonist(id: string | undefined): void
   // A file or symbol was double-clicked.
   onOpen(id: string): void
   // Overlays drawn over the canvas: breadcrumb, zoom buttons.
@@ -24,16 +27,30 @@ export interface MapViewProps {
 // The canvas map. The renderer stays imperative; this component only owns its
 // lifetime, the zoom readout and the hover tooltip, which it writes directly
 // every frame or pointer move.
-export function MapView({ scene, handleRef, overlays, onSelect, onOpen, children }: MapViewProps) {
+export function MapView({
+  scene,
+  handleRef,
+  overlays,
+  colonists,
+  onSelect,
+  onSelectColonist,
+  onOpen,
+  children,
+}: MapViewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const markerCanvasRef = useRef<HTMLCanvasElement>(null)
   const hudRef = useRef<HTMLDivElement>(null)
   const tooltipRef = useRef<HTMLDivElement>(null)
   const sceneRef = useRef(scene)
   sceneRef.current = scene
   const overlaysRef = useRef(overlays)
   overlaysRef.current = overlays
+  const colonistsRef = useRef(colonists)
+  colonistsRef.current = colonists
   const onSelectRef = useRef(onSelect)
   onSelectRef.current = onSelect
+  const onSelectColonistRef = useRef(onSelectColonist)
+  onSelectColonistRef.current = onSelectColonist
   const onOpenRef = useRef(onOpen)
   onOpenRef.current = onOpen
 
@@ -42,10 +59,12 @@ export function MapView({ scene, handleRef, overlays, onSelect, onOpen, children
     if (!canvas) return
     const handle = createMapController(canvas, {
       onSelect: (ids) => onSelectRef.current(ids),
+      onSelectColonist: (id) => onSelectColonistRef.current(id),
       onHover: (hover) => {
         if (tooltipRef.current) placeTooltip(tooltipRef.current, hover)
       },
       onOpen: (id) => onOpenRef.current(id),
+      ...(markerCanvasRef.current ? { markerCanvas: markerCanvasRef.current } : {}),
       onDraw: (camera) => {
         if (hudRef.current && sceneRef.current)
           hudRef.current.textContent = hudText(sceneRef.current, camera)
@@ -54,6 +73,7 @@ export function MapView({ scene, handleRef, overlays, onSelect, onOpen, children
     handleRef.current = handle
     handle.setOverlays(overlaysRef.current)
     if (sceneRef.current) handle.setScene(sceneRef.current)
+    handle.setColonists(colonistsRef.current)
     return () => {
       handle.dispose()
       handleRef.current = null
@@ -68,6 +88,10 @@ export function MapView({ scene, handleRef, overlays, onSelect, onOpen, children
     handleRef.current?.setOverlays(overlays)
   }, [overlays, handleRef])
 
+  useEffect(() => {
+    handleRef.current?.setColonists(colonists)
+  }, [colonists, handleRef])
+
   return (
     <div className="relative h-full min-w-0 overflow-hidden bg-[#0d1b2a]">
       <canvas
@@ -75,6 +99,11 @@ export function MapView({ scene, handleRef, overlays, onSelect, onOpen, children
         tabIndex={0}
         aria-label="Code map"
         className="absolute inset-0 size-full touch-none outline-none"
+      />
+      <canvas
+        ref={markerCanvasRef}
+        aria-hidden
+        className="pointer-events-none absolute inset-0 size-full"
       />
       {!scene && (
         <p className="absolute inset-0 flex items-center justify-center text-muted-foreground">
