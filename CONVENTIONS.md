@@ -108,23 +108,23 @@ Rules:
 5. No `common/`, `utils/` or `helpers/` module. Shared code goes in a module named for what it does; a helper with one consumer lives in that consumer's module.
 6. Test helpers live in `testing/` inside the module whose tests use them, and only tests import them.
 
-| Module          | Runtime | Entry files                                                | May import                                                                                 |
-| --------------- | ------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `world/`        | both    | all                                                        | nothing                                                                                    |
-| `logging/`      | both    | `log.ts`                                                   | nothing                                                                                    |
-| `theme/`        | both    | all                                                        | `world`                                                                                    |
-| `lane-routing/` | both    | all                                                        | `world`                                                                                    |
-| `layout/`       | both    | `world-layout.ts`, `symbol-band.ts`                        | `world`, `lane-routing`                                                                    |
-| `wire/`         | both    | `api-types.ts`, `world-encoder.ts`, `world-decoder.ts`     | `world`, `layout`                                                                          |
-| `config/`       | Node    | `load-config.ts`                                           | `wire`                                                                                     |
-| `language/`     | Node    | `language-adapter.ts`, `registry.ts`, `parse.ts`, `lsp.ts` | `world`                                                                                    |
-| `search/`       | Node    | `search-index.ts`                                          | `world`, `wire`                                                                            |
-| `indexing/`     | Node    | `colony.ts` (`testing/` for tests)                         | `world`, `wire`, `logging`, `config`, `language`, `layout`                                 |
-| `scene/`        | browser | all                                                        | `world`, `wire`, `logging`                                                                 |
-| `map/`          | browser | `map-controller.ts`, `overlays.ts`, `camera.ts`            | `world`, `logging`, `lane-routing`, `scene`, `theme`                                       |
-| `preferences/`  | browser | `shell-preferences.ts`                                     | nothing                                                                                    |
-| `server/` shell | Node    | -                                                          | `world`, `wire`, `logging`, `config`, `search`, `indexing`; `@codecolony/dock/server`      |
-| `web/` shell    | browser | -                                                          | `world`, `wire`, `logging`, `scene`, `map`, `theme`, `preferences`; `@codecolony/dock/web` |
+| Module          | Runtime | Entry files                                                     | May import                                                                                 |
+| --------------- | ------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `world/`        | both    | all                                                             | nothing                                                                                    |
+| `logging/`      | both    | `log.ts`                                                        | nothing                                                                                    |
+| `theme/`        | both    | all                                                             | `world`                                                                                    |
+| `lane-routing/` | both    | all                                                             | `world`                                                                                    |
+| `layout/`       | both    | `world-layout.ts`, `symbol-band.ts`                             | `world`, `lane-routing`                                                                    |
+| `wire/`         | both    | `api-types.ts`, `world-encoder.ts`, `world-decoder.ts`          | `world`, `layout`                                                                          |
+| `config/`       | Node    | `load-config.ts`                                                | `wire`                                                                                     |
+| `language/`     | Node    | `language-adapter.ts`, `registry.ts`, `parse.ts`, `lsp.ts`      | `world`                                                                                    |
+| `search/`       | Node    | `search-index.ts`                                               | `world`, `wire`                                                                            |
+| `indexing/`     | Node    | `colony.ts` (`testing/` for tests)                              | `world`, `wire`, `logging`, `config`, `language`, `layout`                                 |
+| `scene/`        | browser | all                                                             | `world`, `wire`, `logging`                                                                 |
+| `map/`          | browser | `map-controller.ts`, `overlays.ts`, `camera.ts`, `selection.ts` | `world`, `logging`, `lane-routing`, `scene`, `theme`                                       |
+| `preferences/`  | browser | `shell-preferences.ts`                                          | nothing                                                                                    |
+| `server/` shell | Node    | -                                                               | `world`, `wire`, `logging`, `config`, `search`, `indexing`; `@codecolony/dock/server`      |
+| `web/` shell    | browser | -                                                               | `world`, `wire`, `logging`, `scene`, `map`, `theme`, `preferences`; `@codecolony/dock/web` |
 
 Inside `language/`, only `registry.ts` and `contract-samples.ts` import `adapters/`. The adapter contract test may also import `indexing/colony.ts` and `indexing/testing/`, because it indexes each sample end to end.
 

@@ -21,6 +21,11 @@ export const EDGE_COLORS: Record<Edge['kind'], string> = {
   data: '#ef6f6c',
 }
 
+// Outlines around the selected nodes, and around the hovered one while
+// nothing is selected.
+export const SELECTION_COLOR = '#ffd166'
+export const HOVER_COLOR = 'rgba(228, 237, 246, 0.85)'
+
 const hues = new Map<string, number>()
 // A stable hue per module, so a module's files share a colour and
 // neighbouring modules tell apart at every zoom.

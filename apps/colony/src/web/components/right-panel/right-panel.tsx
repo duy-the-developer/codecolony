@@ -16,7 +16,10 @@ const FileTab = lazy(() =>
 export interface RightPanelProps {
   tab: RightTab
   scene: Scene | undefined
+  // The node the File tab follows: the last one selected.
   selected: WorldNode | undefined
+  // Everything selected, for the Inspector.
+  selection: readonly WorldNode[]
   workerCount: number
   // Receives the element the terminal dock mounts into.
   dockRef(element: HTMLDivElement | null): void
@@ -31,6 +34,7 @@ export function RightPanel({
   tab,
   scene,
   selected,
+  selection,
   workerCount,
   dockRef,
   onTabChange,
@@ -76,7 +80,7 @@ export function RightPanel({
       <TabsContent value="inspector" className="overflow-y-auto">
         <Inspector
           scene={scene}
-          selected={selected}
+          selection={selection}
           onPick={onPick}
           onOpen={onOpen}
           onTraceCalls={onTraceCalls}

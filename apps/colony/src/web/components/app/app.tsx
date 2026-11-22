@@ -37,7 +37,8 @@ export function App() {
   useSceneRevision(scene)
   const projects = useProjects()
   const [preferences, updatePreferences] = useShellPreferences()
-  const [selectedId, setSelectedId] = useState<string>()
+  // In the order they were added; the last is the one the panels follow.
+  const [selectedIds, setSelectedIds] = useState<readonly string[]>([])
   const [, setEdgeVersion] = useState(0)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   // Overlays start off: the map shows only blocks until one is switched on.
@@ -67,7 +68,11 @@ export function App() {
   // The last width of each panel while open: what expanding returns to.
   const widthsPx = useRef({ left: preferences.left.widthPx, right: preferences.right.widthPx })
 
-  const selected = selectedId ? scene?.byId.get(selectedId) : undefined
+  const selection = useMemo(
+    () => selectedIds.flatMap((id) => scene?.byId.get(id) ?? []),
+    [selectedIds, scene],
+  )
+  const selected = selection.at(-1)
 
   const updatePanel = useCallback(
     <S extends PanelSide>(side: S, change: Partial<ShellPreferences[S]>) =>
@@ -216,7 +221,7 @@ export function App() {
             scene={scene}
             handleRef={mapRef}
             overlays={overlays}
-            onSelect={setSelectedId}
+            onSelect={setSelectedIds}
             onOpen={showFile}
           >
             <div className="pointer-events-none absolute inset-x-3 top-3 flex items-start gap-2">
@@ -247,6 +252,7 @@ export function App() {
               tab={preferences.right.tab}
               scene={scene}
               selected={selected}
+              selection={selection}
               workerCount={workers.length}
               dockRef={setDockElement}
               onTabChange={(tab) => updatePanel('right', { tab })}

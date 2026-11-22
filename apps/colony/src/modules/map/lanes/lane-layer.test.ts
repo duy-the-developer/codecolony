@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { Scene } from '../../scene/scene.ts'
 import type { Edge, NodeKind, Rect, World, WorldNode } from '../../world/world-types.ts'
+import { buildFocus, NO_FOCUS } from '../focus.ts'
 import { type LaneFrame, LaneLayer } from './lane-layer.ts'
 import { createLaneRouter } from './lane-router.ts'
 import type { LaneRoutes } from './lane-world.ts'
@@ -68,21 +69,19 @@ async function settle(draw: () => LaneFrame): Promise<LaneFrame> {
 }
 
 const SCALE = 40
-const NOTHING = new Set<string>()
 
 describe('LaneLayer', () => {
   it('draws no lanes with the overlay off and nothing in focus', async () => {
     const scene = makeScene()
     const layer = new LaneLayer(scene, createLaneRouter(), () => {})
-    const frame = await settle(() => layer.frame(SCALE, [], undefined, NOTHING, false))
+    const frame = await settle(() => layer.frame(SCALE, [], NO_FOCUS, false))
     expect(listLanes(frame)).toEqual([])
   })
 
   it('draws only the focus links when the overlay is off', async () => {
     const scene = makeScene()
     const layer = new LaneLayer(scene, createLaneRouter(), () => {})
-    const focus = new Set(['r/a', 'r/a/f.ts'])
-    const frame = await settle(() => layer.frame(SCALE, [], 'r/a', focus, false))
+    const frame = await settle(() => layer.frame(SCALE, [], buildFocus(scene, ['r/a']), false))
     expect(listLanes(frame)).toHaveLength(2)
     expect(listLanes(frame).every((lane) => lane.emphasis === 'hot')).toBe(true)
   })
@@ -90,10 +89,9 @@ describe('LaneLayer', () => {
   it('draws every link with the overlay on, and highlights the focus links', async () => {
     const scene = makeScene()
     const layer = new LaneLayer(scene, createLaneRouter(), () => {})
-    const all = await settle(() => layer.frame(SCALE, [], undefined, NOTHING, true))
+    const all = await settle(() => layer.frame(SCALE, [], NO_FOCUS, true))
     expect(listLanes(all).map((lane) => lane.emphasis)).toEqual(['normal', 'normal', 'normal'])
-    const focus = new Set(['r/c', 'r/c/f.ts'])
-    const focused = await settle(() => layer.frame(SCALE, [], 'r/c', focus, true))
+    const focused = await settle(() => layer.frame(SCALE, [], buildFocus(scene, ['r/c']), true))
     expect(
       listLanes(focused)
         .map((lane) => lane.emphasis)
@@ -104,17 +102,26 @@ describe('LaneLayer', () => {
   it('keeps every link undimmed when the focus has no link in or out', async () => {
     const scene = makeScene()
     const layer = new LaneLayer(scene, createLaneRouter(), () => {})
-    const focus = new Set(['r', 'r/a', 'r/a/f.ts', 'r/b', 'r/b/f.ts', 'r/c', 'r/c/f.ts'])
-    const frame = await settle(() => layer.frame(SCALE, [], 'r', focus, true))
+    const frame = await settle(() => layer.frame(SCALE, [], buildFocus(scene, ['r']), true))
     expect(listLanes(frame).map((lane) => lane.emphasis)).toEqual(['normal', 'normal', 'normal'])
+  })
+
+  it('draws the links of every selected node, including those between them', async () => {
+    const scene = makeScene()
+    const layer = new LaneLayer(scene, createLaneRouter(), () => {})
+    // a and b: a's two links, and b's link to c; a to b is between them.
+    const frame = await settle(() =>
+      layer.frame(SCALE, [], buildFocus(scene, ['r/a', 'r/b']), false),
+    )
+    expect(listLanes(frame)).toHaveLength(3)
+    expect(listLanes(frame).every((lane) => lane.emphasis === 'hot')).toBe(true)
   })
 
   it('ends each lane with an arrow into the imported block', async () => {
     const scene = makeScene()
     const layer = new LaneLayer(scene, createLaneRouter(), () => {})
     // Both of c's links import c, which spans x 1-11, y 16-26.
-    const focus = new Set(['r/c', 'r/c/f.ts'])
-    const frame = await settle(() => layer.frame(SCALE, [], 'r/c', focus, false))
+    const frame = await settle(() => layer.frame(SCALE, [], buildFocus(scene, ['r/c']), false))
     expect(listLanes(frame)).toHaveLength(2)
     for (const { points: p } of listLanes(frame)) {
       const [x, y] = [p[p.length - 2] as number, p[p.length - 1] as number]
