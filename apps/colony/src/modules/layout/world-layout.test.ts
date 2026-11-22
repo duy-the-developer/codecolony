@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { buildChannelGraph, laneCapacity } from '../lane-routing/channel-graph.ts'
 import { buildRouteBoxes } from '../lane-routing/route-boxes.ts'
-import { countChannelLoad } from '../lane-routing/route-lanes.ts'
+import { countChannelLoad, routeLanes } from '../lane-routing/route-lanes.ts'
 import type { Edge, NodeKind, Rect, WorldNode } from '../world/world-types.ts'
-import { listBlockLinks } from './lane-widening.ts'
+import { listBlockLinks, RING_LANES } from './lane-widening.ts'
 import { emptyLayout, layoutWorld } from './world-layout.ts'
 
 const ZERO = { x: 0, y: 0, w: 0, h: 0 }
@@ -215,7 +215,9 @@ describe('layoutWorld', () => {
     }
   })
 
-  it('keeps a folder and its files in place when a subfolder arrives', () => {
+  // The folder opens and gains a ring of lanes, so its files may move in by
+  // the ring's growth.
+  it('keeps a folder in place, and its files nearly, when a subfolder arrives', () => {
     const store = emptyLayout()
     const first = makeNodes()
     layoutWorld(first, EDGES, store)
@@ -225,14 +227,21 @@ describe('layoutWorld', () => {
       node('p/r/app/web/hooks/use.ts', 'file', 'p/r/app/web/hooks', 10),
     ])
     layoutWorld(nested, EDGES, store)
-    for (const id of ['p/r/app/web', 'p/r/app/web/f0.ts', 'p/r/app/server', 'p/r/app/core']) {
-      const after = nested.find((n) => n.id === id)?.rect
-      const was = before.get(id) as Rect
-      expect([after?.x, after?.y], id).toEqual([was.x, was.y])
+    const web = nested.find((n) => n.id === 'p/r/app/web')?.rect as Rect
+    const was = before.get('p/r/app/web') as Rect
+    expect([web.x, web.y]).toEqual([was.x, was.y])
+    // Its top and bottom ring can each grow.
+    for (const id of ['p/r/app/web/f0.ts', 'p/r/app/server', 'p/r/app/core']) {
+      const after = nested.find((n) => n.id === id)?.rect as Rect
+      const old = before.get(id) as Rect
+      for (const d of [after.x - old.x, after.y - old.y]) {
+        expect(d, id).toBeGreaterThanOrEqual(0)
+        expect(d, id).toBeLessThanOrEqual(2 * RING_LANES)
+      }
     }
   })
 
-  it('widens gutters to fit a lane per dependency, up to the cap', () => {
+  it('widens gutters and rings to fit a lane per dependency, up to their caps', () => {
     // Every module imports every other one.
     const modules = makeNodes().filter((n) => n.kind === 'module')
     const edges = modules.flatMap((a) =>
@@ -251,9 +260,16 @@ describe('layoutWorld', () => {
     const boxes = buildRouteBoxes(wide)
     const graph = buildChannelGraph(boxes.root as NonNullable<typeof boxes.root>)
     const load = countChannelLoad(graph, listBlockLinks(edges, boxes.blockOf))
+    let crowdedRings = 0
     graph.channels.forEach((channel, c) => {
-      expect(laneCapacity(channel)).toBeGreaterThanOrEqual(Math.min(load[c] as number, 7))
+      const cap = channel.ring ? RING_LANES : 7
+      expect(laneCapacity(channel)).toBeGreaterThanOrEqual(Math.min(load[c] as number, cap))
+      if (!channel.ring || (load[c] as number) === 0) return
+      // A ring side grows to its cap and no further, however many lanes.
+      expect(laneCapacity(channel), `${channel.container} ${channel.ring}`).toBe(RING_LANES)
+      if ((load[c] as number) > RING_LANES) crowdedRings++
     })
+    expect(crowdedRings).toBeGreaterThan(0)
     for (const n of wide) {
       if (n.kind === 'symbol') continue
       expect(Number.isInteger(n.rect.x) && Number.isInteger(n.rect.y), n.id).toBe(true)
@@ -308,5 +324,83 @@ describe('layoutWorld', () => {
     const b = makeNodes()
     layoutWorld(b, EDGES, emptyLayout())
     expect(rects(b)).toEqual(rects(a))
+  })
+
+  // #71: in a monorepo whose other app is far taller, apps/template's script
+  // imports src/lib. The line used to run down past the bottom of the map to
+  // the ring round it and back up.
+  it('routes every link inside the folder its ends share, with folders open', () => {
+    const nodes = [
+      node('world', 'world'),
+      node('sp', 'project', 'world'),
+      node('sp/r', 'repo', 'sp'),
+      node('sp/r/package.json', 'file', 'sp/r', 40),
+      node('t', 'package', 'sp/r'),
+      node('t/astro.config.ts', 'file', 't', 60),
+      node('t/package.json', 'file', 't', 50),
+      node('t/scripts', 'module', 't'),
+      node('t/scripts/brand-images.ts', 'file', 't/scripts', 200),
+      node('t/src', 'module', 't'),
+      node('t/src/content.config.ts', 'file', 't/src', 80),
+      node('t/src/env.d.ts', 'file', 't/src', 5),
+      node('big', 'package', 'sp/r'),
+    ]
+    const files = (module: string, parent: string, count: number, lines: number[]) => {
+      nodes.push(node(module, 'module', parent))
+      for (let i = 0; i < count; i++) {
+        nodes.push(node(`${module}/f${i}.ts`, 'file', module, lines[i % lines.length]))
+      }
+    }
+    for (const [name, count] of [
+      ['lib', 3],
+      ['components', 12],
+      ['layouts', 2],
+      ['pages', 6],
+      ['styles', 1],
+    ] as const) {
+      files(`t/src/${name}`, 't/src', count, [40, 300, 120, 900])
+    }
+    for (let m = 0; m < 6; m++) files(`big/m${m}`, 'big', 20, [900])
+    const edges = [
+      importEdge('t/scripts/brand-images.ts', 't/src/lib/f0.ts'),
+      importEdge('t/scripts/brand-images.ts', 't/src/lib/f1.ts'),
+      importEdge('t/src/pages/f0.ts', 't/src/layouts/f0.ts'),
+      importEdge('t/src/pages/f1.ts', 't/src/components/f3.ts'),
+      importEdge('t/src/components/f0.ts', 't/src/lib/f0.ts'),
+      importEdge('t/src/layouts/f1.ts', 't/src/styles/f0.ts'),
+      importEdge('t/astro.config.ts', 't/src/lib/f1.ts'),
+      importEdge('big/m0/f0.ts', 'big/m1/f0.ts'),
+      importEdge('big/m3/f1.ts', 'big/m0/f2.ts'),
+    ]
+    layoutWorld(nodes, edges, emptyLayout())
+    const byId = new Map(nodes.map((n) => [n.id, n]))
+    const boxes = buildRouteBoxes(nodes)
+    const links = listBlockLinks(edges, boxes.blockOf)
+    const routing = routeLanes(
+      buildChannelGraph(boxes.root as NonNullable<typeof boxes.root>),
+      links,
+    )
+    // The folders above a block, deepest first.
+    const above = (block: string) => {
+      const list: string[] = []
+      const hash = block.indexOf('#')
+      let at = hash < 0 ? byId.get(block)?.parent : block.slice(0, hash)
+      for (; at; at = byId.get(at)?.parent) list.push(at)
+      return list
+    }
+    expect(links).toContainEqual({ from: 't/scripts', to: 't/src/lib' })
+    links.forEach((link, i) => {
+      const from = new Set(above(link.from))
+      const shared = above(link.to).find((id) => from.has(id)) as string
+      const { x, y, w, h } = byId.get(shared)?.rect ?? ZERO
+      const points = routing.points[i] as Float64Array
+      const name = `${link.from} -> ${link.to} in ${shared}`
+      expect(points, name).toBeDefined()
+      for (let k = 0; k < points.length; k += 2) {
+        const px = points[k] as number
+        const py = points[k + 1] as number
+        expect(px >= x && px <= x + w && py >= y && py <= y + h, `${name}: ${px},${py}`).toBe(true)
+      }
+    })
   })
 })

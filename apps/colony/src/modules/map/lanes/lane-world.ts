@@ -37,8 +37,6 @@ export interface LaneRoutes {
 
 // Levels kept in memory.
 const MAX_LEVELS = 8
-// Merge levels walk this many folders up from the imported block at most.
-const MAX_MERGE_LEVEL = 32
 // Lanes per grid unit at levels whose files are blocks.
 export const FILE_LANE_PITCH = 2
 
@@ -53,13 +51,11 @@ interface Level {
 export class LaneWorld {
   private readonly nodes: readonly RouteNode[]
   private readonly edges: readonly LaneEdge[]
-  private readonly parentOf = new Map<string, string>()
   private readonly levels = new Map<string, Level>()
 
   constructor(nodes: readonly RouteNode[], edges: readonly LaneEdge[]) {
     this.nodes = nodes
     this.edges = edges
-    for (const node of nodes) if (node.parent) this.parentOf.set(node.id, node.parent)
   }
 
   // The links of the level with these open containers, kept under key.
@@ -72,10 +68,7 @@ export class LaneWorld {
     const { graph, pitch, level } = this.resolveLevel(key, open)
     const picked = only ? [...only] : level.links.map((_, i) => i)
     const links = picked.map((i) => level.links[i] as Link)
-    const routing = routeLanes(graph, links, {
-      merge: 'whenFull',
-      mergeKey: (link, depth) => this.mergeKey((links[link] as Link).to, depth),
-    })
+    const routing = routeLanes(graph, links, { merge: 'whenFull' })
     const offsets = new Int32Array(picked.length + 1)
     let total = 0
     routing.points.forEach((points, i) => {
@@ -95,17 +88,6 @@ export class LaneWorld {
     }
   }
 
-  // Links share a lane by imported block first, then by each folder above it.
-  private mergeKey(block: string, depth: number): string | undefined {
-    if (depth > MAX_MERGE_LEVEL) return undefined
-    if (depth === 1) return block
-    // A container's own files merge into that container first.
-    const hash = block.indexOf('#')
-    let id = hash < 0 ? block : block.slice(0, hash)
-    for (let up = hash < 0 ? 1 : 2; up < depth; up++) id = this.parentOf.get(id) ?? id
-    return id
-  }
-
   private resolveLevel(key: string, open: readonly string[]): Level {
     let found = this.levels.get(key)
     if (found) {
@@ -119,7 +101,7 @@ export class LaneWorld {
       const pitch = boxes.hasFileBlocks ? FILE_LANE_PITCH : 1
       const graph = boxes.root
         ? buildChannelGraph(scaleBox(boxes.root, pitch), pitch !== 1)
-        : { channels: [], attachments: [], blockAttachments: new Map(), stuck: 0 }
+        : { channels: [], attachments: [], blockAttachments: new Map(), stuck: 0, nest: new Map() }
       found = { boxes, graph, pitch, level: buildLevel(this.edges, boxes) }
       if (this.levels.size >= MAX_LEVELS) {
         const oldest = this.levels.keys().next().value

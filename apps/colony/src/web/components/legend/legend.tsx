@@ -160,7 +160,7 @@ export function Legend({ scene }: LegendProps) {
         <LegendRow
           mark={<Lanes color={OVERLAYS[0].color} />}
           label="Lanes"
-          detail="run in the gutters one grid unit apart and never overlap; in a full gutter, links to the same module share one"
+          detail="run in the gutters one grid unit apart and never overlap, inside the folder their ends share; in a full gutter, only links to the same module or file share one"
         />
         <LegendRow
           mark={<Swatch color="#e4edf6" />}

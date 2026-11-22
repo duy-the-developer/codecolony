@@ -15,7 +15,7 @@ import { writeAtomic } from './atomic-write.ts'
 // repository's or package's own folder as loose files instead of a root module;
 // version 4 nests a folder's subfolders inside its module; version 5 puts a
 // street between files, which changes every module's height.
-const STORE_VERSION = 5
+const STORE_VERSION = 6
 
 interface StoredLayout {
   version: number

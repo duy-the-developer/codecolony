@@ -9,12 +9,19 @@ import type { Rect } from '../world/world-types.ts'
 // the rows, then between the slots of each row, then between the stacked
 // boxes, and on into open children. A cut between two groups of boxes is a
 // channel, and lanes run along it on the whole grid lines strictly inside it.
-// A cut at the edge of a band, such as a container's padding or the room below
-// a short block in a tall row, holds no lanes: lines only cross it straight on
-// their way between a channel and a block side or another channel. With
-// edgeLanes, padding that holds a lane is a channel too, so that a block side
-// facing a container wall meets the lane beside it rather than one outside
-// the container.
+// A cut at the edge of a band, such as the room below a short block in a tall
+// row, holds no lanes: lines only cross it straight on their way between a
+// channel and a block side or another channel. With edgeLanes, such room that
+// holds a lane is a channel too, so that a block side facing it meets the
+// lane beside it rather than one further out.
+//
+// An open folder's padding is a ring of four channels inside its border, below
+// its label strip, so that links between two of its boxes can always go round
+// inside it. A line leaves a folder only straight on, through a door: where a
+// gutter inside it, or its ring's top or bottom channel, ends on the ring's
+// left, right or bottom channel, the line may carry on across the ring and
+// the border into the channel outside. The ring's sides also open out at the
+// bottom. Nothing crosses the label strip.
 
 // The direction lanes run in: 'x' for a horizontal channel.
 export type Axis = 'x' | 'y'
@@ -47,8 +54,21 @@ export interface Channel {
   // near edge is the channel's high side: widening the channel moves them.
   container: string
   after: string[]
-  // The channel each end runs into, start then end, or -1.
+  // The channel each end runs into, start then end, or -1. A door is another
+  // way out of an end (see the attachments).
   bars: [number, number]
+  // A channel of its container's ring: the side of the folder it lines.
+  ring?: BlockSide
+}
+
+// A box's place in the box tree: a box lies inside another when its order
+// falls in [order, end) of the other.
+export interface BoxNest {
+  parent: string | undefined
+  order: number
+  end: number
+  // An open folder (or the root): links whose ends it holds stay inside it.
+  isScope: boolean
 }
 
 // Where a stem meets a channel (its bar) from the side. The stem is a block
@@ -77,6 +97,8 @@ export interface ChannelGraph {
   blockAttachments: Map<string, number[]>
   // Boxes the cut could not separate; their blocks have no attachments.
   stuck: number
+  // Every box by id.
+  nest: Map<string, BoxNest>
 }
 
 interface Band {
@@ -114,6 +136,7 @@ export function buildChannelGraph(root: RouteBox, edgeLanes = false): ChannelGra
     attachments: [],
     blockAttachments: new Map(),
     stuck: 0,
+    nest: nestBoxes(root),
   }
 
   const attach = (attachment: Attachment) => {
@@ -140,27 +163,106 @@ export function buildChannelGraph(root: RouteBox, edgeLanes = false): ChannelGra
   }
 
   const placeContainer = (box: RouteBox, nb: Neighbours, depth: number) => {
-    const band = toBand(box.rect)
     const items: Item[] = []
     for (const kid of box.kids ?? []) items.push({ band: toBand(kid.rect), box: kid })
-    const header = box.header ?? 0
-    const headerEnd = Math.min(band.y0 + header, band.y1)
-    // Children flush under the label strip are cut off it first, so that the
-    // cut never has to fall where the strip merely touches them, which would
-    // also split them at every edge that lines up with it.
-    if (
-      header > 0 &&
-      items.length > 0 &&
-      items.every((item) => item.band.y0 >= headerEnd) &&
-      Math.min(...items.map((item) => item.band.y0)) === headerEnd
-    ) {
-      const below: Neighbours = [...nb]
-      below[TOP] = -1
-      split({ ...band, y0: headerEnd }, items, 'y', below, box.id, depth)
-      return
+    if ((box.header ?? 0) > 0) placeFolder(box, items, nb, depth)
+    else split(toBand(box.rect), items, 'y', nb, box.id, depth)
+  }
+
+  // A folder's ring, in the padding between its border, below the label
+  // strip, and its boxes, then its boxes inside the ring and the doors out.
+  // A side with no padding has no ring channel.
+  const placeFolder = (box: RouteBox, items: Item[], nb: Neighbours, depth: number) => {
+    if (items.length === 0) return
+    const b = toBand(box.rect)
+    const top = Math.min(b.y0 + (box.header ?? 0), b.y1)
+    const inner: Band = {
+      x0: Math.max(b.x0, Math.min(...items.map((item) => item.band.x0))),
+      y0: Math.max(top, Math.min(...items.map((item) => item.band.y0))),
+      x1: Math.min(b.x1, Math.max(...items.map((item) => item.band.x1))),
+      y1: Math.min(b.y1, Math.max(...items.map((item) => item.band.y1))),
     }
-    if (header > 0) items.unshift({ band: { ...band, y1: headerEnd }, box: undefined })
-    split(band, items, 'y', nb, box.id, depth)
+    const firstNew = graph.attachments.length
+    const ring = (side: BlockSide, channel: Omit<Channel, 'container' | 'after' | 'ring'>) =>
+      graph.channels.push({ ...channel, container: box.id, after: [], ring: side }) - 1
+    // The sides run from the label strip down, and open out at the bottom.
+    const side = (which: 'left' | 'right', low: number, high: number): number => {
+      if (high <= low) return -1
+      const index = ring(which, {
+        axis: 'y',
+        low,
+        high,
+        start: top,
+        end: b.y1,
+        depth,
+        bars: [-1, nb[BOTTOM]],
+      })
+      if (nb[BOTTOM] >= 0) {
+        attach({
+          bar: nb[BOTTOM],
+          isHigh: false,
+          from: low,
+          to: high,
+          mouth: b.y1,
+          channel: index,
+          end: 1,
+        })
+      }
+      return index
+    }
+    const left = side('left', b.x0, inner.x0)
+    const right = side('right', inner.x1, b.x1)
+    // The top and bottom run between the sides.
+    const across = (which: 'top' | 'bottom', low: number, high: number): number => {
+      if (high <= low) return -1
+      const index = ring(which, {
+        axis: 'x',
+        low,
+        high,
+        start: inner.x0,
+        end: inner.x1,
+        depth: depth + 1,
+        bars: [left, right],
+      })
+      if (left >= 0) {
+        attach({
+          bar: left,
+          isHigh: true,
+          from: low,
+          to: high,
+          mouth: inner.x0,
+          channel: index,
+          end: 0,
+        })
+      }
+      if (right >= 0) {
+        attach({
+          bar: right,
+          isHigh: false,
+          from: low,
+          to: high,
+          mouth: inner.x1,
+          channel: index,
+          end: 1,
+        })
+      }
+      return index
+    }
+    const upper = across('top', top, inner.y0)
+    const lower = across('bottom', inner.y1, b.y1)
+    split(inner, items, 'y', [upper, right, lower, left], box.id, depth + 2)
+    // Doors: a channel end on the ring's left, right or bottom also runs on
+    // across it into the channel outside, from the same mouth.
+    const outside = new Map<number, number>()
+    if (left >= 0 && nb[LEFT] >= 0) outside.set(left, nb[LEFT])
+    if (right >= 0 && nb[RIGHT] >= 0) outside.set(right, nb[RIGHT])
+    if (lower >= 0 && nb[BOTTOM] >= 0) outside.set(lower, nb[BOTTOM])
+    const lastNew = graph.attachments.length
+    for (let i = firstNew; i < lastNew; i++) {
+      const a = graph.attachments[i] as Attachment
+      const bar = outside.get(a.bar)
+      if (a.channel !== undefined && bar !== undefined) attach({ ...a, bar })
+    }
   }
 
   // A channel from low to high across `across`, the length of the band, with
@@ -427,4 +529,23 @@ function holdsLane(low: number, high: number): boolean {
 // Whole-unit lanes a channel holds: the grid lines strictly inside it.
 export function laneCapacity(channel: Channel): number {
   return Math.max(0, Math.ceil(channel.high) - Math.floor(channel.low) - 1)
+}
+
+// Every box's place in the tree, depth first.
+function nestBoxes(root: RouteBox): Map<string, BoxNest> {
+  const nest = new Map<string, BoxNest>()
+  let order = 0
+  const visit = (box: RouteBox, parent: string | undefined) => {
+    const entry: BoxNest = {
+      parent,
+      order: order++,
+      end: 0,
+      isScope: parent === undefined || (box.kids !== undefined && (box.header ?? 0) > 0),
+    }
+    nest.set(box.id, entry)
+    for (const kid of box.kids ?? []) visit(kid, box.id)
+    entry.end = order
+  }
+  visit(root, undefined)
+  return nest
 }
