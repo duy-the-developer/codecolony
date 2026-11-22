@@ -22,7 +22,7 @@ export function MapBreadcrumb({ scene, selected, onPick }: MapBreadcrumbProps) {
   return (
     <nav
       aria-label="Selection path"
-      className="pointer-events-auto flex min-w-0 items-center gap-0.5 overflow-hidden rounded-md border bg-card/90 px-1.5 py-1 text-xs"
+      className="pointer-events-auto flex min-w-0 max-w-full items-center gap-0.5 overflow-hidden rounded-md border bg-card/90 px-1.5 py-1 text-xs"
     >
       {/* The ancestors and every chevron before the selected name shrink and
           clip as one group, so the selected name keeps its width and truncates
