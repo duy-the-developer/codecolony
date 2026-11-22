@@ -516,7 +516,7 @@ function scopeOf(nest: ChannelGraph['nest'], from: string, to: string): [number,
 // Shortest paths, one search per importing block and scope. Each path lists
 // the attachments it crosses, from a side of `from` to a side of `to`, through
 // channels inside the deepest open folder that holds both, leaving only boxes
-// that hold `from`. A link with no such path may go anywhere.
+// that hold `from`. A link with no such path stays unrouted.
 function findPaths(
   graph: ChannelGraph,
   search: SearchGraph,
@@ -539,13 +539,7 @@ function findPaths(
     if (found) found.list.push(i)
     else searches.set(key, { source: link.from, scope, list: [i] })
   })
-  const anywhere: number[] = []
-  const run = (
-    source: string,
-    [low, high]: [number, number],
-    list: readonly number[],
-    isFree = false,
-  ) => {
+  const run = (source: string, [low, high]: [number, number], list: readonly number[]) => {
     const starts = blockAttachments.get(source)
     if (!starts || starts.length === 0) return
     const at = graph.nest.get(source)?.order ?? -1
@@ -594,7 +588,7 @@ function findPaths(
       for (let e = offsets[node] as number; e < (offsets[node + 1] as number); e++) {
         const next = targets[e] as number
         const order = nodeOrder[next] as number
-        if (!isFree && order >= 0) {
+        if (order >= 0) {
           if (order < low || order >= high) continue
           // Out of a box that does not hold the importer.
           const from = nodeOrder[node] as number
@@ -610,19 +604,7 @@ function findPaths(
       }
     }
   }
-  for (const { source, scope, list } of searches.values()) {
-    run(source, scope, list)
-    for (const i of list) if (!paths[i]) anywhere.push(i)
-  }
-  // Grouped by source again, so each still costs one search.
-  const bySource = new Map<string, number[]>()
-  for (const i of anywhere) {
-    const source = (links[i] as Link).from
-    const list = bySource.get(source)
-    if (list) list.push(i)
-    else bySource.set(source, [i])
-  }
-  for (const [source, list] of bySource) run(source, [0, Number.MAX_SAFE_INTEGER], list, true)
+  for (const { source, scope, list } of searches.values()) run(source, scope, list)
   return paths
 }
 

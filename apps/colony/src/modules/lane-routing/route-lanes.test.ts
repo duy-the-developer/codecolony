@@ -289,6 +289,22 @@ describe('routeLanes', () => {
     }
   })
 
+  it('leaves a link unrouted when its folder cannot join the two ends inside', () => {
+    // A wall from the label strip down to the bottom border parts a from b;
+    // the only way between them is out of the folder and round it.
+    const kids = [block('s/a', 1, 3, 4, 4), block('s/wall', 7, 3, 2, 10), block('s/b', 11, 3, 4, 4)]
+    const folder: RouteBox = { id: 's', rect: { x: 0, y: 2, w: 16, h: 11 }, header: 1, kids }
+    const root: RouteBox = {
+      id: 'world',
+      rect: { x: 0, y: 0, w: 16, h: 16 },
+      header: 0,
+      kids: [folder],
+    }
+    const routing = routeLanes(buildChannelGraph(root), [{ from: 's/a', to: 's/b' }])
+    expect(routing.points[0]).toBeUndefined()
+    expect([...routing.load].every((n) => n === 0)).toBe(true)
+  })
+
   it('never passes through a folder on the way to another', () => {
     // Three folders in a row; the middle one has a gutter straight across it,
     // with doors at both ends, that would be the shortest way from l to r.
