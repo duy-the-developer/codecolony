@@ -34,8 +34,8 @@ interface LegendGroup {
 // possible-conflict badge while a file has one; each overlay's group, titled
 // with its key, shows only while it draws: Git while the overlay is on or a
 // colonist is picked, Owners while its pins are on, Dependency while its lines
-// or a selection's are drawn. Collapsed it is a small chip; L or a click
-// toggles it.
+// or a selection's are drawn. The selection's outline is named with its lines,
+// else on its own. Collapsed it is a small chip; L or a click toggles it.
 export function MapLegend({
   lines,
   overlays,
@@ -158,22 +158,25 @@ function listLegendGroups({
           mark={<Arrow color={DIRECTION_COLORS.dependant} />}
           name="Dependants"
         />,
-        <LegendRow
-          key="selected"
-          mark={
-            <span
-              className="size-3 rounded-[2px] border-2"
-              style={{ borderColor: SELECTION_COLOR }}
-            />
-          }
-          name="Selected"
-        />,
       )
     }
+    if (lines.isDirected && lines.isSelected) rows.push(selectedRow)
     groups.push({ title: dependency.name, hotkey: dependency.key, rows })
   }
+  if (lines.isSelected && !lines.isDirected)
+    groups.push({ title: 'Selection', rows: [selectedRow] })
   return groups
 }
+
+const selectedRow = (
+  <LegendRow
+    key="selected"
+    mark={
+      <span className="size-3 rounded-[2px] border-2" style={{ borderColor: SELECTION_COLOR }} />
+    }
+    name="Selected"
+  />
+)
 
 function overlayKey(id: OverlayId): string | undefined {
   return OVERLAYS.find((overlay) => overlay.id === id)?.key

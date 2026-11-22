@@ -52,6 +52,9 @@ export interface Robot {
   // Where its stem touches the block.
   tipX: number
   tipY: number
+  // How far its chip stands above the usual, on a longer stem, to clear
+  // the robots placed before it.
+  lift: number
 }
 
 // What is under the pointer: a robot, a colonist's pin, or the
@@ -72,8 +75,6 @@ export function keyOfHit(hit: MarkerHit): string {
 const CHIP_PX = 22
 const ICON_PX = 15
 const ROBOT_POINTER_PX = 8
-// Robots of different colonists on the same spot sit side by side.
-const SIDE_BY_SIDE_PX = 26
 const BOB_PX = 2.5
 const BOB_MS = 1400
 // Others' robots with a colonist picked: dimmer, still easy to find.
@@ -185,6 +186,7 @@ export class ColonistLayer {
         path: placed.colonist.lastSaved,
         tipX: anchor.x + anchor.w / 2,
         tipY: anchor.y + Math.min(anchor.h / 2, 1),
+        lift: 0,
       })
     }
     this.robots = spreadRobots(robots)
@@ -321,8 +323,11 @@ export class ColonistLayer {
       const isDimmed = this.selected !== undefined && !badge.colonistIds.includes(this.selected)
       drawConflictBadge(ctx, badge, isDimmed ? OTHERS_ALPHA : 1)
     }
+    // Lifted robots first, so their stems pass behind the chips below.
     const robots = [...this.robots].sort(
-      (a, b) => Number(a.colonistId === this.selected) - Number(b.colonistId === this.selected),
+      (a, b) =>
+        Number(a.colonistId === this.selected) - Number(b.colonistId === this.selected) ||
+        b.lift - a.lift,
     )
     for (const robot of robots) {
       const isSelected = robot.colonistId === this.selected
@@ -440,7 +445,7 @@ export class ColonistLayer {
 }
 
 function chipCentre(robot: Robot): { x: number; y: number } {
-  return { x: robot.tipX, y: robot.tipY - ROBOT_POINTER_PX - CHIP_PX / 2 }
+  return { x: robot.tipX, y: robot.tipY - ROBOT_POINTER_PX - CHIP_PX / 2 - robot.lift }
 }
 
 // The robot's chip and stem on screen, with room for the bob.
@@ -454,23 +459,22 @@ function robotBox(robot: Robot): Rect {
   }
 }
 
-// Moves robots that would cover each other apart, side by side.
+// Lifts each robot that would cover one placed before it, a chip's height at
+// a time, so it stands above on a longer stem. Its stem stays on its own
+// block; robots on blocks far enough apart stay side by side.
 function spreadRobots(robots: Robot[]): Robot[] {
   const placed: Robot[] = []
   for (const robot of [...robots].sort((a, b) => a.tipY - b.tipY || a.tipX - b.tipX)) {
-    const moved = { ...robot }
-    while (
-      placed.some(
-        (other) =>
-          Math.abs(other.tipX - moved.tipX) < SIDE_BY_SIDE_PX &&
-          Math.abs(other.tipY - moved.tipY) < CHIP_PX + ROBOT_POINTER_PX,
-      )
-    ) {
-      moved.tipX += SIDE_BY_SIDE_PX
-    }
-    placed.push(moved)
+    const lifted = { ...robot }
+    while (placed.some((other) => overlaps(robotBox(other), robotBox(lifted))))
+      lifted.lift += CHIP_PX + BOB_PX + ROBOT_POINTER_PX
+    placed.push(lifted)
   }
   return placed
+}
+
+function overlaps(a: Rect, b: Rect): boolean {
+  return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
 }
 
 // One device pixel, so it never blurs into a wedge.
@@ -549,6 +553,8 @@ function drawPin(
 function drawConflictBadge(ctx: CanvasRenderingContext2D, badge: ConflictBadge, alpha: number) {
   ctx.globalAlpha = alpha
   ctx.setLineDash([])
+  if (badge.tipY !== undefined)
+    drawStem(ctx, badge.x, badge.y + BADGE_RADIUS_PX, badge.tipY, CONFLICT_COLOR)
   ctx.fillStyle = CONFLICT_COLOR
   ctx.strokeStyle = COLONIST_CHIP
   ctx.lineWidth = 1.5

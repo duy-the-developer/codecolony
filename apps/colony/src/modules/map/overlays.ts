@@ -45,6 +45,8 @@ export interface DrawnLines {
   overlays: readonly OverlayId[]
   // The selection's lines are drawn, coloured by direction.
   isDirected: boolean
+  // A selection's outline is drawn.
+  isSelected: boolean
 }
 
 // Named in the overlay menu, not built yet.

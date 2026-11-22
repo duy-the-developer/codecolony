@@ -210,6 +210,52 @@ describe('ColonistLayer', () => {
     })
   })
 
+  it('stands a conflict badge with no pins on a stem down to its file', () => {
+    const layer = new ColonistLayer()
+    layer.setColonists(shared(placed('/one', 'O'), placed('/two', 'T')))
+    layer.drawChanges(ctx, scene, camera, OPEN)
+    const [badge] = layer.pins.badges
+    expect(badge?.tipY).toBe(31)
+    const calls: Call[] = []
+    layer.drawMarkers(recordingContext(calls), { width: 800, height: 600 }, 0, true)
+    const from = calls.findIndex(
+      ([name, , y]) => name === 'moveTo' && y === Math.round((badge?.y ?? 0) + 7),
+    )
+    const [, x] = calls[from] as Call
+    expect(Math.abs((x as number) - (badge?.x ?? 0))).toBeLessThanOrEqual(1)
+    expect(x).toBeGreaterThanOrEqual(20)
+    expect(x).toBeLessThanOrEqual(60)
+    expect(calls[from + 1]).toEqual(['lineTo', x, 31])
+  })
+
+  it('stands two robots on the same small file, the later one lifted, both pointing at it', () => {
+    const layer = new ColonistLayer()
+    layer.setColonists([
+      placed('/one', 'O', { lastSaved: 'a.ts' }),
+      placed('/two', 'T', { lastSaved: 'a.ts' }),
+    ])
+    layer.drawChanges(ctx, scene, camera, OPEN)
+    const calls: Call[] = []
+    layer.drawMarkers(recordingContext(calls), { width: 800, height: 600 }, 0, true)
+    const stems = calls.flatMap((call, i) =>
+      call[0] === 'moveTo' ? [[call, calls[i + 1] as Call] as const] : [],
+    )
+    expect(stems).toHaveLength(2)
+    for (const [from, to] of stems) {
+      expect(from[1]).toBeGreaterThanOrEqual(20)
+      expect(from[1]).toBeLessThanOrEqual(60)
+      expect(to).toEqual(['lineTo', from[1], 31])
+    }
+    const [x, y] = chipOver(20, 60, 30)
+    const below = layer.hitMarker(x, y)
+    const above = layer.hitMarker(x, y - 32.5)
+    expect(below).toMatchObject({ kind: 'robot' })
+    expect(above).toMatchObject({ kind: 'robot' })
+    expect(below?.kind === 'robot' && below.colonistId).not.toBe(
+      above?.kind === 'robot' && above.colonistId,
+    )
+  })
+
   it('finds the conflict badge left of the pins of two colonists on one file', () => {
     const layer = new ColonistLayer()
     layer.showOwners = true

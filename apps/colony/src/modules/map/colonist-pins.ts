@@ -11,7 +11,7 @@ import type { Drawn } from './render.ts'
 // for one. Pins on the same block sit side by side in roster order, right to
 // left. A block holding a file two or more colonists change also gets a
 // possible-conflict badge, left of its pins; with the overlay off the badge
-// stays, alone. A row that would cover another block's pins, or a robot, is
+// stays, alone, on a stem of its own down to the block. A row that would cover another block's pins, or a robot, is
 // lifted above them, on a longer stem, so every pin still points at its own
 // block.
 
@@ -42,6 +42,8 @@ export interface ConflictBadge {
   paths: string[]
   x: number
   y: number
+  // Where its stem touches the block, when it stands with no pins.
+  tipY?: number
 }
 
 export interface PinLayout {
@@ -152,14 +154,19 @@ export function layoutPins(
       })
     }
     if (pins.length === 0 && shared.size === 0) continue
-    const badge =
+    const badge: ConflictBadge | undefined =
       shared.size > 0
         ? {
             nodeId: group.nodeId,
             colonistIds: [...shared],
             paths: [...sharedPaths].sort(),
-            x: right - BADGE_RADIUS_PX,
+            // Alone, it stands over the block, even a narrow one.
+            x:
+              pins.length > 0
+                ? right - BADGE_RADIUS_PX
+                : Math.max(right - BADGE_RADIUS_PX, rect.x + rect.w / 2),
             y: top + PIN_HEIGHT_PX / 2,
+            ...(pins.length > 0 ? {} : { tipY }),
           }
         : undefined
     const left = badge ? badge.x - BADGE_RADIUS_PX : right + GAP_PX

@@ -46,7 +46,7 @@ import { ZoomControls } from '../zoom-controls/zoom-controls.tsx'
 
 type PanelSide = 'left' | 'right'
 
-const NO_LINES: DrawnLines = { overlays: [], isDirected: false }
+const NO_LINES: DrawnLines = { overlays: [], isDirected: false, isSelected: false }
 const NO_OVERLAYS: ReadonlySet<OverlayId> = new Set()
 
 // The page: header, left panel | map | right panel.

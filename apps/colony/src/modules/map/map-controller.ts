@@ -122,7 +122,7 @@ export function createMapController(
         ...(lanes ? { lanes } : {}),
       })
       drawn = result.drawn
-      const key = `${result.lines.overlays.join(',')}|${result.lines.isDirected}`
+      const key = `${result.lines.overlays.join(',')}|${result.lines.isDirected}|${result.lines.isSelected}`
       if (key !== linesKey) {
         linesKey = key
         options.onLines?.(result.lines)

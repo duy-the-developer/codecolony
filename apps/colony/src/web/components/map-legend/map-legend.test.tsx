@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DrawnLines, OverlayId } from '../../../modules/map/overlays.ts'
 import { MapLegend, type MapLegendProps } from './map-legend.tsx'
 
-const NOTHING: DrawnLines = { overlays: [], isDirected: false }
+const NOTHING: DrawnLines = { overlays: [], isDirected: false, isSelected: false }
 
 function renderLegend(props: Partial<MapLegendProps> = {}) {
   return render(
@@ -80,14 +80,20 @@ describe('MapLegend', () => {
   })
 
   it('adds the Dependency group while its lines are drawn', () => {
-    renderLegend({ lines: { overlays: ['dependency'], isDirected: false } })
+    renderLegend({ lines: { overlays: ['dependency'], isDirected: false, isSelected: false } })
     expect(groupTitles()).toEqual(['Dependency1'])
     expect(rowNames()).toEqual(['Import'])
   })
 
   it('shows both directions while a selection draws its lines, with no overlay on', () => {
-    renderLegend({ lines: { overlays: [], isDirected: true } })
+    renderLegend({ lines: { overlays: [], isDirected: true, isSelected: true } })
     expect(groupTitles()).toEqual(['Dependency1'])
     expect(rowNames()).toEqual(['Depends on', 'Dependants', 'Selected'])
+  })
+
+  it('names the selection on its own while it draws no lines', () => {
+    renderLegend({ lines: { overlays: [], isDirected: false, isSelected: true } })
+    expect(groupTitles()).toEqual(['Selection'])
+    expect(rowNames()).toEqual(['Selected'])
   })
 })
