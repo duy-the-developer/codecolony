@@ -84,6 +84,14 @@ describe('parseConfig', () => {
     })
   })
 
+  it('resolves the firstmate home against the config folder', () => {
+    const config = parseConfig(
+      { projects: [{ name: 'a', root: '/a' }], firstmateHome: '../firstmate' },
+      '/base/config',
+    )
+    expect(config.firstmateHome).toBe('/base/firstmate')
+  })
+
   it.each([
     [null, /expected an object/],
     [{ projects: [] }, /non-empty array/],
@@ -100,6 +108,7 @@ describe('parseConfig', () => {
       /duplicate name "a"/,
     ],
     [{ projects: [{ name: 'a', root: '/a' }], cacheDir: 1 }, /cacheDir/],
+    [{ projects: [{ name: 'a', root: '/a' }], firstmateHome: '' }, /firstmateHome/],
   ])('rejects %j', (raw, message) => {
     expect(() => parseConfig(raw, '/base')).toThrow(message)
   })

@@ -2,7 +2,12 @@ import { EventEmitter } from 'node:events'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import type { FileResponse } from '../modules/wire/api-types.ts'
+import {
+  FAKE_BACKLOG,
+  makeFirstmateHome,
+} from '../modules/build-queue/testing/firstmate-home-fixture.ts'
+import type { ColonyConfig } from '../modules/config/load-config.ts'
+import type { BuildQueueResponse, FileResponse } from '../modules/wire/api-types.ts'
 import type { Edge, World, WorldNode, WorldPayload } from '../modules/world/world-types.ts'
 import { createApi, type WorldSource } from './api.ts'
 
@@ -195,6 +200,11 @@ describe('api', () => {
     await reader.cancel()
   })
 
+  it('says the build queue is not connected without a firstmate home', async () => {
+    expect(await (await fetch(`${base}/api/build-queue`)).json()).toEqual({ isConnected: false })
+    expect((await fetch(`${base}/api/build-queue/changes?id=x`)).status).toBe(404)
+  })
+
   it('rejects writes and unknown api paths', async () => {
     expect((await fetch(`${base}/api/world`, { method: 'POST' })).status).toBe(405)
     expect((await fetch(`${base}/api/nope`)).status).toBe(404)
@@ -202,5 +212,43 @@ describe('api', () => {
 
   it('leaves other paths to the page', async () => {
     expect((await fetch(`${base}/`)).status).toBe(418)
+  })
+})
+
+describe('api with a firstmate home', () => {
+  let server: Server
+  let base: string
+
+  beforeAll(async () => {
+    const config: ColonyConfig = {
+      projects: [{ name: 'app', root: '/private/path/app', kind: 'repo' }],
+      cacheDir: '/cache',
+      firstmateHome: makeFirstmateHome({ backlog: FAKE_BACKLOG }),
+      source: 'default',
+      port: 0,
+    }
+    const api = createApi(config, new StubSource(), () => null)
+    server = createServer((req, res) => {
+      if (!api(req, res)) res.writeHead(418).end()
+    })
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
+  })
+
+  afterAll(() => {
+    server.closeAllConnections()
+    return new Promise<void>((resolve) => server.close(() => resolve()))
+  })
+
+  it("serves the map's orders from the backlog", async () => {
+    const body = (await (await fetch(`${base}/api/build-queue`)).json()) as BuildQueueResponse
+    const ids = body.isConnected ? body.orders.map((order) => order.id) : []
+    expect(ids).toContain('app-wiring')
+    expect(ids).not.toContain('other-site')
+  })
+
+  it('has no changes for an order without a worker copy, and needs an id', async () => {
+    expect((await fetch(`${base}/api/build-queue/changes?id=app-queue`)).status).toBe(404)
+    expect((await fetch(`${base}/api/build-queue/changes`)).status).toBe(400)
   })
 })

@@ -18,6 +18,9 @@ export interface ProjectConfig extends ProjectSummary {
 export interface ColonyConfig {
   projects: ProjectConfig[]
   cacheDir: string
+  // A firstmate home whose backlog and worker state feed the build queue,
+  // read only. Absent: the queue is not connected.
+  firstmateHome?: string
   // Where the config came from: a file path, or 'default'.
   source: string
   // The server's port, from PORT.
@@ -68,10 +71,10 @@ export function loadConfig({ env = process.env, repoRoot }: LoadConfigOptions): 
   return { ...parseConfig(raw, dirname(file)), source: file, port }
 }
 
-// Relative roots and cacheDir resolve against the config file's folder.
+// Relative roots, cacheDir and firstmateHome resolve against the config file's folder.
 export function parseConfig(raw: unknown, baseDir: string): Omit<ColonyConfig, 'source' | 'port'> {
   if (!isRecord(raw)) throw new ConfigError('InvalidConfig', 'config: expected an object')
-  const { projects, cacheDir } = raw
+  const { projects, cacheDir, firstmateHome } = raw
   if (!Array.isArray(projects) || projects.length === 0) {
     throw new ConfigError('InvalidConfig', 'config.projects: expected a non-empty array')
   }
@@ -87,9 +90,13 @@ export function parseConfig(raw: unknown, baseDir: string): Omit<ColonyConfig, '
   if (cacheDir !== undefined && typeof cacheDir !== 'string') {
     throw new ConfigError('InvalidConfig', 'config.cacheDir: expected a string')
   }
+  if (firstmateHome !== undefined && (typeof firstmateHome !== 'string' || firstmateHome === '')) {
+    throw new ConfigError('InvalidConfig', 'config.firstmateHome: expected a path')
+  }
   return {
     projects: parsed,
     cacheDir: cacheDir ? resolvePath(cacheDir, baseDir) : defaultCacheDir(),
+    ...(firstmateHome ? { firstmateHome: resolvePath(firstmateHome, baseDir) } : {}),
   }
 }
 
