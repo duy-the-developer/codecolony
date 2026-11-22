@@ -10,12 +10,12 @@ import type { SymbolsResponse, WorldResponse } from '../../modules/world/world-t
 // as patches after that; symbols come per file; search runs on the server.
 
 // The world now: a patch on top of `base` when the server still knows it.
-// A whole world comes with the window's shape, which a freshly laid out map
+// Every request carries the window's shape, which a freshly laid out map
 // takes for its top level.
 export async function fetchWorld(base?: WorldState): Promise<WorldState> {
   const whole = `/api/world?aspect=${window.innerWidth / window.innerHeight}`
   const url = base
-    ? `/api/world?session=${encodeURIComponent(base.session)}&since=${base.world.version}`
+    ? `${whole}&session=${encodeURIComponent(base.session)}&since=${base.world.version}`
     : whole
   const response = (await fetchJson(url)) as WorldResponse
   try {
