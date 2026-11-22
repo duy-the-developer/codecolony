@@ -7,12 +7,12 @@ import type { Drawn } from './render.ts'
 // Where colonist pins go on screen. Every file a colonist changes gets a pin
 // over the top right corner of its block: the file itself, or an added
 // file's placeholder (its folder, when there was no room for one), at every
-// zoom, so the pins match the colonist's files
-// one for one. Pins on the same block sit side by side
-// in roster order, right to left. A block holding a file two or more
-// colonists change also gets a possible-conflict badge, left of its pins.
-// A row that would cover another block's pins is lifted above them, on a
-// longer stem, so every pin still points at its own block.
+// zoom, so the pins match the colonist's files one for one. Pins on the
+// same block sit side by side in roster order, right to left. A block
+// holding a file two or more colonists change also gets a possible-conflict
+// badge, left of its pins. A row that would cover another block's pins is
+// lifted above them, on a longer stem, so every pin still points at its own
+// block.
 
 type ColonistStatus = PlacedColonist['colonist']['status']
 
