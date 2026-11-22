@@ -94,7 +94,7 @@ describe('ColonistLayer', () => {
     expect(layer.isAnimated).toBe(false)
   })
 
-  it('moves to the closed folder when the file is too faint to show', () => {
+  it('stays on the file when it is too faint to show', () => {
     const layer = new ColonistLayer()
     layer.setColonists([placed('/one', 'O')])
     layer.drawChanges(ctx, scene, camera, [
@@ -102,10 +102,10 @@ describe('ColonistLayer', () => {
       drawn('m', 1, 0.2),
       drawn('m/a.ts', 0.2, 0),
     ])
-    // The module spans 10..210 across from 20 down.
-    const hit = layer.hitPin(205, 10)
+    // The file spans 20..60 across from 30 down.
+    const hit = layer.hitPin(55, 20)
     expect(hit).toMatchObject({ kind: 'pin', colonistId: '/one' })
-    expect(hit?.kind === 'pin' && hit.pin.text).toBe('O 1')
+    expect(hit?.kind === 'pin' && [hit.pin.nodeId, hit.pin.text]).toEqual(['m/a.ts', 'O'])
   })
 
   it('finds the conflict badge left of the pins of two colonists on one file', () => {
