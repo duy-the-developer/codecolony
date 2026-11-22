@@ -1,20 +1,35 @@
-import { buildChannelGraph, laneCapacity } from '../lane-routing/channel-graph.ts'
+import { type BlockSide, buildChannelGraph, laneCapacity } from '../lane-routing/channel-graph.ts'
 import { buildRouteBoxes } from '../lane-routing/route-boxes.ts'
 import { countChannelLoad, type Link } from '../lane-routing/route-lanes.ts'
 import type { Edge, WorldNode } from '../world/world-types.ts'
 import type { GapWidening, StoredRow } from './pack-rows.ts'
 
 // Gutters grow so the Dependency overlay's lanes fit them one unit apart, up
-// to a cap; past it the page merges lanes instead. Links are routed between
-// the blocks seen at full zoom (every folder open), which need the most lanes.
+// to a cap; past it the page merges lanes to one block and packs the rest
+// closer. A folder's ring grows the same way on each side, up to RING_LANES.
+// Links are routed between the blocks seen with every folder open and every
+// module of files closed, which need the most lanes between modules.
 
-// Container id -> extra units per gap of its rows.
+// Container id -> extra units per gap of its rows, and per side of its ring.
 export type LaneWidening = Map<string, MutableGapWidening>
 
 export interface MutableGapWidening extends GapWidening {
   rows: Map<string, number>
   slots: Map<string, number>
   stacks: Map<string, number>
+  ring: Record<BlockSide, number>
+}
+
+// The most lanes a folder's ring grows to hold on each side.
+export const RING_LANES = 1
+
+function emptyWidening(): MutableGapWidening {
+  return {
+    rows: new Map(),
+    slots: new Map(),
+    stacks: new Map(),
+    ring: { top: 0, right: 0, bottom: 0, left: 0 },
+  }
 }
 
 interface Spot {
@@ -46,9 +61,9 @@ export function listBlockLinks(
   return links
 }
 
-// Adds to `widening` the units each gutter is short of holding its lanes,
-// up to maxGutter units wide. rows: each container's rows as laid out. True
-// when anything grew.
+// Adds to `widening` the units each gutter and ring side is short of holding
+// its lanes, gutters up to maxGutter units wide. rows: each container's rows
+// as laid out. True when anything grew.
 export function resolveLaneWidening(
   nodes: readonly WorldNode[],
   edges: readonly Edge[],
@@ -86,13 +101,17 @@ export function resolveLaneWidening(
   // The most each gap is short by this round.
   const short = new Map<string, MutableGapWidening>()
   graph.channels.forEach((channel, c) => {
-    const want = Math.min(load[c] as number, maxGutter - 1)
+    const want = Math.min(load[c] as number, channel.ring ? RING_LANES : maxGutter - 1)
     const missing = want - laneCapacity(channel)
     if (missing <= 0) return
     let gaps = short.get(channel.container)
     if (!gaps) {
-      gaps = { rows: new Map(), slots: new Map(), stacks: new Map() }
+      gaps = emptyWidening()
       short.set(channel.container, gaps)
+    }
+    if (channel.ring) {
+      gaps.ring[channel.ring] = Math.max(gaps.ring[channel.ring], missing)
+      return
     }
     for (const id of channel.after) {
       const spot = spotOf(channel.container, id)
@@ -112,7 +131,7 @@ export function resolveLaneWidening(
   for (const [container, gaps] of short) {
     let total = widening.get(container)
     if (!total) {
-      total = { rows: new Map(), slots: new Map(), stacks: new Map() }
+      total = emptyWidening()
       widening.set(container, total)
     }
     for (const key of ['rows', 'slots', 'stacks'] as const) {
@@ -120,6 +139,11 @@ export function resolveLaneWidening(
         total[key].set(id, (total[key].get(id) ?? 0) + units)
         grew = true
       }
+    }
+    for (const side of ['top', 'right', 'bottom', 'left'] as const) {
+      if (gaps.ring[side] === 0) continue
+      total.ring[side] += gaps.ring[side]
+      grew = true
     }
   }
   return grew

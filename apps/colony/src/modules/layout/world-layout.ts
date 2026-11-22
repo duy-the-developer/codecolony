@@ -1,3 +1,4 @@
+import type { BlockSide } from '../lane-routing/channel-graph.ts'
 import { looseId } from '../lane-routing/route-boxes.ts'
 import {
   type Edge,
@@ -55,7 +56,9 @@ const DEFAULT_MAX_GUTTER = 8
 // last round share lanes on the page.
 const WIDEN_ROUNDS = 2
 
-// Units of padding inside a container's left, right and bottom edges.
+// Units of padding inside a container's edges, below its label strip. A
+// folder's padding holds its ring of lanes (see lane-widening.ts) and grows
+// on each side to fit them.
 const PAD = 1
 // Units of street between neighbouring files. It never widens, so files keep
 // their places whatever imports change.
@@ -146,8 +149,8 @@ function layOut(
     if (node.kind === 'module' && blocks.length === 0) {
       const { sizes, height } = packFiles(node.id, kids)
       const width = (h: number) =>
-        Math.max(packFileCells(sizes, h - top - PAD).width, MIN_MODULE_CELLS) + 2 * PAD
-      return { w: width(height + top + PAD), h: height + top + PAD, fit: width }
+        Math.max(packFileCells(sizes, h - top - 2 * PAD).width, MIN_MODULE_CELLS) + 2 * PAD
+      return { w: width(height + top + 2 * PAD), h: height + top + 2 * PAD, fit: width }
     }
     const group = looseId(node.id)
     const ids = blocks.map((kid) => kid.id)
@@ -179,8 +182,20 @@ function layOut(
     })
     rows.set(node.id, packed.rows)
     placed.set(node.id, packed.placed)
-    const pad = node.kind === 'world' ? 0 : PAD
-    return { w: packed.width + 2 * pad, h: packed.height + top + pad }
+    const pad = padOf(node)
+    return { w: packed.width + pad.left + pad.right, h: packed.height + top + pad.top + pad.bottom }
+  }
+
+  // A container's padding on each side.
+  const padOf = (node: WorldNode): Record<BlockSide, number> => {
+    if (node.kind === 'world') return { top: 0, right: 0, bottom: 0, left: 0 }
+    const ring = widening.get(node.id)?.ring
+    return {
+      top: PAD + (ring?.top ?? 0),
+      right: PAD + (ring?.right ?? 0),
+      bottom: PAD + (ring?.bottom ?? 0),
+      left: PAD + (ring?.left ?? 0),
+    }
   }
 
   const rootSize = size(root)
@@ -205,22 +220,24 @@ function layOut(
     node.rect = rect
     const top = HEADER_UNITS[node.kind]
     if (node.kind === 'module' && !placed.has(node.id)) {
-      placeFiles(node.id, rect.x + PAD, rect.y + top, rect.h - top - PAD)
+      placeFiles(node.id, rect.x + PAD, rect.y + top + PAD, rect.h - top - 2 * PAD)
       return
     }
     if (node.kind === 'file') {
       for (const kid of children.get(node.id) ?? []) placeSymbol(kid, node, children)
       return
     }
-    const pad = node.kind === 'world' ? 0 : PAD
+    const pad = padOf(node)
+    const x = rect.x + pad.left
+    const y = rect.y + top + pad.top
     const kids = placed.get(node.id)
     for (const kid of children.get(node.id) ?? []) {
       if (kid.kind === 'file') continue
       const at = kids?.get(kid.id)
-      if (at) place(kid, { x: rect.x + pad + at.x, y: rect.y + top + at.y, w: at.w, h: at.h })
+      if (at) place(kid, { x: x + at.x, y: y + at.y, w: at.w, h: at.h })
     }
     const group = kids?.get(looseId(node.id))
-    if (group) placeFiles(looseId(node.id), rect.x + pad + group.x, rect.y + top + group.y, group.h)
+    if (group) placeFiles(looseId(node.id), x + group.x, y + group.y, group.h)
   }
   place(root, { x: 0, y: 0, w: rootSize.w, h: rootSize.h })
 }

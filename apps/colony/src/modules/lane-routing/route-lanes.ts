@@ -12,7 +12,9 @@ import {
 //
 // 1. Each link takes the shortest orthogonal path through the channels: along
 //    a channel, then across into the next one at a side, with a small cost per
-//    bend.
+//    bend. It stays inside the deepest open folder that holds both its ends,
+//    and leaves only the boxes that hold its importer: it never passes through
+//    a folder on its way to another.
 // 2. Channels are settled deepest first, so a channel's stems (the channels
 //    whose ends meet its sides, and the block sides beside it) already have
 //    their positions. Lanes are ordered by where each link enters and leaves,
@@ -23,9 +25,10 @@ import {
 //    where a stem arrives from across the channel.
 //
 // When a channel or block side has fewer whole-unit lanes than links, links
-// can share a lane (merge): first those that import the same block, then those
-// whose imported blocks share a folder, and so on up. Lanes that still do not
-// fit are spread evenly across the channel, apart but closer than a unit.
+// that import the same block can share a lane (merge); links to different
+// blocks never do, so lines in opposite directions never merge. Lanes that
+// still do not fit are spread evenly across the channel, apart but closer than
+// a unit.
 
 export interface Link {
   from: string
@@ -46,12 +49,9 @@ export interface LaneRouting {
 }
 
 export interface RouteLanesOptions {
-  // Whether links share a lane: never, or when a channel or block side has
-  // too few lanes, at the first merge level that fits.
+  // Whether links to the same block share a lane: never, or when a channel or
+  // block side has too few lanes.
   merge?: 'never' | 'whenFull'
-  // The key links share a lane under at a merge level (1, 2, ...), or
-  // undefined past the last level.
-  mergeKey?: (link: number, level: number) => string | undefined
 }
 
 // Path cost of one bend, in grid units.
@@ -88,7 +88,7 @@ export function countChannelLoad(graph: ChannelGraph, links: readonly Link[]): I
 export function routeLanes(
   graph: ChannelGraph,
   links: readonly Link[],
-  { merge = 'never', mergeKey }: RouteLanesOptions = {},
+  { merge = 'never' }: RouteLanesOptions = {},
 ): LaneRouting {
   const { channels, attachments } = graph
   // Per link: the attachments it crosses, first and last on block sides.
@@ -107,26 +107,23 @@ export function routeLanes(
   const pathOf = (pass: Pass) => paths[pass.link] as number[]
   const coordsOf = (pass: Pass) => coords[pass.link] as Float64Array
 
-  // The lane (unit) of each of a set of links, merging as needed to fit room.
+  // The lane (unit) of each of a set of links: links to one block share one
+  // when there is not room for all.
   const share = (list: readonly number[], room: number): { unit: number[]; count: number } => {
-    let best = { unit: list.map((_, i) => i), count: list.length }
-    if (merge === 'never' || !mergeKey) return best
-    for (let level = 1; best.count > room; level++) {
-      const keys = list.map((link) => mergeKey(link, level))
-      const ids = new Map<string, number>()
-      const unit: number[] = []
-      for (const key of keys) {
-        if (key === undefined) return best
-        let id = ids.get(key)
-        if (id === undefined) {
-          id = ids.size
-          ids.set(key, id)
-        }
-        unit.push(id)
-      }
-      best = { unit, count: ids.size }
+    if (merge === 'never' || list.length <= room) {
+      return { unit: list.map((_, i) => i), count: list.length }
     }
-    return best
+    const ids = new Map<string, number>()
+    const unit = list.map((link) => {
+      const target = (links[link] as Link).to
+      let id = ids.get(target)
+      if (id === undefined) {
+        id = ids.size
+        ids.set(target, id)
+      }
+      return id
+    })
+    return { unit, count: ids.size }
   }
 
   const load = new Int32Array(channels.length)
@@ -427,6 +424,10 @@ interface SearchGraph {
   offsets: Int32Array
   targets: Int32Array
   costs: Float64Array
+  // Per node, the span in the box tree (see BoxNest) of the container its
+  // channel was cut in, or -1 for a block side.
+  nodeOrder: Int32Array
+  nodeEnd: Int32Array
 }
 
 // Each channel graph's search graph, built on first use: a level routes the
@@ -484,34 +485,70 @@ function buildSearchGraph(graph: ChannelGraph): SearchGraph {
     add(a, b, cost)
     add(b, a, cost)
   }
-  return { offsets, targets, costs }
+  const nodeOrder = new Int32Array(nodes)
+  const nodeEnd = new Int32Array(nodes)
+  const put = (node: number, c: number | undefined) => {
+    const nest = c === undefined ? undefined : graph.nest.get((channels[c] as Channel).container)
+    nodeOrder[node] = nest ? nest.order : -1
+    nodeEnd[node] = nest ? nest.end : -1
+  }
+  attachments.forEach((a, i) => {
+    put(2 * i, a.bar)
+    put(2 * i + 1, a.channel)
+  })
+  return { offsets, targets, costs, nodeOrder, nodeEnd }
 }
 
-// Shortest paths, one search per importing block. Each path lists the
-// attachments it crosses, from a side of `from` to a side of `to`.
+// The deepest open folder that holds both blocks, as the span of the box tree
+// inside it, or the whole tree.
+function scopeOf(nest: ChannelGraph['nest'], from: string, to: string): [number, number] {
+  const above = new Set<string>()
+  for (let id: string | undefined = from; id !== undefined; id = nest.get(id)?.parent) above.add(id)
+  let id = nest.get(to)?.parent
+  while (id !== undefined && !above.has(id)) id = nest.get(id)?.parent
+  for (let up = id; up !== undefined; up = nest.get(up)?.parent) {
+    const entry = nest.get(up)
+    if (entry?.isScope) return [entry.order, entry.end]
+  }
+  return [0, Number.MAX_SAFE_INTEGER]
+}
+
+// Shortest paths, one search per importing block and scope. Each path lists
+// the attachments it crosses, from a side of `from` to a side of `to`, through
+// channels inside the deepest open folder that holds both, leaving only boxes
+// that hold `from`. A link with no such path may go anywhere.
 function findPaths(
   graph: ChannelGraph,
   search: SearchGraph,
   links: readonly Link[],
 ): (number[] | undefined)[] {
   const { attachments, blockAttachments } = graph
-  const { offsets, targets, costs } = search
+  const { offsets, targets, costs, nodeOrder, nodeEnd } = search
   const nodes = offsets.length - 1
   const dist = new Float64Array(nodes)
   const prev = new Int32Array(nodes)
   const seen = new Int32Array(nodes)
   const heap = new CostHeap()
   let round = 0
-  const bySource = new Map<string, number[]>()
-  links.forEach((link, i) => {
-    const list = bySource.get(link.from)
-    if (list) list.push(i)
-    else bySource.set(link.from, [i])
-  })
   const paths: (number[] | undefined)[] = links.map(() => undefined)
-  for (const [source, list] of bySource) {
+  const searches = new Map<string, { source: string; scope: [number, number]; list: number[] }>()
+  links.forEach((link, i) => {
+    const scope = scopeOf(graph.nest, link.from, link.to)
+    const key = `${link.from}\n${scope[0]}`
+    const found = searches.get(key)
+    if (found) found.list.push(i)
+    else searches.set(key, { source: link.from, scope, list: [i] })
+  })
+  const anywhere: number[] = []
+  const run = (
+    source: string,
+    [low, high]: [number, number],
+    list: readonly number[],
+    isFree = false,
+  ) => {
     const starts = blockAttachments.get(source)
-    if (!starts || starts.length === 0) continue
+    if (!starts || starts.length === 0) return
+    const at = graph.nest.get(source)?.order ?? -1
     // Links still looking for a path, by target.
     const wanted = new Map<string, number[]>()
     for (const i of list) {
@@ -556,6 +593,14 @@ function findPaths(
       const base = dist[node] as number
       for (let e = offsets[node] as number; e < (offsets[node + 1] as number); e++) {
         const next = targets[e] as number
+        const order = nodeOrder[next] as number
+        if (!isFree && order >= 0) {
+          if (order < low || order >= high) continue
+          // Out of a box that does not hold the importer.
+          const from = nodeOrder[node] as number
+          const end = nodeEnd[node] as number
+          if (from >= 0 && (order < from || order >= end) && (at < from || at >= end)) continue
+        }
         const cost = base + (costs[e] as number)
         if (seen[next] === round && cost >= (dist[next] as number)) continue
         seen[next] = round
@@ -565,6 +610,19 @@ function findPaths(
       }
     }
   }
+  for (const { source, scope, list } of searches.values()) {
+    run(source, scope, list)
+    for (const i of list) if (!paths[i]) anywhere.push(i)
+  }
+  // Grouped by source again, so each still costs one search.
+  const bySource = new Map<string, number[]>()
+  for (const i of anywhere) {
+    const source = (links[i] as Link).from
+    const list = bySource.get(source)
+    if (list) list.push(i)
+    else bySource.set(source, [i])
+  }
+  for (const [source, list] of bySource) run(source, [0, Number.MAX_SAFE_INTEGER], list, true)
   return paths
 }
 

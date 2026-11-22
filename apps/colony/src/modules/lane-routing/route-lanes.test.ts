@@ -7,19 +7,19 @@ function block(id: string, x: number, y: number, w: number, h: number): RouteBox
   return { id, rect: { x, y, w, h } }
 }
 
-// Two packages side by side, each with a 2-unit label strip, 1-unit padding
-// and two rows of blocks `gutter` units apart.
-function makeWorld(gutter: number): { root: RouteBox; blocks: RouteBox[] } {
+// Two packages side by side, each with a 2-unit label strip, `pad` units of
+// padding left, right and below, and two rows of blocks `gutter` units apart.
+function makeWorld(gutter: number, pad = 1): { root: RouteBox; blocks: RouteBox[] } {
   const g = gutter
   const pkg = (id: string, x: number) => {
     const kids = [
-      block(`${id}/a`, x + 1, 2, 5, 4),
-      block(`${id}/b`, x + 1 + 5 + g, 2, 4, 4),
-      block(`${id}/c`, x + 1, 2 + 4 + g, 3, 3),
-      block(`${id}/d`, x + 1 + 3 + g, 2 + 4 + g, 6, 5),
+      block(`${id}/a`, x + pad, 2, 5, 4),
+      block(`${id}/b`, x + pad + 5 + g, 2, 4, 4),
+      block(`${id}/c`, x + pad, 2 + 4 + g, 3, 3),
+      block(`${id}/d`, x + pad + 3 + g, 2 + 4 + g, 6, 5),
     ]
-    const w = 1 + Math.max(5 + g + 4, 3 + g + 6) + 1
-    const h = 2 + 4 + g + 5 + 1
+    const w = pad + Math.max(5 + g + 4, 3 + g + 6) + pad
+    const h = 2 + 4 + g + 5 + pad
     const box: RouteBox = { id, rect: { x, y: 0, w, h }, header: 2, kids }
     return { box, kids, w, h }
   }
@@ -154,17 +154,19 @@ describe('routeLanes', () => {
   })
 
   it('puts lanes on whole units one apart and never overlaps them when there is room', () => {
-    const { root } = makeWorld(40)
-    // A few links per block, so every block side has a port for each.
+    const { root } = makeWorld(40, 6)
+    // A few links per block, so every block side has a port for each, and
+    // across the packages one way only: two lines that swap places between
+    // doors facing each other across a gutter cannot help overlapping there.
     const pairs = [
       ['p/a', 'p/d'],
       ['p/b', 'q/c'],
-      ['q/a', 'p/c'],
-      ['q/d', 'p/b'],
       ['p/c', 'q/b'],
-      ['q/b', 'p/a'],
       ['p/d', 'q/a'],
-      ['q/c', 'p/d'],
+      ['q/a', 'q/d'],
+      ['q/c', 'q/b'],
+      ['p/c', 'p/b'],
+      ['q/b', 'q/d'],
     ]
     const routing = routeLanes(
       buildChannelGraph(root),
@@ -177,21 +179,53 @@ describe('routeLanes', () => {
     expect(countOverlaps(listSegments(routing))).toBe(0)
   })
 
-  it('merges links into shared lanes when a gutter is full', () => {
+  it('merges only links to the same block when a gutter is full', () => {
     const { root, blocks } = makeWorld(2)
     const graph = buildChannelGraph(root)
     const links = linkEveryPair(blocks)
-    // Level 1: the imported block; level 2: everything.
-    const mergeKey = (link: number, level: number) =>
-      level === 1 ? (links[link] as Link).to : level === 2 ? 'all' : undefined
-    const routing = routeLanes(graph, links, { merge: 'whenFull', mergeKey })
-    graph.channels.forEach((channel, c) => {
-      if ((routing.load[c] as number) > 0) {
-        expect(routing.lanes[c]).toBeLessThanOrEqual(Math.max(1, laneCapacity(channel)))
-      }
-    })
+    const routing = routeLanes(graph, links, { merge: 'whenFull' })
     expect(routing.merged).toBeGreaterThan(0)
+    // Lanes past the room left pack closer instead.
+    expect(routing.crowded).toBeGreaterThan(0)
+    // The blocks imported through each channel: a full channel takes a lane
+    // per imported block, never fewer.
+    const targets: Set<string>[] = graph.channels.map(() => new Set())
+    for (const link of links) {
+      countChannelLoad(graph, [link]).forEach((n, c) => {
+        if (n > 0) targets[c]?.add(link.to)
+      })
+    }
+    graph.channels.forEach((channel, c) => {
+      const load = routing.load[c] as number
+      const want = load > laneCapacity(channel) ? (targets[c] as Set<string>).size : load
+      expect(routing.lanes[c], `channel ${c}`).toBe(want)
+    })
     expect(countBlockHits(listSegments(routing), blocks)).toBe(0)
+  })
+
+  it('never merges a link with its reverse, even with no room', () => {
+    const a = block('a', 0, 0, 4, 4)
+    const b = block('b', 0, 5, 4, 4)
+    const root: RouteBox = {
+      id: 'world',
+      rect: { x: 0, y: 0, w: 4, h: 9 },
+      header: 0,
+      kids: [a, b],
+    }
+    const routing = routeLanes(
+      buildChannelGraph(root),
+      [
+        { from: 'a', to: 'b' },
+        { from: 'b', to: 'a' },
+      ],
+      { merge: 'whenFull' },
+    )
+    expect(routing.merged).toBe(0)
+    expect(routing.crowded).toBeGreaterThan(0)
+    const [ab, ba] = routing.points as [Float64Array, Float64Array]
+    // Both cross the 1-unit gutter straight down, apart.
+    expect(ab[0]).not.toBe(ba[0])
+    expect(countOverlaps(listSegments(routing))).toBe(0)
   })
 
   it('goes round a block that fills a whole row', () => {
@@ -214,5 +248,73 @@ describe('routeLanes', () => {
     const graph = buildChannelGraph(root)
     const links = linkEveryPair(blocks)
     expect([...countChannelLoad(graph, links)]).toEqual([...routeLanes(graph, links).load])
+  })
+
+  it('keeps links between the boxes of one folder inside it', () => {
+    const { root, blocks } = makeWorld(2, 2)
+    const p = root.kids?.[0] as RouteBox
+    const inP = blocks.filter((b) => b.id.startsWith('p/'))
+    const routing = routeLanes(buildChannelGraph(root), linkEveryPair(inP))
+    const { x, y, w, h } = p.rect
+    for (const points of routing.points) {
+      expect(points).toBeDefined()
+      for (let k = 0; k < (points?.length ?? 0); k += 2) {
+        const px = points?.[k] as number
+        const py = points?.[k + 1] as number
+        // Inside the border, below the label strip.
+        expect(px > x && px < x + w && py > y + 2 && py < y + h, `${px},${py}`).toBe(true)
+      }
+    }
+  })
+
+  it('stays inside the folder even when going out over its label is shorter', () => {
+    // A tall folder: a wall flush under the label strip parts a from b, so
+    // inside, the way round is down to the bottom of the ring and back up.
+    const kids = [
+      block('s/a', 1, 1, 4, 4),
+      block('s/a2', 1, 7, 4, 32),
+      block('s/wall', 7, 1, 2, 38),
+      block('s/b', 11, 1, 4, 4),
+      block('s/b2', 11, 7, 4, 32),
+    ]
+    const folder: RouteBox = { id: 's', rect: { x: 0, y: 0, w: 16, h: 40 }, header: 1, kids }
+    const root: RouteBox = { id: 'world', rect: folder.rect, header: 0, kids: [folder] }
+    const routing = routeLanes(buildChannelGraph(root), [{ from: 's/a', to: 's/b' }])
+    const points = routing.points[0] as Float64Array
+    expect(points).toBeDefined()
+    for (let k = 0; k < points.length; k += 2) {
+      const x = points[k] as number
+      const y = points[k + 1] as number
+      expect(x > 0 && x < 16 && y > 0 && y < 40, `${x},${y}`).toBe(true)
+    }
+  })
+
+  it('never passes through a folder on the way to another', () => {
+    // Three folders in a row; the middle one has a gutter straight across it,
+    // with doors at both ends, that would be the shortest way from l to r.
+    const folder = (id: string, x: number): RouteBox => ({
+      id,
+      rect: { x, y: 0, w: 8, h: 12 },
+      header: 1,
+      kids: [block(`${id}/top`, x + 2, 3, 4, 3), block(`${id}/bottom`, x + 2, 8, 4, 2)],
+    })
+    const l = folder('l', 0)
+    const m = folder('m', 10)
+    const r = folder('r', 20)
+    const root: RouteBox = {
+      id: 'world',
+      rect: { x: 0, y: 0, w: 28, h: 12 },
+      header: 0,
+      kids: [l, m, r],
+    }
+    const routing = routeLanes(buildChannelGraph(root), [{ from: 'l/top', to: 'r/top' }])
+    const points = routing.points[0] as Float64Array
+    expect(points).toBeDefined()
+    for (const s of listSegments(routing)) {
+      const crossesM = s.isHorizontal
+        ? s.across > 0 && s.across < 12 && s.to > 10 && s.from < 18
+        : s.across > 10 && s.across < 18
+      expect(crossesM, JSON.stringify(s)).toBe(false)
+    }
   })
 })
