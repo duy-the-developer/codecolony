@@ -41,7 +41,8 @@ export function App() {
   useSceneRevision(scene)
   const projects = useProjects()
   const [preferences, updatePreferences] = useShellPreferences()
-  const [selectedId, setSelectedId] = useState<string>()
+  // In the order they were added; the last is the one the panels follow.
+  const [selectedIds, setSelectedIds] = useState<readonly string[]>([])
   const [, setEdgeVersion] = useState(0)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   // Overlays start off: the map shows only blocks until one is switched on.
@@ -74,7 +75,11 @@ export function App() {
   // The last width of each panel while open: what expanding returns to.
   const widthsPx = useRef({ left: preferences.left.widthPx, right: preferences.right.widthPx })
 
-  const selected = selectedId ? scene?.byId.get(selectedId) : undefined
+  const selection = useMemo(
+    () => selectedIds.flatMap((id) => scene?.byId.get(id) ?? []),
+    [selectedIds, scene],
+  )
+  const selected = selection.at(-1)
   const selectedColonist = placed.find((p) => p.colonist.id === selectedColonistId)
 
   const updatePanel = useCallback(
@@ -259,7 +264,7 @@ export function App() {
             handleRef={mapRef}
             overlays={overlays}
             colonists={placed}
-            onSelect={setSelectedId}
+            onSelect={setSelectedIds}
             onSelectColonist={handleSelectColonist}
             onOpen={showFile}
           >
@@ -298,6 +303,7 @@ export function App() {
               tab={preferences.right.tab}
               scene={scene}
               selected={selected}
+              selection={selection}
               colonist={selectedColonist}
               canOpenTerminal={workers.some(
                 (worker) => worker.paneId === selectedColonist?.colonist.paneId,

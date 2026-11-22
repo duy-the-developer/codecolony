@@ -1,8 +1,9 @@
 import type { Scene } from '../scene/scene.ts'
-import { hueOf, SELECTION_COLOR, SYMBOL_COLORS } from '../theme/palette.ts'
+import { HOVER_COLOR, hueOf, SELECTION_COLOR, SYMBOL_COLORS } from '../theme/palette.ts'
 import { HEADER_UNITS, type WorldNode } from '../world/world-types.ts'
 import type { Camera, Viewport } from './camera.ts'
 import type { ColonistLayer } from './colonist-layer.ts'
+import type { Focus } from './focus.ts'
 import type { LaneFrame, LaneLayer } from './lanes/lane-layer.ts'
 import type { LaneRoutes } from './lanes/lane-world.ts'
 import { MIN_LINK_ALPHA } from './link-cache.ts'
@@ -26,11 +27,9 @@ export interface Drawn {
 }
 
 export interface RenderState {
-  selected: string | undefined
-  // The hovered node, else the selected one: its connections stand out.
-  focus: string | undefined
-  // The focus and everything inside it.
-  focusSubtree: ReadonlySet<string>
+  selected: ReadonlySet<string>
+  // The selected nodes, else the hovered one: their connections stand out.
+  focus: Focus
   overlays: ReadonlySet<OverlayId>
   // Routes the Dependency overlay's lanes; without it none are drawn.
   lanes?: LaneLayer
@@ -90,7 +89,6 @@ export function render(
     camera.scale,
     holders,
     state.focus,
-    state.focusSubtree,
     state.overlays.has('dependency'),
   )
   if (frame) drawLanes(ctx, frame, camera, view)
@@ -98,23 +96,24 @@ export function render(
   state.colonists?.drawChanges(ctx, scene, camera, drawn)
   ctx.globalAlpha = 1
   ctx.setLineDash([])
-  // The nodes at the other end of the focus's imports, then the focus.
+  // The nodes at the other end of the focus's imports, then the hovered
+  // node, then the selection.
   if (frame && frame.partners.size > 0) {
     ctx.strokeStyle = DEPENDENCY_COLOR
     ctx.lineWidth = 1.5
     for (const item of drawn) if (frame.partners.has(item.node.id)) outline(ctx, item, 1)
   }
-  const focus = state.focus !== state.selected && drawn.find((d) => d.node.id === state.focus)
+  const hovered = state.selected.size === 0 ? state.focus.ids[0] : undefined
+  const focus = hovered !== undefined && drawn.find((d) => d.node.id === hovered)
   if (focus) {
-    ctx.strokeStyle = 'rgba(228, 237, 246, 0.85)'
+    ctx.strokeStyle = HOVER_COLOR
     ctx.lineWidth = 1.5
     outline(ctx, focus, 1)
   }
-  const selected = drawn.find((d) => d.node.id === state.selected)
-  if (selected) {
+  if (state.selected.size > 0) {
     ctx.strokeStyle = SELECTION_COLOR
     ctx.lineWidth = 2
-    outline(ctx, selected, 0.5)
+    for (const item of drawn) if (state.selected.has(item.node.id)) outline(ctx, item, 0.5)
   }
   return drawn
 }

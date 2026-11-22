@@ -1,20 +1,24 @@
 import { FileCodeIcon } from 'lucide-react'
 import { useState } from 'react'
+import { isMacPlatform, toggleKeyLabel } from '../../../modules/map/selection.ts'
 import {
   describeEdgeRow,
   type EdgeSection,
   listEdgeSections,
 } from '../../../modules/scene/edge-sections.ts'
 import type { Scene } from '../../../modules/scene/scene.ts'
-import { EDGE_COLORS } from '../../../modules/theme/palette.ts'
+import { buildSelectionSummary } from '../../../modules/scene/selection-summary.ts'
+import { EDGE_COLORS, SELECTION_COLOR } from '../../../modules/theme/palette.ts'
 import { PROVEN_PROVENANCES } from '../../../modules/world/facts.ts'
 import type { Provenance, WorldNode } from '../../../modules/world/world-types.ts'
 import { Button } from '../ui/button.tsx'
 import { cn } from '../ui/class-names.ts'
+import { Kbd } from '../ui/kbd.tsx'
 
 export interface InspectorProps {
   scene: Scene | undefined
-  selected: WorldNode | undefined
+  // The selected nodes, in the order they were added.
+  selection: readonly WorldNode[]
   onPick(id: string): void
   // Shows the node's file in the File tab.
   onOpen(id: string): void
@@ -25,16 +29,39 @@ export interface InspectorProps {
 const MAX_ROWS = 14
 
 // The selected node: its facts, and every dependency in or out of it with
-// how it was proven.
-export function Inspector({ scene, selected, onPick, onOpen, onTraceCalls }: InspectorProps) {
-  if (!scene || !selected) {
+// how it was proven. Several selected nodes show combined.
+export function Inspector({ scene, selection, onPick, onOpen, onTraceCalls }: InspectorProps) {
+  const [first] = selection
+  if (!scene || !first) {
     return (
       <p className="m-3 rounded-md border border-dashed p-4 text-center text-muted-foreground">
         Click anything on the map to inspect it.
       </p>
     )
   }
-  const node = selected
+  if (selection.length > 1) {
+    return <CombinedDetails scene={scene} selection={selection} onPick={onPick} />
+  }
+  return (
+    <NodeDetails
+      scene={scene}
+      node={first}
+      onPick={onPick}
+      onOpen={onOpen}
+      onTraceCalls={onTraceCalls}
+    />
+  )
+}
+
+interface NodeDetailsProps {
+  scene: Scene
+  node: WorldNode
+  onPick(id: string): void
+  onOpen(id: string): void
+  onTraceCalls(file: WorldNode): Promise<void>
+}
+
+function NodeDetails({ scene, node, onPick, onOpen, onTraceCalls }: NodeDetailsProps) {
   const kind = node.kind === 'symbol' ? (node.symbolKind ?? 'symbol') : node.kind
   const repo = scene.repoOf(node)
   const subtree = scene.listSubtree(node)
@@ -102,6 +129,76 @@ export function Inspector({ scene, selected, onPick, onOpen, onTraceCalls }: Ins
       ))}
 
       {canTrace && <TraceButton key={node.id} file={node} onTraceCalls={onTraceCalls} />}
+    </div>
+  )
+}
+
+interface CombinedDetailsProps {
+  scene: Scene
+  selection: readonly WorldNode[]
+  onPick(id: string): void
+}
+
+// Several selected nodes: what they are, how they connect to each other, and
+// every dependency in or out of them together.
+function CombinedDetails({ scene, selection, onPick }: CombinedDetailsProps) {
+  const summary = buildSelectionSummary(scene, selection)
+  const facts: [string, number][] = [
+    ['Files', summary.files],
+    ['Imports between them', summary.importsBetween],
+    ['Imports out', summary.importsOut],
+    ['Imported by others', summary.importedBy],
+  ]
+  return (
+    <div className="space-y-4 p-3 text-[13px]">
+      <div>
+        <p className="font-semibold text-[11px] text-primary uppercase tracking-wider">
+          {selection.length} selected
+        </p>
+        <h3 className="font-semibold text-base">Combined</h3>
+        <p className="mt-1 flex flex-wrap items-center gap-1 text-muted-foreground text-xs">
+          <Kbd>{toggleKeyLabel(isMacPlatform())}</Kbd> click adds or removes ·<Kbd>Esc</Kbd>
+          clears
+        </p>
+      </div>
+      <ul aria-label="Selected">
+        {selection.map((node) => (
+          <li key={node.id}>
+            <button
+              type="button"
+              onClick={() => onPick(node.id)}
+              className="flex w-full cursor-pointer items-center gap-2 rounded px-1 py-0.5 text-left hover:bg-accent"
+            >
+              <span
+                className="size-2.5 shrink-0 rounded-full border-2"
+                style={{ borderColor: SELECTION_COLOR }}
+              />
+              <span className="shrink-0 text-muted-foreground">
+                {node.kind === 'symbol' ? (node.symbolKind ?? 'symbol') : node.kind}
+              </span>
+              <span className="min-w-0 flex-1 break-all font-mono text-xs">
+                {node.path ?? node.name}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-0.5">
+        {facts.map(([label, value]) => (
+          <div key={label} className="contents">
+            <dt className="text-muted-foreground">{label}</dt>
+            <dd>{value.toLocaleString()}</dd>
+          </div>
+        ))}
+      </dl>
+      {summary.sections.map((section) => (
+        <EdgeList
+          key={`${section.kind}|${section.direction}`}
+          scene={scene}
+          section={section}
+          onPick={onPick}
+        />
+      ))}
     </div>
   )
 }

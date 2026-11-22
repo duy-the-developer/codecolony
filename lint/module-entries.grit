@@ -49,7 +49,8 @@ or {
       $file <: or {
         "map-controller.ts",
         "overlays.ts",
-        "camera.ts"
+        "camera.ts",
+        "selection.ts"
       }
     },
     and { $module <: "preferences", $file <: "shell-preferences.ts" },

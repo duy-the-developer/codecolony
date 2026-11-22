@@ -67,21 +67,22 @@ See `codecolony.config.example.json`.
 
 The page has a header (project picker, search, map controls), the map, and a side panel on each side. The left panel holds the Build queue, the Legend and a Files tree; the right panel holds the Terminal, the File tab (the selected file, read only, as committed at the indexed commit) and the Inspector. Drag a panel's edge to resize it; widths, collapsed panels and the open tabs are remembered in the browser.
 
-| Input                    | Action                                                                                                                               |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
-| Scroll, pinch, `+` / `-` | Zoom smoothly at the cursor; detail fades in and out as you zoom                                                                     |
-| Drag, arrow keys         | Pan                                                                                                                                  |
-| Hover                    | Show the dependencies of the module, file or closed block under the pointer; with an overlay on, highlight them                      |
-| Click                    | Select and keep the highlight; the Inspector lists facts, then imports, calls and HTTP requests in and out, with how each was proven |
-| Double-click             | Fly into a block or file; on a file or symbol, also show it in the File tab                                                          |
-| `Home`                   | See everything                                                                                                                       |
-| `Esc`                    | Clear the selection                                                                                                                  |
-| `⌘K` / `Ctrl+K`          | Search files and symbols by name; Enter flies to the result and selects it, Shift+Enter opens its file                               |
-| `[` / `]`                | Collapse or expand the left / right panel                                                                                            |
+| Input                    | Action                                                                                                                                                                    |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Scroll, pinch, `+` / `-` | Zoom smoothly at the cursor; detail fades in and out as you zoom                                                                                                          |
+| Drag, arrow keys         | Pan                                                                                                                                                                       |
+| Hover                    | Show the dependencies of the module, file or closed block under the pointer; with an overlay on, highlight them. While something is selected, only show its name and kind |
+| Click                    | Select and keep the highlight; the Inspector lists facts, then imports, calls and HTTP requests in and out, with how each was proven. Click empty map to clear            |
+| `⌘`-click / `Ctrl`-click | Add a block or file to the selection, or take it out; the connections of everything selected show together and the Inspector sums them up                                 |
+| Double-click             | Fly into a block or file; on a file or symbol, also show it in the File tab                                                                                               |
+| `Home`                   | See everything                                                                                                                                                            |
+| `Esc`                    | Clear the selection                                                                                                                                                       |
+| `⌘K` / `Ctrl+K`          | Search files and symbols by name; Enter flies to the result and selects it, Shift+Enter opens its file                                                                    |
+| `[` / `]`                | Collapse or expand the left / right panel                                                                                                                                 |
 
 By default the map shows only module blocks and file squares. Overlays draw connections over it, switched on from Overlays in the header; Dependency, the first, draws imports as arrows from the importing module to the imported one. The arrows run through the gutters between blocks, never across them, in lanes on the grid one unit apart, so they never overlap and only cross at right angles. Gutters widen, up to 8 units, to fit their lanes; in a gutter that is still full, arrows to the same module share a lane. Zoomed out, arrows join at the folders, packages and repositories you can see.
 
-With no overlay on, hovering a module or file shows its dependencies; with one on, all of them show and hovering highlights the module's own. The Inspector lists connections as Imports / Imported by, Calls / Called by, and HTTP requests / HTTP routes served, by route, with how each was proven. "Trace calls with the language server" proves the calls of a file's functions, including method calls the parser cannot resolve.
+With no overlay on, hovering a module or file shows its dependencies; with one on, all of them show and hovering highlights the module's own. Once something is selected, hovering leaves its highlight alone and only shows the name and kind of the block under the pointer, so you can pan along its connections; `⌘`-click (`Ctrl`-click off a Mac) selects several at once. The Inspector lists connections as Imports / Imported by, Calls / Called by, and HTTP requests / HTTP routes served, by route, with how each was proven. "Trace calls with the language server" proves the calls of a file's functions, including method calls the parser cannot resolve.
 
 ### Colonists
 

@@ -3,18 +3,38 @@ import type { Scene } from '../scene/scene.ts'
 import type { WorldNode } from '../world/world-types.ts'
 import { Camera, type Viewport } from './camera.ts'
 import { ColonistLayer } from './colonist-layer.ts'
+import { buildFocus, type Focus, NO_FOCUS } from './focus.ts'
 import { LaneLayer } from './lanes/lane-layer.ts'
 import { createLaneRouter } from './lanes/lane-router.ts'
 import { FILE_OPEN } from './lod.ts'
 import type { OverlayId } from './overlays.ts'
 import { type Drawn, hitTest, hoverTarget, render } from './render.ts'
+import {
+  buildSelection,
+  isMacPlatform,
+  isToggleClick,
+  listFocusIds,
+  type SelectMode,
+  sameSelection,
+} from './selection.ts'
 
 // The map: one canvas, drawn imperatively. React owns the page around it and
 // talks to it through this handle; React never renders map nodes.
 
+// The node under the pointer while something is selected, for its tooltip;
+// x and y are relative to the canvas.
+export interface MapHover {
+  node: WorldNode
+  x: number
+  y: number
+}
+
 export interface MapControllerOptions {
-  // A node was selected or the selection was cleared, by the map or a caller.
-  onSelect(id: string | undefined): void
+  // The selection changed, by the map or a caller: the selected ids in the
+  // order they were added, empty when cleared.
+  onSelect(ids: readonly string[]): void
+  // The pointer moved onto or off a node while something is selected.
+  onHover(hover: MapHover | undefined): void
   // After each frame, for the zoom readout.
   onDraw(camera: Camera): void
   // A file or symbol was double-clicked: show its file.
@@ -28,7 +48,7 @@ export interface MapControllerOptions {
 
 export interface MapHandle {
   setScene(scene: Scene): void
-  // Selects a node (or clears the selection) and, with fly, frames it.
+  // Selects only this node (or clears the selection) and, with fly, frames it.
   select(id: string | undefined, fly?: boolean): void
   // The overlays drawn over the map; none by default.
   setOverlays(overlays: ReadonlySet<OverlayId>): void
@@ -65,14 +85,17 @@ export function createMapController(
   const camera = new Camera()
   let scene: Scene | undefined
   let drawn: Drawn[] = []
-  let selected: string | undefined
+  let selected: readonly string[] = []
+  let selectedSet: ReadonlySet<string> = new Set()
+  // Grows with each selection change, so a selection that waits for symbols
+  // gives way to a newer one.
+  let selection = 0
   let hovered: string | undefined
+  let tooltip: MapHover | undefined
   let overlays: ReadonlySet<OverlayId> = new Set()
-  // The hovered node, else the selected one, and its subtree.
-  let focus: { id: string | undefined; subtree: ReadonlySet<string> } = {
-    id: undefined,
-    subtree: new Set(),
-  }
+  // The selected nodes, else the hovered one, with their subtrees.
+  let focus: Focus = NO_FOCUS
+  const isMac = isMacPlatform()
   const router = createLaneRouter()
   let lanes: LaneLayer | undefined
   let view: Viewport = { width: 0, height: 0 }
@@ -88,9 +111,8 @@ export function createMapController(
       frame = undefined
       if (!scene) return
       drawn = render(ctx, scene, camera, view, {
-        selected,
-        focus: focus.id,
-        focusSubtree: focus.subtree,
+        selected: selectedSet,
+        focus,
         overlays,
         colonists,
         ...(lanes ? { lanes } : {}),
@@ -151,37 +173,64 @@ export function createMapController(
     })
   }
 
-  // Points the focus at the hovered node, else the selected one.
+  // Points the focus at the selected nodes, else the hovered one.
   function updateFocus(): void {
-    const id = hovered ?? selected
-    const node = id ? scene?.byId.get(id) : undefined
-    if (node?.id === focus.id) return
-    focus = { id: node?.id, subtree: node && scene ? scene.listSubtree(node) : new Set() }
+    const ids = listFocusIds(selected, hovered)
+    if (ids.join('\n') === focus.key) return
+    focus = scene ? buildFocus(scene, ids) : NO_FOCUS
     requestDraw()
   }
 
-  function hover(id: string | undefined): void {
-    if (id === hovered) return
-    hovered = id
+  // target: what the pointer puts in focus while nothing is selected; tip:
+  // what it names in the tooltip while something is.
+  function hover(target: string | undefined, tip?: MapHover): void {
+    showTooltip(selected.length > 0 ? tip : undefined)
+    if (target === hovered) return
+    hovered = target
     updateFocus()
   }
 
+  function showTooltip(next: MapHover | undefined): void {
+    if (!next && !tooltip) return
+    tooltip = next
+    options.onHover(next)
+  }
+
   function select(id: string | undefined, fly = false): void {
-    const node = id ? scene?.byId.get(id) : undefined
-    // A symbol whose file's symbols are not loaded yet: load, then select.
-    if (id && !node && scene?.fileIdOf(id)) {
-      const current = scene
-      void current.ensureNode(id).then((loaded) => {
-        if (scene !== current) return
-        if (loaded) select(id, fly)
-        else if (selected === id) select(undefined)
+    selectIds(buildSelection(selected, id, 'replace'), fly ? id : undefined)
+  }
+
+  function clickNode(id: string | undefined, mode: SelectMode): void {
+    selectIds(buildSelection(selected, id, mode))
+  }
+
+  // Makes these ids the selection, in order, and flies to `fly` if given.
+  // Symbols whose file's symbols are not loaded yet are loaded first; ids not
+  // on the map are dropped.
+  function selectIds(ids: readonly string[], fly?: string): void {
+    const current = scene
+    const request = ++selection
+    const missing = current
+      ? ids.filter((id) => !current.byId.has(id) && current.fileIdOf(id) !== undefined)
+      : []
+    if (current && missing.length > 0) {
+      void Promise.all(missing.map((id) => current.ensureNode(id))).then(() => {
+        if (scene !== current || request !== selection) return
+        selectIds(
+          ids.filter((id) => current.byId.has(id)),
+          fly,
+        )
       })
       return
     }
-    const changed = node?.id !== selected
-    selected = node?.id
-    if (node && colonists.selected) selectColonist(undefined)
-    if (node && fly) camera.flyTo(node.rect, view, requestDraw)
+    const next = [...new Set(ids.filter((id) => current?.byId.has(id)))]
+    const changed = !sameSelection(next, selected)
+    selected = next
+    selectedSet = new Set(next)
+    if (next.length > 0 && colonists.selected) selectColonist(undefined)
+    const target = fly ? current?.byId.get(fly) : undefined
+    if (target) camera.flyTo(target.rect, view, requestDraw)
+    if (next.length === 0) showTooltip(undefined)
     updateFocus()
     if (changed) options.onSelect(selected)
     requestDraw()
@@ -191,7 +240,7 @@ export function createMapController(
     const next = id && colonists.has(id) ? id : undefined
     const changed = next !== colonists.selected
     colonists.selected = next
-    if (next && selected) select(undefined)
+    if (next && selected.length > 0) select(undefined)
     const bounds = next ? colonists.boundsOf(next) : undefined
     if (bounds && fly) camera.flyTo(bounds, view, requestDraw)
     if (changed) options.onSelectColonist(next)
@@ -209,31 +258,34 @@ export function createMapController(
     scene = next
     lanes = new LaneLayer(next, router, requestDraw)
     // Node ids may be gone or reused: work the focus out afresh.
-    focus = { id: undefined, subtree: new Set() }
+    focus = NO_FOCUS
     unsubscribe?.()
     unsubscribe = next.subscribe(() => {
-      // New symbols can be the focus, or hold its edges.
-      focus = { id: undefined, subtree: new Set() }
+      // New symbols can be in focus, or hold its edges.
+      focus = NO_FOCUS
       updateFocus()
       requestDraw()
     })
     if (hovered && !next.byId.has(hovered)) hovered = undefined
-    // Keep the selection across world versions while its node still exists.
-    select(selected)
+    if (tooltip && next.byId.get(tooltip.node.id) !== tooltip.node) showTooltip(undefined)
+    // Keep the selection across world versions while its nodes still exist.
+    selectIds(selected)
     if (!first) return
     pendingFit = next
     if (view.width > 0 && view.height > 0) frameFirstScene(next)
   }
 
-  // Input: wheel and pinch zoom at the cursor, drag pans, click selects,
-  // double-click flies in (and opens a file), +/- and arrows work from the
-  // keyboard.
+  // Input: wheel and pinch zoom at the cursor, drag pans, click selects (with
+  // Cmd, or Ctrl off a Mac, it adds or removes), double-click flies in (and
+  // opens a file), +/- and arrows work from the keyboard, Escape clears.
   const onWheel = (event: WheelEvent) => {
     event.preventDefault()
     const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? view.height : 1
     // Trackpad pinches arrive as wheel events with ctrlKey set.
     const speed = event.ctrlKey ? 0.01 : 0.0015
     camera.zoomAt(event.offsetX, event.offsetY, Math.exp(-event.deltaY * unit * speed))
+    // The blocks move under the pointer; the next move names the new one.
+    showTooltip(undefined)
     requestDraw()
   }
 
@@ -243,6 +295,7 @@ export function createMapController(
     canvas.setPointerCapture(event.pointerId)
     pointers.set(event.pointerId, { x: event.offsetX, y: event.offsetY })
     dragDistance = 0
+    showTooltip(undefined)
   }
   const onPointerMove = (event: PointerEvent) => {
     const last = pointers.get(event.pointerId)
@@ -251,7 +304,12 @@ export function createMapController(
       hoverColonist(marker)
       const hit = marker ? undefined : hitTest(drawn, event.offsetX, event.offsetY)
       canvas.style.cursor = marker || hit ? 'pointer' : 'default'
-      hover(scene && hit ? hoverTarget(scene, hit) : undefined)
+      const target = scene && hit ? hoverTarget(scene, hit) : undefined
+      // A symbol names itself in the tooltip; other blocks only where they
+      // would put themselves in focus.
+      const node =
+        hit?.node.kind === 'symbol' ? hit.node : target ? scene?.byId.get(target) : undefined
+      hover(target, node && { node, x: event.offsetX, y: event.offsetY })
       return
     }
     const next = { x: event.offsetX, y: event.offsetY }
@@ -279,7 +337,8 @@ export function createMapController(
         selectColonist(marker)
         return
       }
-      select(hitTest(drawn, event.offsetX, event.offsetY)?.node.id)
+      const id = hitTest(drawn, event.offsetX, event.offsetY)?.node.id
+      clickNode(id, isToggleClick(event, isMac) ? 'toggle' : 'replace')
       if (colonists.selected) selectColonist(undefined)
     }
   }
@@ -297,7 +356,7 @@ export function createMapController(
       return
     }
     const hit = hitTest(drawn, event.offsetX, event.offsetY)
-    if (!hit) return
+    if (!hit || isToggleClick(event, isMac)) return
     select(hit.node.id, true)
     if (hit.node.kind === 'file' || hit.node.kind === 'symbol') options.onOpen(hit.node.id)
   }

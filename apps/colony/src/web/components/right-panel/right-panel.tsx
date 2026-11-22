@@ -18,8 +18,11 @@ const FileTab = lazy(() =>
 export interface RightPanelProps {
   tab: RightTab
   scene: Scene | undefined
+  // The node the File tab follows: the last one selected.
   selected: WorldNode | undefined
-  // The picked colonist: the Inspector shows its card instead of a node.
+  // Everything selected, for the Inspector.
+  selection: readonly WorldNode[]
+  // The picked colonist: the Inspector shows its card instead of the selection.
   colonist: PlacedColonist | undefined
   canOpenTerminal: boolean
   workerCount: number
@@ -38,6 +41,7 @@ export function RightPanel({
   tab,
   scene,
   selected,
+  selection,
   colonist,
   canOpenTerminal,
   workerCount,
@@ -96,7 +100,7 @@ export function RightPanel({
         ) : (
           <Inspector
             scene={scene}
-            selected={selected}
+            selection={selection}
             onPick={onPick}
             onOpen={onOpen}
             onTraceCalls={onTraceCalls}

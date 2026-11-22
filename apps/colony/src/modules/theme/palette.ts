@@ -21,6 +21,11 @@ export const EDGE_COLORS: Record<Edge['kind'], string> = {
   data: '#ef6f6c',
 }
 
+// Outlines around the selected nodes, and around the hovered one while
+// nothing is selected.
+export const SELECTION_COLOR = '#ffd166'
+export const HOVER_COLOR = 'rgba(228, 237, 246, 0.85)'
+
 const hues = new Map<string, number>()
 // A stable hue per module, so a module's files share a colour and
 // neighbouring modules tell apart at every zoom.
@@ -63,5 +68,3 @@ export const REMOVED_VEIL = 'rgba(8, 16, 26, 0.45)'
 // The colonist marker's chip and its hover label.
 export const COLONIST_CHIP = '#0b1724'
 export const COLONIST_INK = '#e4edf6'
-// The selected node's outline: solid, never dashed like a diff.
-export const SELECTION_COLOR = '#ffd166'

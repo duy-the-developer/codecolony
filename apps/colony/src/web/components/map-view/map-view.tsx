@@ -1,6 +1,10 @@
 import { type ReactNode, type RefObject, useEffect, useRef } from 'react'
 import type { Camera } from '../../../modules/map/camera.ts'
-import { createMapController, type MapHandle } from '../../../modules/map/map-controller.ts'
+import {
+  createMapController,
+  type MapHandle,
+  type MapHover,
+} from '../../../modules/map/map-controller.ts'
 import type { OverlayId } from '../../../modules/map/overlays.ts'
 import type { PlacedColonist } from '../../../modules/scene/colonist-places.ts'
 import type { Scene } from '../../../modules/scene/scene.ts'
@@ -11,7 +15,8 @@ export interface MapViewProps {
   handleRef: RefObject<MapHandle | null>
   overlays: ReadonlySet<OverlayId>
   colonists: readonly PlacedColonist[]
-  onSelect(id: string | undefined): void
+  // The selected ids, in the order they were added.
+  onSelect(ids: readonly string[]): void
   onSelectColonist(id: string | undefined): void
   // A file or symbol was double-clicked.
   onOpen(id: string): void
@@ -20,7 +25,8 @@ export interface MapViewProps {
 }
 
 // The canvas map. The renderer stays imperative; this component only owns its
-// lifetime and the zoom readout, which it writes directly every frame.
+// lifetime, the zoom readout and the hover tooltip, which it writes directly
+// every frame or pointer move.
 export function MapView({
   scene,
   handleRef,
@@ -34,6 +40,7 @@ export function MapView({
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const markerCanvasRef = useRef<HTMLCanvasElement>(null)
   const hudRef = useRef<HTMLDivElement>(null)
+  const tooltipRef = useRef<HTMLDivElement>(null)
   const sceneRef = useRef(scene)
   sceneRef.current = scene
   const overlaysRef = useRef(overlays)
@@ -51,8 +58,11 @@ export function MapView({
     const canvas = canvasRef.current
     if (!canvas) return
     const handle = createMapController(canvas, {
-      onSelect: (id) => onSelectRef.current(id),
+      onSelect: (ids) => onSelectRef.current(ids),
       onSelectColonist: (id) => onSelectColonistRef.current(id),
+      onHover: (hover) => {
+        if (tooltipRef.current) placeTooltip(tooltipRef.current, hover)
+      },
       onOpen: (id) => onOpenRef.current(id),
       ...(markerCanvasRef.current ? { markerCanvas: markerCanvasRef.current } : {}),
       onDraw: (camera) => {
@@ -105,9 +115,35 @@ export function MapView({
         aria-live="polite"
         className="pointer-events-none absolute bottom-3 left-3 max-w-[calc(100%-4.5rem)] rounded-md border bg-card/85 px-2 py-1 text-muted-foreground text-xs"
       />
+      <div
+        ref={tooltipRef}
+        role="tooltip"
+        hidden
+        className="pointer-events-none absolute top-0 left-0 max-w-64 truncate rounded-md border bg-popover px-2 py-1 text-popover-foreground text-xs shadow-md"
+      />
       {children}
     </div>
   )
+}
+
+// Pointer offset of the tooltip, in pixels.
+const TOOLTIP_GAP_PX = 14
+
+// Shows the hovered node's name and kind beside the pointer, on the side with
+// room.
+function placeTooltip(element: HTMLDivElement, hover: MapHover | undefined): void {
+  element.hidden = !hover
+  if (!hover) return
+  const { node } = hover
+  const kind = node.kind === 'symbol' ? (node.symbolKind ?? 'symbol') : node.kind
+  element.textContent = `${node.name} · ${kind}`
+  const parent = element.parentElement
+  const isRight = !parent || hover.x < parent.clientWidth - element.offsetWidth - 2 * TOOLTIP_GAP_PX
+  const isBelow =
+    !parent || hover.y < parent.clientHeight - element.offsetHeight - 2 * TOOLTIP_GAP_PX
+  const x = isRight ? hover.x + TOOLTIP_GAP_PX : hover.x - TOOLTIP_GAP_PX - element.offsetWidth
+  const y = isBelow ? hover.y + TOOLTIP_GAP_PX : hover.y - TOOLTIP_GAP_PX - element.offsetHeight
+  element.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`
 }
 
 function hudText(scene: Scene, camera: Camera): string {
