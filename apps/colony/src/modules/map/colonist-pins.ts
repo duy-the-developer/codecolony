@@ -6,7 +6,8 @@ import type { Drawn } from './render.ts'
 
 // Where colonist pins go on screen. Every file a colonist changes gets a pin
 // over the top right corner of its block: the file itself, or an added
-// file's placeholder, at every zoom, so the pins match the colonist's files
+// file's placeholder (its folder, when there was no room for one), at every
+// zoom, so the pins match the colonist's files
 // one for one. Pins on the same block sit side by side
 // in roster order, right to left. A block holding a file two or more
 // colonists change also gets a possible-conflict badge, left of its pins.
@@ -98,10 +99,13 @@ export function layoutPins(
         const node = scene.byId.get(change.nodeId)
         const rect = byId.get(change.nodeId) ?? (node && toScreenRect(camera, node.rect))
         if (rect) add(change.nodeId, change.nodeId, rect, index, placed, change)
-      } else if (change.placeholder && change.holderId) {
-        // Each placeholder is its own spot, even for the same path.
+      } else if (change.holderId) {
+        // Each placeholder is its own spot, even for the same path. An added
+        // file with no room for one stands on its folder instead.
+        const holder = scene.byId.get(change.holderId)
+        const area = change.placeholder ?? holder?.rect
         const key = `${placed.colonist.id}\0${change.path}`
-        add(key, change.holderId, toScreenRect(camera, change.placeholder), index, placed, change)
+        if (area) add(key, change.holderId, toScreenRect(camera, area), index, placed, change)
       }
     }
   })

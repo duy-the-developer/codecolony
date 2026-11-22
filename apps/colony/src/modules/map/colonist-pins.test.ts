@@ -195,6 +195,31 @@ describe('layoutPins', () => {
     )
   })
 
+  it('pins an added file with no room for a placeholder on its folder', () => {
+    // r/f's content area is all taken by c.ts.
+    const full = new Scene({
+      ...scene.world,
+      nodes: [
+        ...scene.world.nodes,
+        node('r/f', 'module', { x: 22, y: 2, w: 6, h: 6 }, 'r'),
+        node('r/f/c.ts', 'file', { x: 22, y: 2, w: 6, h: 6 }, 'r/f'),
+      ],
+    })
+    const adds = colonist('/adds', 'codecolony-adds', [
+      { path: 'f/c.ts', kind: 'modified', units: 1 },
+      { path: 'f/new.ts', kind: 'added', units: 1 },
+    ])
+    const placed = placeColonists(full, [adds])
+    expect(placed[0]?.changes[1]?.placeholder).toBeUndefined()
+    for (const scale of [0.5, 10]) {
+      const { pins } = layoutPins(placed, full, camera(scale), VIEW, [])
+      expect(pins.map((pin) => [pin.nodeId, pin.path])).toEqual([
+        ['r/f/c.ts', 'f/c.ts'],
+        ['r/f', 'f/new.ts'],
+      ])
+    }
+  })
+
   it('leaves out pins on blocks off screen', () => {
     const placed = placeColonists(scene, [PINS])
     const far = camera(10)
