@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { git, makeRepo, makeTempDir } from '../indexing/testing/git-fixture.ts'
@@ -130,6 +130,29 @@ describe('createColonistTracker', () => {
       changes: [{ path: 'src/b.ts', kind: 'modified', units: 1 }],
     })
     tracker.close()
+  })
+
+  it('follows the file a colonist saved last, even when its status does not change', async () => {
+    const { mine, home, slot } = makeColony()
+    const busy = slot(1)
+    writeFileSync(join(busy, 'src', 'a.ts'), 'a2\n')
+    writeFileSync(join(busy, 'src', 'b.ts'), 'b2\n')
+    utimesSync(join(busy, 'src', 'a.ts'), 2000, 2000)
+    utimesSync(join(busy, 'src', 'b.ts'), 1000, 1000)
+    const tracker = createColonistTracker({
+      listRepos: repos(mine),
+      firstmateHome: home,
+      home: '/nowhere',
+    })
+    await tracker.refresh({ discover: true })
+    expect(tracker.snapshot.colonists[0]?.lastSaved).toBe('src/a.ts')
+
+    // Saving b.ts again leaves git status as it was.
+    const version = tracker.snapshot.version
+    utimesSync(join(busy, 'src', 'b.ts'), 3000, 3000)
+    await tracker.refresh()
+    expect(tracker.snapshot.colonists[0]?.lastSaved).toBe('src/b.ts')
+    expect(tracker.snapshot.version).toBe(version + 1)
   })
 
   it('ignores clones of other repositories', async () => {

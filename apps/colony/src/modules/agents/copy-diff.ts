@@ -1,4 +1,4 @@
-import { open } from 'node:fs/promises'
+import { open, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileUnits } from '../layout/pack-cells.ts'
 import type { ChangeKind, ColonistChange } from '../wire/api-types.ts'
@@ -91,4 +91,26 @@ async function countLines(path: string): Promise<number> {
   } finally {
     await handle?.close()
   }
+}
+
+// The changed file saved last: the newest modification time among the
+// files still in the copy. A removed file has none, so a copy that only
+// removes files has no last-saved file.
+export async function readLastSaved(
+  copy: string,
+  changes: readonly ColonistChange[],
+): Promise<string | undefined> {
+  let newest: { path: string; ms: number } | undefined
+  await Promise.all(
+    changes.map(async ({ path, kind }) => {
+      if (kind === 'removed') return
+      try {
+        const { mtimeMs } = await stat(join(copy, path))
+        if (!newest || mtimeMs > newest.ms) newest = { path, ms: mtimeMs }
+      } catch {
+        // Gone since the diff: the next poll catches up.
+      }
+    }),
+  )
+  return newest?.path
 }

@@ -29,7 +29,7 @@ describe('ColonistRoster', () => {
     expect(container.innerHTML).toBe('')
   })
 
-  it('has one robot per colonist, names the picked one, and picks on click', () => {
+  it('has one robot per colonist, names the picked one with its file count, and picks on click', () => {
     const onPick = vi.fn()
     render(
       <ColonistRoster
@@ -43,7 +43,7 @@ describe('ColonistRoster', () => {
       'build-a · working · 1 file',
       'build-b · waiting on you · 1 file',
     ])
-    expect(buttons.map((b) => b.textContent)).toEqual(['', 'build-b'])
+    expect(buttons.map((b) => b.textContent)).toEqual(['', 'build-b1 file'])
     fireEvent.click(buttons[0] as HTMLElement)
     expect(onPick).toHaveBeenCalledWith('/a')
   })

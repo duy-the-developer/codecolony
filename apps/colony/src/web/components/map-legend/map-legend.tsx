@@ -1,4 +1,4 @@
-import { ChevronDownIcon, ChevronUpIcon } from 'lucide-react'
+import { BotIcon, ChevronDownIcon, ChevronUpIcon } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { type DrawnLines, OVERLAYS, type OverlayId } from '../../../modules/map/overlays.ts'
 import {
@@ -13,26 +13,45 @@ import { Kbd } from '../ui/kbd.tsx'
 
 export interface MapLegendProps {
   lines: DrawnLines
+  // The overlays switched on.
+  overlays: ReadonlySet<OverlayId>
+  hasColonists: boolean
+  isColonistPicked: boolean
+  hasConflicts: boolean
   isOpen: boolean
   onToggle(): void
 }
 
-// What each overlay's lines are called.
-const LINE_NAMES: Record<OverlayId, string> = {
-  dependency: 'Import',
-}
-
 interface LegendGroup {
   title: string
+  // The key that toggles its overlay.
+  hotkey?: string | undefined
   rows: ReactNode[]
 }
 
 // The map's legend, floating at its top left: names and swatches for what is
-// on the map now. Colonist pins and change outlines are always listed; each
-// overlay's group shows only while its lines are drawn, by the overlay or by
-// a selection. Collapsed it is a small chip; L or a click toggles it.
-export function MapLegend({ lines, isOpen, onToggle }: MapLegendProps) {
-  const groups = listLegendGroups(lines)
+// on the map now. The colonists' robots show while there are colonists, the
+// possible-conflict badge while a file has one; each overlay's group, titled
+// with its key, shows only while it draws: Git while the overlay is on or a
+// colonist is picked, Owners while its pins are on, Dependency while its lines
+// or a selection's are drawn. Collapsed it is a small chip; L or a click
+// toggles it.
+export function MapLegend({
+  lines,
+  overlays,
+  hasColonists,
+  isColonistPicked,
+  hasConflicts,
+  isOpen,
+  onToggle,
+}: MapLegendProps) {
+  const groups = listLegendGroups({
+    lines,
+    overlays,
+    hasColonists,
+    isColonistPicked,
+    hasConflicts,
+  })
   const Chevron = isOpen ? ChevronUpIcon : ChevronDownIcon
   return (
     <section
@@ -57,7 +76,10 @@ export function MapLegend({ lines, isOpen, onToggle }: MapLegendProps) {
         <div className="space-y-2 px-2 pt-0.5 pb-2">
           {groups.map((group) => (
             <div key={group.title}>
-              <h3 className="mb-0.5 text-[11px] text-muted-foreground">{group.title}</h3>
+              <h3 className="mb-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                {group.title}
+                {group.hotkey && <Kbd className="h-3.5 min-w-3.5 text-[9px]">{group.hotkey}</Kbd>}
+              </h3>
               <ul className="space-y-0.5">{group.rows}</ul>
             </div>
           ))}
@@ -67,17 +89,27 @@ export function MapLegend({ lines, isOpen, onToggle }: MapLegendProps) {
   )
 }
 
-function listLegendGroups(lines: DrawnLines): LegendGroup[] {
-  const groups: LegendGroup[] = [
-    {
-      title: 'Colonists',
-      rows: [
-        <LegendRow key="pin" mark={<Pin />} name="Pin" />,
-        <LegendRow key="conflict" mark={<Conflict />} name="Possible conflict" />,
-      ],
-    },
-    {
-      title: 'Changes',
+function listLegendGroups({
+  lines,
+  overlays,
+  hasColonists,
+  isColonistPicked,
+  hasConflicts,
+}: Omit<MapLegendProps, 'isOpen' | 'onToggle'>): LegendGroup[] {
+  const groups: LegendGroup[] = []
+  if (hasColonists) {
+    const rows = [
+      <LegendRow key="robot" mark={<Robot />} name="Colonist" tip="On the file it saved last" />,
+    ]
+    if (hasConflicts)
+      rows.push(<LegendRow key="conflict" mark={<Conflict />} name="Possible conflict" />)
+    groups.push({ title: 'Colonists', rows })
+  }
+  const isGit = overlays.has('git')
+  if (isGit || isColonistPicked) {
+    groups.push({
+      title: isGit ? 'Git' : 'Git · picked colonist',
+      hotkey: overlayKey('git'),
       rows: [
         <LegendRow
           key="modified"
@@ -91,32 +123,29 @@ function listLegendGroups(lines: DrawnLines): LegendGroup[] {
           tip="Placeholder, sized by line count"
         />,
         <LegendRow key="removed" mark={<Dashed color={CHANGE_COLORS.removed} />} name="Removed" />,
+      ],
+    })
+  }
+  if (overlays.has('owners') && hasColonists) {
+    groups.push({
+      title: 'Owners',
+      hotkey: overlayKey('owners'),
+      rows: [
         <LegendRow
-          key="selected"
-          mark={
-            <span
-              className="size-3 rounded-[2px] border-2"
-              style={{ borderColor: SELECTION_COLOR }}
-            />
-          }
-          name="Selected"
+          key="pin"
+          mark={<Pin />}
+          name="Owner"
+          tip="A pin per changed file, in its colonist's colour"
         />,
       ],
-    },
-  ]
-  for (const overlay of OVERLAYS) {
-    const isOn = lines.overlays.includes(overlay.id)
-    if (!isOn && !lines.isDirected) continue
+    })
+  }
+  const dependency = OVERLAYS.find((overlay) => overlay.id === 'dependency') ?? OVERLAYS[0]
+  const isDependency = lines.overlays.includes(dependency.id)
+  if (isDependency || lines.isDirected) {
     const rows: ReactNode[] = []
-    if (isOn) {
-      rows.push(
-        <LegendRow
-          key="line"
-          mark={<Arrow color={overlay.color} />}
-          name={LINE_NAMES[overlay.id]}
-        />,
-      )
-    }
+    if (isDependency)
+      rows.push(<LegendRow key="line" mark={<Arrow color={dependency.color} />} name="Import" />)
     if (lines.isDirected) {
       rows.push(
         <LegendRow
@@ -129,11 +158,25 @@ function listLegendGroups(lines: DrawnLines): LegendGroup[] {
           mark={<Arrow color={DIRECTION_COLORS.dependant} />}
           name="Dependants"
         />,
+        <LegendRow
+          key="selected"
+          mark={
+            <span
+              className="size-3 rounded-[2px] border-2"
+              style={{ borderColor: SELECTION_COLOR }}
+            />
+          }
+          name="Selected"
+        />,
       )
     }
-    groups.push({ title: overlay.name, rows })
+    groups.push({ title: dependency.name, hotkey: dependency.key, rows })
   }
   return groups
+}
+
+function overlayKey(id: OverlayId): string | undefined {
+  return OVERLAYS.find((overlay) => overlay.id === id)?.key
 }
 
 interface LegendRowProps {
@@ -199,6 +242,17 @@ function Pin() {
       style={{ background: COLONIST_COLORS.working, color: COLONIST_CHIP }}
     >
       CP
+    </span>
+  )
+}
+
+function Robot() {
+  return (
+    <span
+      className="flex size-4 items-center justify-center rounded-[4px] border"
+      style={{ background: COLONIST_CHIP, borderColor: COLONIST_COLORS.working }}
+    >
+      <BotIcon className="size-3" strokeWidth={2.5} style={{ color: COLONIST_COLORS.working }} />
     </span>
   )
 }

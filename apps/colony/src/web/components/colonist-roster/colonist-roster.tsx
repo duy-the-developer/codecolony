@@ -10,7 +10,8 @@ export interface ColonistRosterProps {
 }
 
 // The colonists at a glance, over the map's top right corner: one robot per
-// colonist; the picked one shows its name. Absent with no colonists.
+// colonist; the picked one shows its name and how many files it changes.
+// Absent with no colonists.
 export function ColonistRoster({ colonists, selectedId, onPick }: ColonistRosterProps) {
   if (colonists.length === 0) return null
   return (
@@ -38,9 +39,14 @@ export function ColonistRoster({ colonists, selectedId, onPick }: ColonistRoster
           >
             <ColonistIcon status={colonist.status} canMove />
             {isSelected && (
-              <span className="truncate font-mono text-[11px] text-foreground">
-                {colonist.label}
-              </span>
+              <>
+                <span className="truncate font-mono text-[11px] text-foreground">
+                  {colonist.label}
+                </span>
+                <span className="shrink-0 rounded-sm bg-primary/15 px-1 text-[11px] text-primary tabular-nums">
+                  {files} {files === 1 ? 'file' : 'files'}
+                </span>
+              </>
             )}
           </button>
         )
