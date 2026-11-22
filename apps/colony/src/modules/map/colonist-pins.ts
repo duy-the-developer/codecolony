@@ -6,9 +6,8 @@ import type { Drawn } from './render.ts'
 
 // Where colonist pins go on screen. Every file a colonist changes gets a pin
 // over the top right corner of its block: the file itself, or an added
-// file's placeholder. A block too small or too faint to hold a pin passes it
-// up to the nearest folder around it that can, and there each colonist's
-// pins merge into one with a count. Pins on the same block sit side by side
+// file's placeholder, at every zoom, so the pins match the colonist's files
+// one for one. Pins on the same block sit side by side
 // in roster order, right to left. A block holding a file two or more
 // colonists change also gets a possible-conflict badge, left of its pins.
 // A row that would cover another block's pins is lifted above them, on a
@@ -20,12 +19,10 @@ export interface Pin {
   colonistId: string
   status: ColonistStatus
   text: string
-  // The block it stands on: the file, the folder holding the placeholder,
-  // or the folder its pins merged into.
+  // The block it stands on: the file, or the folder holding the placeholder.
   nodeId: string
-  // The changes it stands for.
-  paths: string[]
-  isMerged: boolean
+  // The change it stands for.
+  path: string
   // One of its files is changed by another colonist too.
   isShared: boolean
   // Its head on screen.
@@ -52,8 +49,6 @@ export interface PinLayout {
 
 export const PIN_HEIGHT_PX = 16
 export const BADGE_RADIUS_PX = 7
-// A block narrower than this passes its pins up to its folder.
-export const PIN_HOST_PX = 16
 export const POINTER_PX = 4
 // A row of pins lifts at most this many times to clear the others.
 const MAX_LIFTS = 4
@@ -61,13 +56,12 @@ const GAP_PX = 2
 const PIN_PAD_PX = 5
 // The width of a character of the pin's 9px bold text, near enough.
 const PIN_CHAR_PX = 6
-// A block counts as shown once it is drawn at least this opaque.
-const SHOWN_ALPHA = 0.5
 
 interface Group {
   nodeId: string
   rect: Rect
-  entries: Map<number, { placed: PlacedColonist; changes: PlacedChange[]; isMerged: boolean }>
+  // Each colonist's change there, by roster index.
+  entries: Map<number, { placed: PlacedColonist; change: PlacedChange }>
 }
 
 // colonists: in roster order. drawn: the frame's blocks, as render returns
@@ -80,19 +74,6 @@ export function layoutPins(
   drawn: readonly Drawn[],
 ): PinLayout {
   const byId = new Map(drawn.map((item) => [item.node.id, item]))
-  // The block that holds pins for a node: itself when big and opaque
-  // enough, else the nearest folder around it that is.
-  const hostOf = (id: string): Drawn | undefined => {
-    for (
-      let node = scene.byId.get(id);
-      node && node.kind !== 'world';
-      node = scene.parentOf(node)
-    ) {
-      const item = byId.get(node.id)
-      if (item && item.alpha >= SHOWN_ALPHA && Math.min(item.w, item.h) >= PIN_HOST_PX) return item
-    }
-    return undefined
-  }
   const groups = new Map<string, Group>()
   const add = (
     key: string,
@@ -101,41 +82,26 @@ export function layoutPins(
     index: number,
     placed: PlacedColonist,
     change: PlacedChange,
-    isMerged: boolean,
   ) => {
     let group = groups.get(key)
     if (!group) {
       group = { nodeId, rect, entries: new Map() }
       groups.set(key, group)
     }
-    const entry = group.entries.get(index) ?? { placed, changes: [], isMerged }
-    entry.changes.push(change)
-    group.entries.set(index, entry)
+    group.entries.set(index, { placed, change })
   }
 
   colonists.forEach((placed, index) => {
     for (const change of placed.changes) {
       if (change.nodeId) {
-        const host = hostOf(change.nodeId)
-        if (host) {
-          const isMerged = host.node.id !== change.nodeId
-          add(host.node.id, host.node.id, host, index, placed, change, isMerged)
-        }
+        // A block too small to draw still has its place on the map.
+        const node = scene.byId.get(change.nodeId)
+        const rect = byId.get(change.nodeId) ?? (node && toScreenRect(camera, node.rect))
+        if (rect) add(change.nodeId, change.nodeId, rect, index, placed, change)
       } else if (change.placeholder && change.holderId) {
-        const holder = byId.get(change.holderId)
-        const rect = toScreenRect(camera, change.placeholder)
-        if (
-          holder &&
-          holder.alpha * holder.open >= SHOWN_ALPHA &&
-          Math.min(rect.w, rect.h) >= PIN_HOST_PX
-        ) {
-          // Each placeholder is its own spot, even for the same path.
-          const key = `${placed.colonist.id}\0${change.path}`
-          add(key, change.holderId, rect, index, placed, change, false)
-        } else {
-          const host = hostOf(change.holderId)
-          if (host) add(host.node.id, host.node.id, host, index, placed, change, true)
-        }
+        // Each placeholder is its own spot, even for the same path.
+        const key = `${placed.colonist.id}\0${change.path}`
+        add(key, change.holderId, toScreenRect(camera, change.placeholder), index, placed, change)
       }
     }
   })
@@ -152,15 +118,13 @@ export function layoutPins(
     const shared = new Set<string>()
     const sharedPaths = new Set<string>()
     const entries = [...group.entries].sort(([a], [b]) => a - b)
-    for (const [, { placed, changes, isMerged }] of entries) {
-      const text = isMerged ? `${placed.initials} ${changes.length}` : placed.initials
+    for (const [, { placed, change }] of entries) {
+      const text = placed.initials
       const w = Math.max(PIN_HEIGHT_PX, PIN_PAD_PX * 2 + text.length * PIN_CHAR_PX)
       const head = { x: right - w, y: top, w, h: PIN_HEIGHT_PX }
       right -= w + GAP_PX
-      let isShared = false
-      for (const change of changes) {
-        if (!change.sharedWith) continue
-        isShared = true
+      const isShared = Boolean(change.sharedWith)
+      if (change.sharedWith) {
         shared.add(placed.colonist.id)
         sharedPaths.add(change.path)
         for (const id of change.sharedWith) shared.add(id)
@@ -170,8 +134,7 @@ export function layoutPins(
         status: placed.colonist.status,
         text,
         nodeId: group.nodeId,
-        paths: changes.map((change) => change.path),
-        isMerged,
+        path: change.path,
         isShared,
         head,
         tipX: head.x + w / 2,

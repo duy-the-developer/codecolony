@@ -42,7 +42,7 @@ export type PinHit =
 // Names a pin or badge across frames.
 export function keyOfHit(hit: PinHit): string {
   return hit.kind === 'pin'
-    ? `pin\0${hit.colonistId}\0${hit.pin.nodeId}\0${hit.pin.isMerged ? '' : hit.pin.paths[0]}`
+    ? `pin\0${hit.colonistId}\0${hit.pin.nodeId}\0${hit.pin.path}`
     : `conflict\0${hit.badge.nodeId}\0${hit.badge.paths.join('\0')}`
 }
 
@@ -238,8 +238,8 @@ export class ColonistLayer {
   }
 }
 
-// A rounded tag with the colonist's initials (and the count of files it
-// stands for, merged on a folder), pointing down at the block's corner.
+// A rounded tag with the colonist's initials, pointing down at the block's
+// corner.
 function drawPin(
   ctx: CanvasRenderingContext2D,
   pin: Pin,
@@ -436,12 +436,9 @@ function drawHoverLabel(
   if (hit.kind === 'pin') {
     const { pin } = hit
     color = COLONIST_COLORS[pin.status]
-    const files = pin.isMerged
-      ? `${pin.paths.length} ${pin.paths.length === 1 ? 'file' : 'files'} in here`
-      : (pin.paths[0] ?? '')
     lines = [
       labels.get(pin.colonistId) ?? pin.colonistId,
-      `● ${COLONIST_STATUS_TEXT[pin.status]} · ${files}`,
+      `● ${COLONIST_STATUS_TEXT[pin.status]} · ${pin.path}`,
     ]
     if (pin.isShared) lines.push('also changed by another colonist')
     anchor = pin.head

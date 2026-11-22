@@ -83,9 +83,9 @@ describe('layoutPins', () => {
   it('puts a pin with the initials over the top right of every changed file', () => {
     const placed = placeColonists(scene, [PINS])
     const { pins, badges } = layoutPins(placed, scene, camera(10), VIEW, frame(10, 1))
-    expect(pins.map((pin) => [pin.nodeId, pin.text, pin.isMerged])).toEqual([
-      ['r/m/a.ts', 'CP', false],
-      ['r/m/b.ts', 'CP', false],
+    expect(pins.map((pin) => [pin.nodeId, pin.text, pin.path])).toEqual([
+      ['r/m/a.ts', 'CP', 'm/a.ts'],
+      ['r/m/b.ts', 'CP', 'm/b.ts'],
     ])
     // a.ts spans 20..60 across from 30 down: the pin ends at its right edge
     // and points just inside its top.
@@ -95,23 +95,45 @@ describe('layoutPins', () => {
     expect(badges).toEqual([])
   })
 
-  it('merges a colonist pins into one with a count on a closed folder', () => {
+  it('keeps a pin on every file inside a closed folder', () => {
     const placed = placeColonists(scene, [PINS])
     const { pins } = layoutPins(placed, scene, camera(10), VIEW, frame(10, 0.2))
-    expect(pins).toHaveLength(1)
-    expect(pins[0]).toMatchObject({
-      nodeId: 'r/m',
-      text: 'CP 2',
-      isMerged: true,
-      paths: ['m/a.ts', 'm/b.ts'],
-    })
+    expect(pins.map((pin) => [pin.nodeId, pin.text])).toEqual([
+      ['r/m/a.ts', 'CP'],
+      ['r/m/b.ts', 'CP'],
+    ])
   })
 
-  it('passes pins up to the folder when the files are too small to hold one', () => {
-    const placed = placeColonists(scene, [PINS])
-    // At 3px a unit the files are 12px wide; the module is 60px.
-    const { pins } = layoutPins(placed, scene, camera(3), VIEW, frame(3, 1))
-    expect(pins.map((pin) => [pin.nodeId, pin.text])).toEqual([['r/m', 'CP 2']])
+  it('gives N changed files at mixed depths exactly N pins at every zoom', () => {
+    const deep = new Scene({
+      ...scene.world,
+      nodes: [
+        ...scene.world.nodes,
+        node('r/m/n', 'module', { x: 2, y: 9, w: 12, h: 12 }, 'r/m'),
+        node('r/m/n/o', 'module', { x: 3, y: 10, w: 8, h: 8 }, 'r/m/n'),
+        node('r/m/n/o/c.ts', 'file', { x: 4, y: 11, w: 2, h: 2 }, 'r/m/n/o'),
+        node('r/m/n/d.ts', 'file', { x: 12, y: 10, w: 1, h: 1 }, 'r/m/n'),
+      ],
+    })
+    const many = colonist('/many', 'codecolony-many', [
+      { path: 'm/a.ts', kind: 'modified', units: 1 },
+      { path: 'm/n/o/c.ts', kind: 'modified', units: 1 },
+      { path: 'm/n/d.ts', kind: 'removed', units: 1 },
+      { path: 'm/n/o/new.ts', kind: 'added', units: 1 },
+    ])
+    const placed = placeColonists(deep, [many])
+    for (const scale of [0.5, 2, 5, 20]) {
+      // Only the repository is drawn when zoomed all the way out.
+      const drawn = frame(scale, 0).filter((item) => scale > 1 || item.node.kind === 'repo')
+      const { pins } = layoutPins(placed, deep, camera(scale), VIEW, drawn)
+      expect(pins.map((pin) => pin.path).sort()).toEqual([
+        'm/a.ts',
+        'm/n/d.ts',
+        'm/n/o/c.ts',
+        'm/n/o/new.ts',
+      ])
+      expect(new Set(pins.map((pin) => pin.text))).toEqual(new Set([placed[0]?.initials]))
+    }
   })
 
   it('sets the pins of colonists on one file side by side with a conflict badge', () => {
@@ -135,14 +157,15 @@ describe('layoutPins', () => {
     expect(badges[0]?.x).toBeLessThan(queueHead?.x ?? 0)
   })
 
-  it('carries the conflict badge up to the closed folder', () => {
+  it('keeps the conflict badge on the shared file inside a closed folder', () => {
     const placed = placeColonists(scene, [PINS, QUEUE])
     const { pins, badges } = layoutPins(placed, scene, camera(10), VIEW, frame(10, 0.2))
     expect(pins.map((pin) => [pin.nodeId, pin.text])).toEqual([
-      ['r/m', 'CP 2'],
-      ['r/m', 'BQ 1'],
+      ['r/m/a.ts', 'CP'],
+      ['r/m/a.ts', 'BQ'],
+      ['r/m/b.ts', 'CP'],
     ])
-    expect(badges.map((badge) => badge.nodeId)).toEqual(['r/m'])
+    expect(badges.map((badge) => badge.nodeId)).toEqual(['r/m/a.ts'])
   })
 
   it('leaves colonists on different files of a folder without a badge', () => {
@@ -154,7 +177,7 @@ describe('layoutPins', () => {
     ])
     const placed = placeColonists(scene, [only, other])
     const { pins, badges } = layoutPins(placed, scene, camera(10), VIEW, frame(10, 0.2))
-    expect(pins).toHaveLength(2)
+    expect(pins.map((pin) => pin.nodeId)).toEqual(['r/m/a.ts', 'r/m/b.ts'])
     expect(badges).toEqual([])
   })
 
@@ -166,7 +189,7 @@ describe('layoutPins', () => {
     const placeholder = placed[0]?.changes[0]?.placeholder as Rect
     const { pins } = layoutPins(placed, scene, camera(10), VIEW, frame(10, 1))
     expect(pins).toHaveLength(1)
-    expect(pins[0]).toMatchObject({ nodeId: 'r/m', text: 'AD', isMerged: false })
+    expect(pins[0]).toMatchObject({ nodeId: 'r/m', text: 'AD', path: 'm/new.ts' })
     expect((pins[0]?.head.x ?? 0) + (pins[0]?.head.w ?? 0)).toBeCloseTo(
       (placeholder.x + placeholder.w) * 10,
     )
@@ -181,8 +204,8 @@ describe('layoutPins', () => {
   })
 
   it("lifts a row of pins that would cover another block's pins", () => {
-    // b.ts sits 2 units right of a.ts: at 3.5px a unit, files are 14px and
-    // pass up to the module; at 5px they hold their own pins 10px apart.
+    // b.ts sits half a unit right of a.ts: at 5px a unit their pins are
+    // 2.5px apart.
     const both = colonist('/both', 'codecolony-both-files', [
       { path: 'm/a.ts', kind: 'modified', units: 1 },
       { path: 'm/b.ts', kind: 'modified', units: 1 },
