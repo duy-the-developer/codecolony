@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
-import type { FileResponse } from '../../../shared/api-types.ts'
-import type { World, WorldNode } from '../../../shared/world-types.ts'
-import { Scene } from '../../scene.ts'
+import { Scene } from '../../../modules/scene/scene.ts'
+import type { FileResponse } from '../../../modules/wire/api-types.ts'
+import type { World, WorldNode } from '../../../modules/world/world-types.ts'
 import { FileTab } from './file-tab.tsx'
 
 // The real module loads the terminal too; only the token matters here.

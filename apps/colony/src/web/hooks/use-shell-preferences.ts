@@ -4,7 +4,7 @@ import {
   readShellPreferences,
   type ShellPreferences,
   saveShellPreferences,
-} from '../shell-preferences.ts'
+} from '../../modules/preferences/shell-preferences.ts'
 
 export type UpdateShellPreferences = (
   update: (current: ShellPreferences) => ShellPreferences,

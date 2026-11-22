@@ -1,5 +1,5 @@
 import type { ComponentProps } from 'react'
-import { cn } from '../../class-names.ts'
+import { cn } from './class-names.ts'
 
 export function Kbd({ className, ...props }: ComponentProps<'kbd'>) {
   return (

@@ -7,9 +7,9 @@ import {
   resolveDockOptions,
   securityHeaders,
 } from '@codecolony/dock/server'
-import { loadConfig } from '../config/load-config.ts'
-import { Colony } from '../indexer/colony.ts'
-import { log } from '../shared/log.ts'
+import { loadConfig } from '../modules/config/load-config.ts'
+import { Colony } from '../modules/indexing/colony.ts'
+import { log } from '../modules/logging/log.ts'
 import { createApi } from './api.ts'
 import { isLoopbackHost } from './host.ts'
 import { createStaticHandler, type Handler } from './static.ts'

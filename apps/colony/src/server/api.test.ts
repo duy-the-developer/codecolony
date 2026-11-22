@@ -2,8 +2,8 @@ import { EventEmitter } from 'node:events'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import type { FileResponse } from '../shared/api-types.ts'
-import type { Edge, World, WorldNode, WorldPayload } from '../shared/world-types.ts'
+import type { FileResponse } from '../modules/wire/api-types.ts'
+import type { Edge, World, WorldNode, WorldPayload } from '../modules/world/world-types.ts'
 import { createApi, type WorldSource } from './api.ts'
 
 const RECT = { x: 0, y: 0, w: 4, h: 4 }

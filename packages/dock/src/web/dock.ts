@@ -14,10 +14,10 @@ import {
   TOKEN_PROTOCOL_PREFIX,
   WORKERS_PATH,
   type WorkersResponse,
-} from '../shared/protocol.ts'
+} from '../protocol/protocol.ts'
 import { keySequence } from './keys.ts'
 
-export type { DockWorker, WorkerStatus } from '../shared/protocol.ts'
+export type { DockWorker, WorkerStatus } from '../protocol/protocol.ts'
 
 export interface DockHandle {
   // Asks Herdr to focus a pane; the terminal then shows it.

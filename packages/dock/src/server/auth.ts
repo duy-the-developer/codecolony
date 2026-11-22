@@ -1,5 +1,5 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
-import { TOKEN_PROTOCOL_PREFIX } from '../shared/protocol.ts'
+import { TOKEN_PROTOCOL_PREFIX } from '../protocol/protocol.ts'
 
 const TOKEN_BYTES = 32
 

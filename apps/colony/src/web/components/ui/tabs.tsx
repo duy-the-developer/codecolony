@@ -1,6 +1,6 @@
 import { Tabs as TabsPrimitive } from 'radix-ui'
 import type { ComponentProps } from 'react'
-import { cn } from '../../class-names.ts'
+import { cn } from './class-names.ts'
 
 export function Tabs({ className, ...props }: ComponentProps<typeof TabsPrimitive.Root>) {
   return (

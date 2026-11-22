@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
-import type { SearchEntry, SearchMatches } from '../../../shared/api-types.ts'
+import type { SearchEntry, SearchMatches } from '../../../modules/wire/api-types.ts'
 import { SearchPalette } from './search-palette.tsx'
 
 function file(id: string): SearchEntry {

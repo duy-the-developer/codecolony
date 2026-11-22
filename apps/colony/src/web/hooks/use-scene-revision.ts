@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react'
-import type { Scene } from '../scene.ts'
+import type { Scene } from '../../modules/scene/scene.ts'
 
 // Re-renders when the scene gains symbols; returns its revision.
 export function useSceneRevision(scene: Scene | undefined): number {

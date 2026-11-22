@@ -11,7 +11,7 @@ import {
 } from '@codemirror/view'
 import { tags } from '@lezer/highlight'
 import { useEffect, useRef } from 'react'
-import type { LineRange } from '../../../shared/world-types.ts'
+import type { LineRange } from '../../../modules/world/world-types.ts'
 
 export interface CodeViewProps {
   text: string

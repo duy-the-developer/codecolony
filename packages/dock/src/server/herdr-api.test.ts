@@ -3,6 +3,7 @@ import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import { createHerdrApi, HerdrError } from './herdr-api.ts'
 import {
   answerWorkerList,
   FAKE_AGENTS,
@@ -10,8 +11,7 @@ import {
   type FakeHerdr,
   ok,
   startFakeHerdr,
-} from '../testing/fake-herdr.ts'
-import { createHerdrApi, HerdrError } from './herdr-api.ts'
+} from './testing/fake-herdr.ts'
 
 describe('createHerdrApi', () => {
   let fake: FakeHerdr | undefined

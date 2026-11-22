@@ -1,6 +1,6 @@
 import { SearchIcon } from 'lucide-react'
-import type { ProjectSummary } from '../../../shared/api-types.ts'
-import type { Scene } from '../../scene.ts'
+import type { Scene } from '../../../modules/scene/scene.ts'
+import type { ProjectSummary } from '../../../modules/wire/api-types.ts'
 import { MapControls, type MapControlsProps } from '../map-controls/map-controls.tsx'
 import { ProjectPicker } from '../project-picker/project-picker.tsx'
 import { Kbd } from '../ui/kbd.tsx'

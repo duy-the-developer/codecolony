@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import type { ProjectSummary, ProjectsResponse } from '../../shared/api-types.ts'
-import { logError } from '../../shared/log.ts'
+import { logError } from '../../modules/logging/log.ts'
+import type { ProjectSummary, ProjectsResponse } from '../../modules/wire/api-types.ts'
 
 export function useProjects(): ProjectSummary[] {
   const [projects, setProjects] = useState<ProjectSummary[]>([])

@@ -1,7 +1,7 @@
 import { CheckIcon } from 'lucide-react'
 import { DropdownMenu as DropdownMenuPrimitive } from 'radix-ui'
 import type { ComponentProps } from 'react'
-import { cn } from '../../class-names.ts'
+import { cn } from './class-names.ts'
 
 export function DropdownMenu(props: ComponentProps<typeof DropdownMenuPrimitive.Root>) {
   return <DropdownMenuPrimitive.Root data-slot="dropdown-menu" {...props} />

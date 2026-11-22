@@ -1,7 +1,7 @@
 import { Command as CommandPrimitive } from 'cmdk'
 import { SearchIcon } from 'lucide-react'
 import type { ComponentProps } from 'react'
-import { cn } from '../../class-names.ts'
+import { cn } from './class-names.ts'
 
 export function Command({ className, ...props }: ComponentProps<typeof CommandPrimitive>) {
   return (

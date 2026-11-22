@@ -1,15 +1,15 @@
 # Conventions
 
-How files, symbols and folders are named and how folders depend on each other. `pnpm lint` (Biome, see `biome.json`) enforces file names, symbol cases, barrel files and the folder dependency direction; the rest is checked in review.
+How files, symbols and folders are named and how modules depend on each other. `pnpm lint` (Biome, see `biome.json`) enforces file names, symbol cases, barrel files and the module rules; the rest is checked in review.
 
 ## Files and folders
 
 - kebab-case, ASCII only (`useFilenamingConvention`).
-- Folders are singular nouns that name an area: `indexer/`, `layout/`, `config/`. `adapters/` is the one plural exception.
+- Folders are singular nouns that name an area: `indexing/`, `layout/`, `config/`. `adapters/` and `modules/` are the two plural exceptions.
 - Name a file after its main export: `buildWorld` lives in `build-world.ts`, `class Scene` in `scene.ts`.
 - When a file plays a role inside a set, the role comes last: `http-detector.ts`, `grpc-detector.ts`.
 - Reuse a base name only for files with the same role in sibling folders: `adapters/<language>/adapter.ts`, `adapters/<language>/sample.ts`.
-- Shared wire types: `shared/<topic>-types.ts`.
+- Types a module offers to others: `<module>/<topic>-types.ts`.
 - `index.ts` is only a package entry point named in `package.json` `exports`. No other barrel files (`noBarrelFile`); import from the file that defines the thing.
 - Entry scripts are `main.ts` (servers and pages) or `cli.ts` (command-line tools).
 - No `utils.ts`, `helpers.ts` or `misc.ts`. Name helpers by what they do: `atomic-write.ts`, `color-scale.ts`.
@@ -69,13 +69,13 @@ Glossary of type suffixes:
 
 - `class <Area>Error extends Error` with `override name = '<Area>Error'`, a `readonly code` from a PascalCase string-literal union (`'MissingFile' | 'BadJson'`) and `ErrorOptions` passed to `super`, so `{ cause }` is kept. Callers branch on `code`, never on the message.
 - `HerdrError` is the exception: its `code` carries Herdr's own error codes through unchanged.
-- Log with `log(message, context)` or `logError(message, context)` from `shared/log.ts`: a fixed message plus a context object, never values formatted into the message. Lines get one `[codecolony]` prefix.
+- Log with `log(message, context)` or `logError(message, context)` from `modules/logging/log.ts`: a fixed message plus a context object, never values formatted into the message. Lines get one `[codecolony]` prefix.
 
 ## Tests
 
 - `<file>.test.ts` next to the source.
 - `describe('<exported symbol>')`, `it('<does something in plain words>')`.
-- Per package, `src/testing/` holds fixtures and fakes, imported only by tests: `<thing>-fixture.ts` exports `make<Thing>()`, and `fake-<service>.ts` exports `startFake<Service>()` or `createFake<Service>()`.
+- Per module, `testing/` holds fixtures and fakes, imported only by tests: `<thing>-fixture.ts` exports `make<Thing>()`, and `fake-<service>.ts` exports `startFake<Service>()` or `createFake<Service>()`.
 - Constants for fake data start with `FAKE_` (`FAKE_AGENTS`).
 
 ## React (if adopted)
@@ -89,26 +89,45 @@ Glossary of type suffixes:
 ## Environment variables and flags
 
 - Env vars start with `CODECOLONY_`; `PORT` and `CI` are the standard exceptions. Each matches a flag: `--herdr-socket` and `CODECOLONY_HERDR_SOCKET`.
-- The app reads them in `config/load-config.ts` and the dock in `packages/dock/src/server/options.ts`; the README lists them all.
+- The app reads them in `modules/config/load-config.ts` and the dock in `packages/dock/src/server/options.ts`; the README lists them all.
 
-## Folder dependency direction
+## Modules
 
-Imports point one way. `noRestrictedImports` overrides in `biome.json` enforce it per folder.
+`apps/colony/src` has two shells and the domain modules they use:
 
-`apps/colony/src`, lowest first: `core` and `shared`, then `config`, `adapters` and `layout`, then `indexer`, then `server`. `web` stands apart and imports only `shared`.
+- `server/`: how the Node app starts and is reached (`main.ts`, `cli.ts`, the `/api` routes).
+- `web/`: the React app (`main.tsx`, `client/` for HTTP requests, `hooks/`, `components/`).
+- `modules/<domain>/`: everything the app knows, one folder per domain, named with a singular noun.
 
-| Folder      | May import                                            |
-| ----------- | ----------------------------------------------------- |
-| `core/`     | nothing else in the app                               |
-| `shared/`   | `core/`                                               |
-| `config/`   | `core/`, `shared/`                                    |
-| `adapters/` | `core/`, `shared/`                                    |
-| `layout/`   | `core/`, `shared/`                                    |
-| `indexer/`  | `core/`, `shared/`, `config/`, `adapters/`, `layout/` |
-| `server/`   | everything except `web/`                              |
-| `web/`      | `shared/` only (and `@codecolony/dock/web`)           |
-| `testing/`  | imported by `*.test.ts` files only                    |
+Rules:
 
-Tests may also import `testing/`, and the adapter contract test may reach up to `indexer/` and `config/`, because it indexes a sample end to end.
+1. Import a module only through its entry files (below). Inside a module, import anything.
+2. A module starts flat. The role goes last in the file name (`fact-cache.ts`, `head-watcher.ts`, `parse-pool.ts`, `http-detector.ts`). Add a sub-folder only for a sub-domain of three or more files (`map/lanes/`), a plugin set (`language/adapters/<language>/`) or the module's own test helpers (`testing/`). Split a module that passes about 15 source files.
+3. A module imports only the modules listed for it. Modules never import `server/` or `web/`.
+4. Browser and both-runtime modules, and `web/`, never import `node:*`.
+5. No `common/`, `utils/` or `helpers/` module. Shared code goes in a module named for what it does; a helper with one consumer lives in that consumer's module.
+6. Test helpers live in `testing/` inside the module whose tests use them, and only tests import them.
 
-`packages/dock/src`: `shared/` imports neither `server/` nor `web/`; `server/` and `web/` do not import each other; `testing/` is for tests only.
+| Module          | Runtime | Entry files                                                | May import                                                                                 |
+| --------------- | ------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `world/`        | both    | all                                                        | nothing                                                                                    |
+| `logging/`      | both    | `log.ts`                                                   | nothing                                                                                    |
+| `theme/`        | both    | all                                                        | `world`                                                                                    |
+| `lane-routing/` | both    | all                                                        | `world`                                                                                    |
+| `layout/`       | both    | `world-layout.ts`, `symbol-band.ts`                        | `world`, `lane-routing`                                                                    |
+| `wire/`         | both    | `api-types.ts`, `world-encoder.ts`, `world-decoder.ts`     | `world`, `layout`                                                                          |
+| `config/`       | Node    | `load-config.ts`                                           | `wire`                                                                                     |
+| `language/`     | Node    | `language-adapter.ts`, `registry.ts`, `parse.ts`, `lsp.ts` | `world`                                                                                    |
+| `search/`       | Node    | `search-index.ts`                                          | `world`, `wire`                                                                            |
+| `indexing/`     | Node    | `colony.ts` (`testing/` for tests)                         | `world`, `wire`, `logging`, `config`, `language`, `layout`                                 |
+| `scene/`        | browser | all                                                        | `world`, `wire`, `logging`                                                                 |
+| `map/`          | browser | `map-controller.ts`, `overlays.ts`, `camera.ts`            | `world`, `logging`, `lane-routing`, `scene`, `theme`                                       |
+| `preferences/`  | browser | `shell-preferences.ts`                                     | nothing                                                                                    |
+| `server/` shell | Node    | -                                                          | `world`, `wire`, `logging`, `config`, `search`, `indexing`; `@codecolony/dock/server`      |
+| `web/` shell    | browser | -                                                          | `world`, `wire`, `logging`, `scene`, `map`, `theme`, `preferences`; `@codecolony/dock/web` |
+
+Inside `language/`, only `registry.ts` and `contract-samples.ts` import `adapters/`. The adapter contract test may also import `indexing/colony.ts` and `indexing/testing/`, because it indexes each sample end to end.
+
+`pnpm lint` enforces these rules: a `noRestrictedImports` override per module and shell in `biome.json` checks the direction, `testing/` and the runtime, and the `lint/module-entries.grit` plugin checks the entry files. Adding a module: add its folder, a row here, a `noRestrictedImports` override in `biome.json` and, if it hides internals, a line in `lint/module-entries.grit`. Adding an entry file: add it to this table and to the plugin.
+
+`packages/dock` is a package, not a module: its entries are the subpaths in its `package.json` `exports` (`./server`, `./web`, `./protocol`), and nothing outside imports deeper. Inside it, `protocol/` imports neither `server/` nor `web/`; `server/` and `web/` do not import each other; `server/testing/` is for tests only.
