@@ -28,7 +28,8 @@ import {
 // that import the same block can share a lane (merge); links to different
 // blocks never do, so lines in opposite directions never merge. Lanes that
 // still do not fit are spread evenly across the channel, apart but closer than
-// a unit.
+// a unit. With a stride, lanes and ports sit that many units apart where they
+// fit, and one unit apart where they do not, before any merge.
 
 export interface Link {
   from: string
@@ -52,6 +53,10 @@ export interface RouteLanesOptions {
   // Whether links to the same block share a lane: never, or when a channel or
   // block side has too few lanes.
   merge?: 'never' | 'whenFull'
+  // How many units apart lanes and ports sit where there is room, on the
+  // multiples of it: on a routing scaled by a pitch, the pitch keeps lines a
+  // whole grid unit apart wherever they fit.
+  stride?: number
 }
 
 // Path cost of one bend, in grid units.
@@ -88,7 +93,7 @@ export function countChannelLoad(graph: ChannelGraph, links: readonly Link[]): I
 export function routeLanes(
   graph: ChannelGraph,
   links: readonly Link[],
-  { merge = 'never' }: RouteLanesOptions = {},
+  { merge = 'never', stride = 1 }: RouteLanesOptions = {},
 ): LaneRouting {
   const { channels, attachments } = graph
   // Per link: the attachments it crosses, first and last on block sides.
@@ -184,7 +189,7 @@ export function routeLanes(
       )
       const rank = rankUnits(unit)
       const opposite = taken[a.isHigh ? 0 : 1]
-      const ports = placePorts(a.from, a.to, count, opposite)
+      const ports = placePorts(a.from, a.to, count, opposite, stride)
       if (ports.isCrowded) crowded++
       const own = taken[a.isHigh ? 1 : 0]
       sorted.forEach(({ pass, which }, i) => {
@@ -207,7 +212,7 @@ export function routeLanes(
       count,
     )
     const values = new Float64Array(count)
-    const spread = spreadUnits(channel.low, channel.high, count)
+    const spread = spreadUnits(channel.low, channel.high, count, stride)
     if (spread.isCrowded) crowded++
     ordered.forEach((u, rank) => {
       values[u] = spread.values[rank] as number
@@ -241,27 +246,52 @@ interface Spread {
   isCrowded: boolean
 }
 
-// count values on consecutive whole units strictly between low and high,
-// centred, or evenly spread across when they do not fit.
-function spreadUnits(low: number, high: number, count: number): Spread {
+// count values on whole units strictly between low and high, centred: on the
+// multiples of stride when they fit there, else on consecutive units, else
+// evenly spread across.
+function spreadUnits(low: number, high: number, count: number, stride = 1): Spread {
   const values = new Float64Array(count)
-  const room = countUnits(low, high)
-  if (count > room) {
+  const run = findRun(low, high, count, stride)
+  if (!run) {
     for (let i = 0; i < count; i++) values[i] = low + ((high - low) * (i + 1)) / (count + 1)
     return { values, isCrowded: true }
   }
-  const first = Math.floor(low) + 1 + Math.floor((room - count) / 2)
-  for (let i = 0; i < count; i++) values[i] = first + i
+  const first = run.first + Math.floor((run.room - count) / 2) * run.step
+  for (let i = 0; i < count; i++) values[i] = first + i * run.step
   return { values, isCrowded: false }
+}
+
+// The spots for count values strictly between low and high: the multiples of
+// stride if there are enough, else every whole unit; undefined when even
+// those are too few.
+function findRun(
+  low: number,
+  high: number,
+  count: number,
+  stride: number,
+): { first: number; step: number; room: number } | undefined {
+  if (stride > 1) {
+    const room = Math.max(0, Math.ceil(high / stride) - Math.floor(low / stride) - 1)
+    if (count <= room) return { first: (Math.floor(low / stride) + 1) * stride, step: stride, room }
+  }
+  const room = countUnits(low, high)
+  return count <= room ? { first: Math.floor(low) + 1, step: 1, room } : undefined
 }
 
 // Like spreadUnits, but slides the run of ports along the side to land on
 // as few spots taken across the channel as it can, nearest the centre first.
-function placePorts(low: number, high: number, count: number, taken: ReadonlySet<number>): Spread {
-  const centred = spreadUnits(low, high, count)
-  if (centred.isCrowded || count === 0 || taken.size === 0) return centred
-  const first = Math.floor(low) + 1
-  const slack = countUnits(low, high) - count
+function placePorts(
+  low: number,
+  high: number,
+  count: number,
+  taken: ReadonlySet<number>,
+  stride = 1,
+): Spread {
+  const centred = spreadUnits(low, high, count, stride)
+  const run = findRun(low, high, count, stride)
+  if (!run || count === 0 || taken.size === 0) return centred
+  const { first, step } = run
+  const slack = run.room - count
   const middle = Math.floor(slack / 2)
   let best = middle
   let bestHits = Number.POSITIVE_INFINITY
@@ -269,7 +299,7 @@ function placePorts(low: number, high: number, count: number, taken: ReadonlySet
     for (const offset of d === 0 ? [middle] : [middle - d, middle + d]) {
       if (offset < 0 || offset > slack) continue
       let hits = 0
-      for (let i = 0; i < count; i++) if (taken.has(first + offset + i)) hits++
+      for (let i = 0; i < count; i++) if (taken.has(first + (offset + i) * step)) hits++
       if (hits < bestHits) {
         best = offset
         bestHits = hits
@@ -278,7 +308,7 @@ function placePorts(low: number, high: number, count: number, taken: ReadonlySet
     if (bestHits === 0) break
   }
   const values = new Float64Array(count)
-  for (let i = 0; i < count; i++) values[i] = first + best + i
+  for (let i = 0; i < count; i++) values[i] = first + (best + i) * step
   return { values, isCrowded: false }
 }
 
@@ -428,6 +458,10 @@ interface SearchGraph {
   // channel was cut in, or -1 for a block side.
   nodeOrder: Int32Array
   nodeEnd: Int32Array
+  // Per node, where it lies: a bar node on the bar's middle line, a stem node
+  // at its mouth. Every edge costs at least the distance between its ends.
+  nodeX: Float64Array
+  nodeY: Float64Array
 }
 
 // Each channel graph's search graph, built on first use: a level routes the
@@ -492,11 +526,21 @@ function buildSearchGraph(graph: ChannelGraph): SearchGraph {
     nodeOrder[node] = nest ? nest.order : -1
     nodeEnd[node] = nest ? nest.end : -1
   }
+  const nodeX = new Float64Array(nodes)
+  const nodeY = new Float64Array(nodes)
   attachments.forEach((a, i) => {
     put(2 * i, a.bar)
     put(2 * i + 1, a.channel)
+    const bar = channels[a.bar] as Channel
+    const along = (a.from + a.to) / 2
+    const middle = (bar.low + bar.high) / 2
+    const isAlongX = bar.axis === 'x'
+    nodeX[2 * i] = isAlongX ? along : middle
+    nodeY[2 * i] = isAlongX ? middle : along
+    nodeX[2 * i + 1] = isAlongX ? along : a.mouth
+    nodeY[2 * i + 1] = isAlongX ? a.mouth : along
   })
-  return { offsets, targets, costs, nodeOrder, nodeEnd }
+  return { offsets, targets, costs, nodeOrder, nodeEnd, nodeX, nodeY }
 }
 
 // The deepest open folder that holds both blocks, as the span of the box tree
@@ -513,44 +557,50 @@ function scopeOf(nest: ChannelGraph['nest'], from: string, to: string): [number,
   return [0, Number.MAX_SAFE_INTEGER]
 }
 
-// Shortest paths, one search per importing block and scope. Each path lists
-// the attachments it crosses, from a side of `from` to a side of `to`, through
-// channels inside the deepest open folder that holds both, leaving only boxes
-// that hold `from`. A link with no such path stays unrouted.
+// Shortest paths, one A* search per link, guided by the distance left to the
+// imported block, which no path can beat. Each path lists the attachments it
+// crosses, from a side of `from` to a side of `to`, through channels inside
+// the deepest open folder that holds both, leaving only boxes that hold
+// `from`. A link with no such path stays unrouted.
 function findPaths(
   graph: ChannelGraph,
   search: SearchGraph,
   links: readonly Link[],
 ): (number[] | undefined)[] {
   const { attachments, blockAttachments } = graph
-  const { offsets, targets, costs, nodeOrder, nodeEnd } = search
+  const { offsets, targets, costs, nodeOrder, nodeEnd, nodeX, nodeY } = search
   const nodes = offsets.length - 1
   const dist = new Float64Array(nodes)
   const prev = new Int32Array(nodes)
   const seen = new Int32Array(nodes)
   const heap = new CostHeap()
   let round = 0
-  const paths: (number[] | undefined)[] = links.map(() => undefined)
-  const searches = new Map<string, { source: string; scope: [number, number]; list: number[] }>()
-  links.forEach((link, i) => {
-    const scope = scopeOf(graph.nest, link.from, link.to)
-    const key = `${link.from}\n${scope[0]}`
-    const found = searches.get(key)
-    if (found) found.list.push(i)
-    else searches.set(key, { source: link.from, scope, list: [i] })
-  })
-  const run = (source: string, [low, high]: [number, number], list: readonly number[]) => {
+  const run = (link: Link): number[] | undefined => {
+    const { from: source, to: target } = link
     const starts = blockAttachments.get(source)
-    if (!starts || starts.length === 0) return
+    const ends = blockAttachments.get(target)
+    if (!starts || starts.length === 0 || !ends || ends.length === 0 || target === source) {
+      return undefined
+    }
+    const [low, high] = scopeOf(graph.nest, source, target)
     const at = graph.nest.get(source)?.order ?? -1
-    // Links still looking for a path, by target.
-    const wanted = new Map<string, number[]>()
-    for (const i of list) {
-      const target = (links[i] as Link).to
-      if (target === source) continue
-      const ids = wanted.get(target)
-      if (ids) ids.push(i)
-      else wanted.set(target, [i])
+    // The box around the target's ends.
+    let x0 = Number.POSITIVE_INFINITY
+    let y0 = Number.POSITIVE_INFINITY
+    let x1 = Number.NEGATIVE_INFINITY
+    let y1 = Number.NEGATIVE_INFINITY
+    for (const a of ends) {
+      const x = nodeX[2 * a + 1] as number
+      const y = nodeY[2 * a + 1] as number
+      x0 = Math.min(x0, x)
+      y0 = Math.min(y0, y)
+      x1 = Math.max(x1, x)
+      y1 = Math.max(y1, y)
+    }
+    const left = (node: number) => {
+      const x = nodeX[node] as number
+      const y = nodeY[node] as number
+      return Math.max(x0 - x, 0, x - x1) + Math.max(y0 - y, 0, y - y1)
     }
     round++
     heap.clear()
@@ -559,26 +609,23 @@ function findPaths(
       seen[node] = round
       dist[node] = 0
       prev[node] = -1
-      heap.push(node, 0)
+      heap.push(node, left(node))
     }
-    while (wanted.size > 0) {
+    for (;;) {
       const node = heap.pop()
-      if (node < 0) break
+      if (node < 0) return undefined
       // A node pushed again at a lower cost leaves a stale entry behind.
-      if (heap.cost > (dist[node] as number)) continue
+      if (heap.cost > (dist[node] as number) + left(node)) continue
       if (node % 2 === 1) {
         const block = (attachments[node >> 1] as Attachment).block
         if (block !== undefined && block !== source) {
-          const found = wanted.get(block)
-          if (found) {
-            wanted.delete(block)
+          if (block === target) {
             // The attachments crossed, read back along the node chain.
             const path: number[] = []
             for (let n = node; prev[n] !== -1; n = prev[n] as number) {
               if ((prev[n] as number) >> 1 === n >> 1) path.push(n >> 1)
             }
-            path.reverse()
-            for (const i of found) paths[i] = path
+            return path.reverse()
           }
           // Block sides are ends, never ways through.
           continue
@@ -600,12 +647,11 @@ function findPaths(
         seen[next] = round
         dist[next] = cost
         prev[next] = node
-        heap.push(next, cost)
+        heap.push(next, cost + left(next))
       }
     }
   }
-  for (const { source, scope, list } of searches.values()) run(source, scope, list)
-  return paths
+  return links.map(run)
 }
 
 // A binary min-heap of nodes keyed by path cost. pop() returns the cheapest

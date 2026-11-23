@@ -534,9 +534,10 @@ function holdsLane(low: number, high: number): boolean {
   return Math.ceil(high) - Math.floor(low) - 1 > 0
 }
 
-// Whole-unit lanes a channel holds: the grid lines strictly inside it.
-export function laneCapacity(channel: Channel): number {
-  return Math.max(0, Math.ceil(channel.high) - Math.floor(channel.low) - 1)
+// Lanes a channel holds stride units apart: the multiples of stride strictly
+// inside it.
+export function laneCapacity(channel: Channel, stride = 1): number {
+  return Math.max(0, Math.ceil(channel.high / stride) - Math.floor(channel.low / stride) - 1)
 }
 
 // Every box's place in the tree, depth first.

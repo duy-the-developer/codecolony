@@ -14,9 +14,6 @@ export const CONTAINER_OPEN: Record<'project' | 'repo' | 'package' | 'module', B
   module: [12, 24],
 }
 export const FILE_OPEN: Band = [150, 300]
-// Once a unit is this wide, lanes run between the files on screen, in the
-// 1-unit streets around them, half a unit apart.
-export const FILE_LANES_PX = 12
 // The background grid, one line per layout unit, fades in as the unit grows
 // over this band; below it the lines would be too dense to read.
 export const GRID_FADE: Band = [5, 12]

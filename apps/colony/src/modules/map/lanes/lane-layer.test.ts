@@ -113,32 +113,6 @@ function listHolders(scene: Scene, scale: number, window: Rect): { node: WorldNo
   return holders
 }
 
-// Every lane a frame draws, highways and lanes inside holders, as numbers.
-function listGeometry(frame: LaneFrame): number[][] {
-  const lanes = listLanes(frame).map((lane) => [...lane.points])
-  for (const files of frame.files) {
-    files.routes.links.forEach((_, i) => {
-      lanes.push([
-        ...files.routes.points.subarray(files.routes.offsets[i], files.routes.offsets[i + 1]),
-      ])
-    })
-  }
-  return lanes
-}
-
-// Whether (x, y) lies on the polyline.
-function isOnRoute(points: Float64Array, x: number, y: number): boolean {
-  for (let k = 0; k + 3 < points.length; k += 2) {
-    const [x0, y0, x1, y1] = [points[k], points[k + 1], points[k + 2], points[k + 3]] as number[]
-    const inX =
-      x >= Math.min(x0 as number, x1 as number) && x <= Math.max(x0 as number, x1 as number)
-    const inY =
-      y >= Math.min(y0 as number, y1 as number) && y <= Math.max(y0 as number, y1 as number)
-    if (inX && inY) return true
-  }
-  return false
-}
-
 describe('LaneLayer', () => {
   it('draws no lanes with the overlay off and nothing in focus', async () => {
     const scene = makeScene()
@@ -215,21 +189,21 @@ describe('LaneLayer', () => {
     )
   })
 
-  it('ends each lane with an arrow into the imported block', async () => {
+  it('ends each line with an arrow on the file it imports', async () => {
     const scene = makeScene()
     const layer = new LaneLayer(scene, createLaneRouter(), () => {})
-    // Both of c's links import c, which spans x 1-11, y 16-26.
+    // Both of c's lines import c/f.ts, which spans x 2-4, y 17-19.
     const frame = await settle(() => layer.frame(SCALE, [], buildFocus(scene, ['r/c']), false))
     expect(listLanes(frame)).toHaveLength(2)
     for (const { points: p } of listLanes(frame)) {
       const [x, y] = [p[p.length - 2] as number, p[p.length - 1] as number]
-      const onSide = (x === 1 || x === 11) && y > 16 && y < 26
-      const onTopOrBottom = (y === 16 || y === 26) && x > 1 && x < 11
+      const onSide = (x === 2 || x === 4) && y >= 17 && y <= 19
+      const onTopOrBottom = (y === 17 || y === 19) && x >= 2 && x <= 4
       expect(onSide || onTopOrBottom).toBe(true)
     }
   })
 
-  it('never moves a lane as the map pans', async () => {
+  it('never moves a line as the map pans', async () => {
     const scene = makeTwoRepos()
     const layer = new LaneLayer(scene, createLaneRouter(), () => {})
     const scale = 16
@@ -245,20 +219,15 @@ describe('LaneLayer', () => {
       frames.push(await settle(() => layer.frame(scale, holders, NO_FOCUS, true)))
     }
     const [whole, ...panned] = frames as [LaneFrame, ...LaneFrame[]]
-    expect(whole.files.length).toBe(2)
+    // One line per importing file, both into r2/b/g.ts.
+    expect(listLanes(whole)).toHaveLength(2)
     for (const frame of panned) {
-      expect(listLanes(frame).map((lane) => [...lane.points])).toEqual(
-        listLanes(whole).map((lane) => [...lane.points]),
-      )
-      // A holder's lanes on screen are the very ones drawn with the whole map.
-      for (const files of frame.files) {
-        expect(whole.files.some((other) => other.routes === files.routes)).toBe(true)
-      }
+      expect(frame.all).toBe(whole.all)
+      expect([...(frame.fade?.alpha ?? [])]).toEqual([...(whole.fade?.alpha ?? [])])
     }
-    expect(listGeometry(frames[1] as LaneFrame).length).toBeGreaterThan(listLanes(whole).length)
   })
 
-  it("keeps a highway's corners at every zoom step that draws both its ends", async () => {
+  it('keeps every line the same at every zoom step', async () => {
     const scene = makeTwoRepos()
     const layer = new LaneLayer(scene, createLaneRouter(), () => {})
     const window: Rect = { x: 0, y: 0, w: 46, h: 20 }
@@ -266,36 +235,26 @@ describe('LaneLayer', () => {
       const holders = listHolders(scene, scale, window)
       return listLanes(await settle(() => layer.frame(scale, holders, NO_FOCUS, true)))
     }
-    // From the level where both modules show to well past FILE_LANES_PX.
-    const [first] = await drawnAt(2 ** (9 / 4))
-    expect(first).toBeDefined()
-    for (let step = 10; step <= 20; step++) {
-      expect((await drawnAt(2 ** (step / 4))).map((lane) => [...lane.points])).toEqual([
-        [...(first?.points ?? [])],
-      ])
+    const first = (await drawnAt(2 ** (2 / 4))).map((lane) => [...lane.points])
+    expect(first).toHaveLength(2)
+    for (let step = 3; step <= 20; step++) {
+      expect((await drawnAt(2 ** (step / 4))).map((lane) => [...lane.points])).toEqual(first)
     }
   })
 
-  it('cuts a highway where it enters the closed containers drawn for its ends', async () => {
+  it('fades each line with its files as their modules close', async () => {
     const scene = makeTwoRepos()
     const layer = new LaneLayer(scene, createLaneRouter(), () => {})
-    const window: Rect = { x: 0, y: 0, w: 46, h: 20 }
-    const near = 2 ** (12 / 4)
-    const far = 1
-    const full = listLanes(
-      await settle(() => layer.frame(near, listHolders(scene, near, window), NO_FOCUS, true)),
-    )[0]?.points as Float64Array
-    const cut = listLanes(
-      await settle(() => layer.frame(far, listHolders(scene, far, window), NO_FOCUS, true)),
-    )
-    expect(cut).toHaveLength(1)
-    const points = cut[0]?.points as Float64Array
-    // Every corner left lies on the full route, from r1's right side to r2's
-    // left side.
-    for (let k = 0; k < points.length; k += 2) {
-      expect(isOnRoute(full, points[k] as number, points[k + 1] as number)).toBe(true)
+    const fadeAt = async (scale: number) => {
+      const frame = await settle(() => layer.frame(scale, [], NO_FOCUS, true))
+      const fade = frame.fade
+      return [...(frame.all?.links ?? [])].map((link) => fade?.alpha[fade.groups[link] as number])
     }
-    expect(points[0]).toBe(20)
-    expect(points[points.length - 2]).toBe(26)
+    // The repositories are 20 units: closed under 40 px, open over 90 px.
+    expect(await fadeAt(1)).toEqual([0, 0])
+    const half = await fadeAt(3)
+    for (const alpha of half) expect(alpha).toBeGreaterThan(0)
+    for (const alpha of half) expect(alpha).toBeLessThan(1)
+    expect(await fadeAt(SCALE)).toEqual([1, 1])
   })
 })

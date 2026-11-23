@@ -179,6 +179,41 @@ describe('routeLanes', () => {
     expect(countOverlaps(listSegments(routing))).toBe(0)
   })
 
+  it('keeps lanes a stride apart where they fit, and closer only where they do not', () => {
+    // On a half-unit pitch: every length doubled, lanes a whole unit (2) apart.
+    const double = (box: RouteBox): RouteBox => ({
+      id: box.id,
+      rect: { x: box.rect.x * 2, y: box.rect.y * 2, w: box.rect.w * 2, h: box.rect.h * 2 },
+      ...(box.header === undefined ? {} : { header: box.header * 2 }),
+      ...(box.kids ? { kids: box.kids.map(double) } : {}),
+    })
+    const { root } = makeWorld(40, 6)
+    const pairs = [
+      ['p/a', 'p/d'],
+      ['p/b', 'q/c'],
+      ['q/a', 'q/d'],
+    ]
+    const links = pairs.map(([from, to]) => ({ from, to }) as Link)
+    const wide = routeLanes(buildChannelGraph(double(root)), links, { stride: 2 })
+    for (const points of wide.points) {
+      expect(points).toBeDefined()
+      for (const value of points ?? []) expect(value % 2).toBe(0)
+    }
+    // A 1-unit street between two blocks holds no whole unit, so its lane
+    // sits half a unit off each.
+    const street: RouteBox = {
+      id: 'world',
+      rect: { x: 0, y: 0, w: 10, h: 6 },
+      header: 0,
+      kids: [block('a', 2, 2, 2, 2), block('b', 5, 2, 2, 2)],
+    }
+    const narrow = routeLanes(buildChannelGraph(double(street), true), [{ from: 'a', to: 'b' }], {
+      stride: 2,
+    })
+    const points = [...(narrow.points[0] ?? [])]
+    expect(points.filter((value, k) => k % 2 === 0 && value === 9)).not.toHaveLength(0)
+  })
+
   it('merges only links to the same block when a gutter is full', () => {
     const { root, blocks } = makeWorld(2)
     const graph = buildChannelGraph(root)

@@ -1,14 +1,15 @@
-import { type BlockSide, buildChannelGraph, laneCapacity } from '../lane-routing/channel-graph.ts'
-import { buildRouteBoxes } from '../lane-routing/route-boxes.ts'
+import { type BlockSide, laneCapacity } from '../lane-routing/channel-graph.ts'
+import { buildFileGraph, FILE_LANE_PITCH } from '../lane-routing/file-graph.ts'
 import { countChannelLoad, type Link } from '../lane-routing/route-lanes.ts'
 import type { Edge, WorldNode } from '../world/world-types.ts'
 import type { GapWidening, StoredRow } from './pack-rows.ts'
 
 // Gutters grow so the Dependency overlay's lanes fit them one unit apart, up
-// to a cap; past it the page merges lanes to one block and packs the rest
+// to a cap; past it the page merges lines to one file and packs the rest
 // closer. A folder's ring grows the same way on each side, up to RING_LANES.
-// Links are routed between the blocks seen with every folder open and every
-// module of files closed, which need the most lanes between modules.
+// Links are routed as the page routes them: one per importing and imported
+// file, through the half-unit channels of file-graph.ts. A module of files
+// never grows; its streets are its ring.
 
 // Container id -> extra units per gap of its rows, and per side of its ring.
 export type LaneWidening = Map<string, MutableGapWidening>
@@ -21,7 +22,7 @@ export interface MutableGapWidening extends GapWidening {
 }
 
 // The most lanes a folder's ring grows to hold on each side.
-export const RING_LANES = 1
+export const RING_LANES = 2
 
 function emptyWidening(): MutableGapWidening {
   return {
@@ -71,9 +72,8 @@ export function resolveLaneWidening(
   maxGutter: number,
   widening: LaneWidening,
 ): boolean {
-  const boxes = buildRouteBoxes(nodes)
-  if (!boxes.root) return false
-  const graph = buildChannelGraph(boxes.root)
+  const { boxes, graph } = buildFileGraph(nodes)
+  if (!graph) return false
   const load = countChannelLoad(graph, listBlockLinks(edges, boxes.blockOf))
   // Where each item sits in its container's rows: the first item of its row,
   // the first item of its slot, and whether it is first in its stack. Gaps
@@ -101,8 +101,9 @@ export function resolveLaneWidening(
   // The most each gap is short by this round.
   const short = new Map<string, MutableGapWidening>()
   graph.channels.forEach((channel, c) => {
+    if (!rows.has(channel.container)) return
     const want = Math.min(load[c] as number, channel.ring ? RING_LANES : maxGutter - 1)
-    const missing = want - laneCapacity(channel)
+    const missing = want - laneCapacity(channel, FILE_LANE_PITCH)
     if (missing <= 0) return
     let gaps = short.get(channel.container)
     if (!gaps) {

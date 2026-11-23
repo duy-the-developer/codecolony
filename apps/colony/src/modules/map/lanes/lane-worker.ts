@@ -1,8 +1,8 @@
 import { answerLaneRequest, type LaneReply, type LaneRequest, toTransfer } from './lane-router.ts'
 import { LaneWorld } from './lane-world.ts'
 
-// The routing worker: holds one world version and answers level and route
-// requests for it in order (see lane-router.ts).
+// The routing worker: holds one world version and answers route requests for
+// it in order (see lane-router.ts).
 
 let world: { version: number; lanes: LaneWorld } | undefined
 
