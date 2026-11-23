@@ -352,6 +352,46 @@ describe('routeLanes', () => {
     expect([...routing.load].every((n) => n === 0)).toBe(true)
   })
 
+  it('brings a line in through the top door straight down onto its lane in the ring', () => {
+    // f's label strip runs y 4-5 with its label over x 0-3, and its ring's
+    // top channel y 5-8 above w, a file as wide as the door.
+    const f: RouteBox = {
+      id: 'f',
+      rect: { x: 0, y: 4, w: 14, h: 14 },
+      header: 1,
+      label: 3,
+      kids: [block('f/w', 2, 8, 10, 3), block('f/x', 2, 13, 10, 3)],
+    }
+    const root: RouteBox = {
+      id: 'world',
+      rect: { x: 0, y: 0, w: 14, h: 18 },
+      header: 0,
+      kids: [block('o', 4, 0, 6, 2), f],
+    }
+    const routing = routeLanes(buildChannelGraph(root), [
+      { from: 'o', to: 'f/x' },
+      { from: 'f/w', to: 'o' },
+    ])
+    expect(routing.points.every((points) => points !== undefined)).toBe(true)
+    const segments = listSegments(routing)
+    const door = segments.find((s) => s.link === 0 && !s.isHorizontal && s.from < 4 && s.to > 5)
+    if (!door) throw new Error('no line through the door')
+    // Down through the strip right of the label and on to a lane in the top
+    // channel, where it turns.
+    expect(door.across).toBeGreaterThan(3)
+    expect(door.to).toBeGreaterThan(5)
+    expect(door.to).toBeLessThan(8)
+    const turn = segments.find(
+      (s) =>
+        s.link === 0 && s.isHorizontal && s.across === door.to && s.from <= door.across,
+    )
+    expect(turn?.to).toBeGreaterThanOrEqual(door.across)
+    // w's port up into the channel stays off the door line's spot.
+    const [portX] = routing.points[1] as Float64Array
+    expect(portX).not.toBe(door.across)
+    expect(countOverlaps(segments)).toBe(0)
+  })
+
   it('never passes through a folder on the way to another', () => {
     // Three folders in a row; the middle one has a gutter straight across it,
     // with doors at both ends, that would be the shortest way from l to r.

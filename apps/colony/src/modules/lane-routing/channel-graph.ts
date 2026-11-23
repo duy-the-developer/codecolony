@@ -275,7 +275,7 @@ export function buildChannelGraph(
             high,
             start: b.y0,
             end: top,
-            depth: depth + 1,
+            depth: depth + 2,
             container: box.id,
             after: [],
             bars: [nb[TOP], upper],
