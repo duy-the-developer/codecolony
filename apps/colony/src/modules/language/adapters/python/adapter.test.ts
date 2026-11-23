@@ -67,12 +67,16 @@ describe('python resolveImport', () => {
       'api/app/__init__.py',
       'api/app/models.py',
       'api/app/routes.py',
+      'api/scripts/seed.py',
       'web/Pipfile',
       'web/site/__init__.py',
       'web/site/views.py',
+      'web/scripts/build.py',
     ])
     expect(resolveImport('app.models.User', 'api/app/routes.py', files)).toBe('api/app/models.py')
-    expect(resolveImport('site.views', 'web/site/__init__.py', files)).toBe('web/site/views.py')
+    // Scripts outside any package reach the service's packages through the marker.
+    expect(resolveImport('app.models', 'api/scripts/seed.py', files)).toBe('api/app/models.py')
+    expect(resolveImport('site.views', 'web/scripts/build.py', files)).toBe('web/site/views.py')
   })
 
   it('starts from the folder above the top-most package of the importing file', () => {
