@@ -12,10 +12,11 @@ import { type Link, routeLanes } from '../../lane-routing/route-lanes.ts'
 // other. Every file is a block (route-boxes.ts with every folder and module
 // open), and the whole world is routed at once on a half-unit pitch, so a
 // 1-unit file street holds a lane (file-graph.ts). Where a channel has room,
-// lines sit a whole unit apart. A line stays inside the deepest open folder that holds
-// both its files and crosses a folder's border straight on, through a door
-// (channel-graph.ts); lines share a lane only when they import the same file
-// and there is no room for both.
+// lines sit a whole unit apart. A line stays inside the deepest open folder
+// that holds both its files; between two folders it runs along one highway
+// between their entry points, shared with every line between them, and
+// inside each folder along a road to the exact file (highways.ts). Lines in
+// and out of a folder never share a lane.
 
 // An import edge, by the ids of its ends.
 export type LaneEdge = readonly [from: string, to: string]

@@ -58,19 +58,14 @@ function isInside(rect: Rect, x: number, y: number): boolean {
 }
 
 describe('LaneWorld', () => {
-  it('routes between two files of a module in the street between them, in grid units', () => {
+  it('routes between two files of a module across the street between them, in grid units', () => {
     const world = new LaneWorld(NODES, [['r/m/a.ts', 'r/m/b.ts']])
     const { links, routes, edgeOffsets, edges } = world.routeFiles()
     expect(links).toEqual([{ from: 'r/m/a.ts', to: 'r/m/b.ts' }])
     expect(routes.pitch).toBe(FILE_LANE_PITCH)
     expect([...edges.subarray(edgeOffsets[0], edgeOffsets[1])]).toEqual([0])
-    // From a's right side, along the middle of the street, to b's left side.
-    const points = listPoints(routes, 0)
-    expect(points.slice(0, 2)).toEqual([4, 4])
-    expect(points.at(-2)).toBe(5)
-    expect(points.filter((_, k) => k % 2 === 0 && k > 0 && k < points.length - 2)).toEqual([
-      4.5, 4.5,
-    ])
+    // From a's right side straight across the street to b's left side.
+    expect(listPoints(routes, 0)).toEqual([4, 4, 5, 4])
   })
 
   it('draws one line per importing and imported file, carrying every import between them', () => {

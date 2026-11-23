@@ -21,7 +21,9 @@ import type { Rect } from '../world/world-types.ts'
 // gutter inside it, or its ring's top or bottom channel, ends on the ring's
 // left, right or bottom channel, the line may carry on across the ring and
 // the border into the channel outside. The ring's sides also open out at the
-// bottom. Nothing crosses the label strip.
+// bottom. The label strip's text is never crossed: where the strip has room
+// right of its label, a door runs straight down through it into the ring's
+// top channel.
 
 // The direction lanes run in: 'x' for a horizontal channel.
 export type Axis = 'x' | 'y'
@@ -31,10 +33,13 @@ export type BlockSide = 'top' | 'right' | 'bottom' | 'left'
 export interface RouteBox {
   id: string
   rect: Rect
-  // An open container: the height of its label strip, which lines never
-  // cross, and the boxes inside it. A box without kids is a block: lines start
-  // and end on its sides and never cross it.
+  // An open container: the height of its label strip, whose label lines
+  // never cross, and the boxes inside it. A box without kids is a block: lines
+  // start and end on its sides and never cross it.
   header?: number
+  // How far the label text reaches into the strip from the box's left edge;
+  // without it the whole strip is the label's.
+  label?: number
   kids?: readonly RouteBox[]
 }
 
@@ -257,6 +262,44 @@ export function buildChannelGraph(
     }
     const upper = across('top', top, inner.y0)
     const lower = across('bottom', inner.y1, b.y1)
+    // The top door: down through the strip right of the label, from the
+    // channel above to the ring's top channel.
+    if (upper >= 0 && nb[TOP] >= 0 && box.label !== undefined && top > b.y0) {
+      const low = Math.max(inner.x0, b.x0 + box.label)
+      const high = inner.x1
+      if (holdsLane(low, high)) {
+        const door =
+          graph.channels.push({
+            axis: 'y',
+            low,
+            high,
+            start: b.y0,
+            end: top,
+            depth: depth + 2,
+            container: box.id,
+            after: [],
+            bars: [nb[TOP], upper],
+          }) - 1
+        attach({
+          bar: nb[TOP],
+          isHigh: true,
+          from: low,
+          to: high,
+          mouth: b.y0,
+          channel: door,
+          end: 0,
+        })
+        attach({
+          bar: upper,
+          isHigh: false,
+          from: low,
+          to: high,
+          mouth: top,
+          channel: door,
+          end: 1,
+        })
+      }
+    }
     split(inner, items, 'y', [upper, right, lower, left], box.id, depth + 2)
     // Doors: a channel end on the ring's left, right or bottom also runs on
     // across it into the channel outside, from the same mouth.

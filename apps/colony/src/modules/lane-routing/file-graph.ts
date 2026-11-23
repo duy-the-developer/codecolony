@@ -36,6 +36,7 @@ function scaleBox(box: RouteBox, k: number): RouteBox {
   const { x, y, w, h } = box.rect
   const scaled: RouteBox = { id: box.id, rect: { x: x * k, y: y * k, w: w * k, h: h * k } }
   if (box.header !== undefined) scaled.header = box.header * k
+  if (box.label !== undefined) scaled.label = box.label * k
   if (box.kids) scaled.kids = box.kids.map((kid) => scaleBox(kid, k))
   return scaled
 }
