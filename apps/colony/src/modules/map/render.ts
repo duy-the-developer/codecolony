@@ -211,8 +211,12 @@ function drawBlock(
   ctx.strokeRect(x0 + 0.5, y0 + 0.5, x1 - x0, y1 - y0)
 }
 
-function isTest(node: WorldNode): boolean {
-  return /(^|\/)(__tests__|tests?|spec)(\/|$)|\.(test|spec)\.[^/]+$/.test(node.path ?? '')
+// Test folders, *.test.* and *.spec.* files, and pytest's test_*.py,
+// *_test.py and conftest.py.
+export function isTest(node: WorldNode): boolean {
+  return /(^|\/)(__tests__|tests?|spec)(\/|$)|\.(test|spec)\.[^/]+$|(^|\/)(test_[^/]*|[^/]*_test|conftest)\.py$/.test(
+    node.path ?? '',
+  )
 }
 
 function drawBody(

@@ -1,0 +1,81 @@
+import type { AdapterSample } from '../../contract-samples.ts'
+
+// The Python adapter's contract sample: a tiny synthetic repository and what
+// the adapter must find in it.
+
+export const pythonSample: AdapterSample = {
+  files: {
+    'shop/__init__.py': ['from .models import Item', ''].join('\n'),
+    'shop/models.py': [
+      'class Item:',
+      '    def __init__(self, price):',
+      '        self.price = price',
+      '',
+      '    def discounted(self, rate):',
+      '        if rate > 0 and self.price > 0:',
+      '            return self.price * (1 - rate)',
+      '        return self.price',
+      '',
+      '',
+      'def make_item(price):',
+      '    def check(p):',
+      '        return p >= 0',
+      '',
+      '    return Item(price) if check(price) else None',
+      '',
+      '',
+      'def _private():',
+      '    return 0',
+      '',
+    ].join('\n'),
+    'shop/db.py': ['def connect():', '    return None', ''].join('\n'),
+    'shop/service.py': [
+      'import os',
+      'from flask import Flask',
+      'from . import db',
+      'from .models import make_item, Item as It',
+      '',
+      '',
+      'def checkout(prices):',
+      '    db.connect()',
+      '    return [make_item(p) for p in prices if p]',
+      '',
+    ].join('\n'),
+    'tests/test_service.py': [
+      'from shop.service import checkout',
+      'import shop.db',
+      '',
+      '',
+      'def test_checkout():',
+      '    assert checkout([1]) is not None',
+      '',
+    ].join('\n'),
+  },
+  symbols: [
+    { path: 'shop/models.py', name: 'Item', kind: 'class', exported: true, lines: [1, 8] },
+    { path: 'shop/models.py', name: '__init__', container: 'Item', kind: 'method' },
+    {
+      path: 'shop/models.py',
+      name: 'discounted',
+      container: 'Item',
+      kind: 'method',
+      lines: [5, 8],
+      complexity: 2,
+    },
+    { path: 'shop/models.py', name: 'make_item', kind: 'function', exported: true, complexity: 1 },
+    { path: 'shop/models.py', name: '_private', kind: 'function', exported: false },
+    { path: 'shop/service.py', name: 'checkout', kind: 'function', complexity: 2 },
+  ],
+  imports: [
+    { from: 'shop/__init__.py', to: 'shop/models.py' },
+    { from: 'shop/service.py', to: 'shop/db.py' },
+    { from: 'shop/service.py', to: 'shop/models.py' },
+    { from: 'tests/test_service.py', to: 'shop/service.py' },
+    { from: 'tests/test_service.py', to: 'shop/db.py' },
+  ],
+  calls: [
+    { from: 'shop/service.py#checkout', to: 'shop/models.py#make_item' },
+    { from: 'shop/models.py#make_item', to: 'shop/models.py#Item' },
+    { from: 'tests/test_service.py#test_checkout', to: 'shop/service.py#checkout' },
+  ],
+}

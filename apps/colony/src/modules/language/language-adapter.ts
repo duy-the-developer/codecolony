@@ -32,6 +32,10 @@ export interface LanguageAdapter {
   isExported?(declaration: Node): boolean
   // True when an import statement only brings in types.
   isTypeOnlyImport?(statement: Node): boolean
+  // Builds the specifier of a name imported from a module when that name may
+  // itself be a module (Python `from pkg import mod`), from the
+  // @import.source and @import.member captures.
+  importSpecifier?(source: string, member: string): string
   // Resolves an import specifier to a repository-relative file path, or
   // undefined for packages outside the repository.
   resolveImport(specifier: string, fromPath: string, files: ReadonlySet<string>): string | undefined
@@ -44,7 +48,9 @@ export interface AdapterQueries {
   // enclosing definition becomes the container (class for a method).
   symbols: string
   // @import on the statement, @import.source on the module string (quotes
-  // are stripped), @import.name on each bound local name.
+  // are stripped), @import.name on each bound local name. With an
+  // importSpecifier hook, @import.member on a name that may be a module; put
+  // @import on that name so each one becomes its own import.
   imports: string
   // @call on the call expression, @call.name on the called identifier,
   // @call.member when it is a member call (x.f()).
