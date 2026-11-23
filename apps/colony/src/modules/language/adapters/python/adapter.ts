@@ -149,14 +149,16 @@ export function resolveImport(
 
   const { roots, packages } = getSourceRoots(files)
   const inside = (root: string) => root === '.' || here === root || here.startsWith(`${root}/`)
-  const ordered = [...roots.filter(inside), ...roots.filter((root) => !inside(root))]
-  // Last, the folder above the importing file's top-most package, or its own
-  // folder outside any package, as Python and pytest put that folder on
-  // sys.path. Never a folder inside a package, which would let a local
-  // email.py shadow the standard library, as Python 3 never does.
+  // After the roots holding the importing file, the folder above its
+  // top-most package, or its own folder outside any package, as Python and
+  // pytest put that folder on sys.path. Never a folder inside a package,
+  // which would let a local email.py shadow the standard library, as Python 3
+  // never does. Roots of other projects come last.
   let top = here
   while (top !== '.' && packages.has(top)) top = posix.dirname(top)
-  if (!ordered.includes(top)) ordered.push(top)
+  const own = roots.filter(inside)
+  if (!own.includes(top)) own.push(top)
+  const ordered = [...own, ...roots.filter((root) => !inside(root))]
   for (const root of ordered) {
     const found = findModule(root, segments, files, false)
     if (found) return found

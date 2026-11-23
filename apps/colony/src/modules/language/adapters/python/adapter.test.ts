@@ -93,6 +93,23 @@ describe('python resolveImport', () => {
     expect(resolveImport('email', 'services/api/app/routes/users.py', files)).toBeUndefined()
   })
 
+  it('prefers its own service over another service with a project marker', () => {
+    const files = new Set([
+      'backend/pyproject.toml',
+      'backend/app/__init__.py',
+      'backend/app/models.py',
+      'worker/app/__init__.py',
+      'worker/app/models.py',
+      'worker/app/tasks.py',
+      'svc/requirements.txt',
+      'svc/helpers.py',
+      'scripts/run.py',
+      'scripts/helpers.py',
+    ])
+    expect(resolveImport('app.models', 'worker/app/tasks.py', files)).toBe('worker/app/models.py')
+    expect(resolveImport('helpers', 'scripts/run.py', files)).toBe('scripts/helpers.py')
+  })
+
   it('lets a script outside a package import from its own folder', () => {
     const files = new Set(['scripts/run.py', 'scripts/helpers.py'])
     expect(resolveImport('helpers', 'scripts/run.py', files)).toBe('scripts/helpers.py')
