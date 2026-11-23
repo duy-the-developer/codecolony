@@ -9,11 +9,12 @@ export interface MapBreadcrumbProps {
   onPick(id: string): void
 }
 
-// Where the selection sits: project › … › parent › selected. The middle
-// ancestors fold into one "…" so the selected name keeps its width.
+// Where the selection sits: project › repository › … › parent › selected.
+// The repository is named only when its project holds more than one. The
+// middle ancestors fold into one "…" so the selected name keeps its width.
 export function MapBreadcrumb({ scene, selected, onPick }: MapBreadcrumbProps) {
   if (!scene || !selected) return null
-  const chain = scene.listAncestry(selected).filter((node) => node.kind !== 'repo')
+  const chain = scene.listAncestry(selected).filter((node) => !isLoneRepo(scene, node))
   const hidden = chain.length > 4 ? chain.slice(1, -2) : []
   const shown = hidden.length > 0 ? [...chain.slice(0, 1), ...chain.slice(-2)] : chain
   const leaf = shown.at(-1)
@@ -61,4 +62,10 @@ export function MapBreadcrumb({ scene, selected, onPick }: MapBreadcrumbProps) {
       </button>
     </nav>
   )
+}
+
+function isLoneRepo(scene: Scene, node: WorldNode): boolean {
+  if (node.kind !== 'repo' || !node.parent) return false
+  const siblings = scene.children.get(node.parent) ?? []
+  return siblings.filter((n) => n.kind === 'repo').length === 1
 }

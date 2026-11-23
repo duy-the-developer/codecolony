@@ -79,7 +79,23 @@ export function App() {
   const [dockElement, setDockElement] = useState<HTMLDivElement | null>(null)
   const { dock, workers } = useDock(dockElement)
   const { colonists, notice: colonistsNotice } = useColonists()
-  const placed = useMemo(() => (scene ? placeColonists(scene, colonists) : []), [scene, colonists])
+  // Active only keeps the colonists at work; the rest leave the roster and
+  // the map, robots, outlines and pins alike.
+  const shownColonists = useMemo(
+    () =>
+      preferences.isActiveOnly
+        ? colonists.filter((colonist) => colonist.status === 'working')
+        : colonists,
+    [colonists, preferences.isActiveOnly],
+  )
+  const placed = useMemo(
+    () => (scene ? placeColonists(scene, shownColonists) : []),
+    [scene, shownColonists],
+  )
+  const toggleActiveOnly = useCallback(
+    () => updatePreferences((current) => ({ ...current, isActiveOnly: !current.isActiveOnly })),
+    [updatePreferences],
+  )
   const [selectedColonistId, setSelectedColonistId] = useState<string>()
   const mapRef = useRef<MapHandle | null>(null)
   const leftPanelRef = useRef<PanelImperativeHandle | null>(null)
@@ -357,10 +373,13 @@ export function App() {
               </div>
               <div className="ml-auto flex min-w-0 justify-end">
                 <ColonistRoster
-                  colonists={colonists}
+                  colonists={shownColonists}
+                  hiddenCount={colonists.length - shownColonists.length}
                   notice={colonistsNotice}
                   selectedId={selectedColonistId}
+                  isActiveOnly={preferences.isActiveOnly}
                   onPick={pickColonist}
+                  onToggleActiveOnly={toggleActiveOnly}
                 />
               </div>
             </div>

@@ -30,10 +30,10 @@ interface LegendGroup {
 }
 
 // The map's legend, floating at its top left: names and swatches for what is
-// on the map now. The colonists' robots show while there are colonists, the
-// possible-conflict badge while a file has one; each overlay's group, titled
-// with its key, shows only while it draws: Git while the overlay is on or a
-// colonist is picked, Owners while its pins are on, Dependency while its lines
+// on the map now. The colonists' robots show while there are colonists; each
+// overlay's group, titled with its key, shows only while it draws: Git while
+// the overlay is on or a colonist is picked, Owners while its pins are on
+// (with the possible-conflict badge while a file has one), Dependency while its lines
 // or a selection's are drawn. The selection's outline is named with its lines,
 // else on its own. Collapsed it is a small chip; L or a click toggles it.
 export function MapLegend({
@@ -98,12 +98,12 @@ function listLegendGroups({
 }: Omit<MapLegendProps, 'isOpen' | 'onToggle'>): LegendGroup[] {
   const groups: LegendGroup[] = []
   if (hasColonists) {
-    const rows = [
-      <LegendRow key="robot" mark={<Robot />} name="Colonist" tip="On the file it saved last" />,
-    ]
-    if (hasConflicts)
-      rows.push(<LegendRow key="conflict" mark={<Conflict />} name="Possible conflict" />)
-    groups.push({ title: 'Colonists', rows })
+    groups.push({
+      title: 'Colonists',
+      rows: [
+        <LegendRow key="robot" mark={<Robot />} name="Colonist" tip="On the file it saved last" />,
+      ],
+    })
   }
   const isGit = overlays.has('git')
   if (isGit || isColonistPicked) {
@@ -127,18 +127,17 @@ function listLegendGroups({
     })
   }
   if (overlays.has('owners') && hasColonists) {
-    groups.push({
-      title: 'Owners',
-      hotkey: overlayKey('owners'),
-      rows: [
-        <LegendRow
-          key="pin"
-          mark={<Pin />}
-          name="Owner"
-          tip="A pin per changed file, in its colonist's colour"
-        />,
-      ],
-    })
+    const rows = [
+      <LegendRow
+        key="pin"
+        mark={<Pin />}
+        name="Owner"
+        tip="A pin per changed file, in its colonist's colour"
+      />,
+    ]
+    if (hasConflicts)
+      rows.push(<LegendRow key="conflict" mark={<Conflict />} name="Possible conflict" />)
+    groups.push({ title: 'Owners', hotkey: overlayKey('owners'), rows })
   }
   const dependency = OVERLAYS.find((overlay) => overlay.id === 'dependency') ?? OVERLAYS[0]
   const isDependency = lines.overlays.includes(dependency.id)

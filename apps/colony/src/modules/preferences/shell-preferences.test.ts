@@ -27,7 +27,13 @@ describe('shellPreferencesFrom', () => {
       right: DEFAULT_SHELL_PREFERENCES.right,
       openQueueSections: { active: false, queued: true, done: true },
       isLegendOpen: false,
+      isActiveOnly: false,
     })
+  })
+
+  it('remembers whether only the colonists at work show', () => {
+    expect(shellPreferencesFrom(JSON.stringify({ isActiveOnly: true })).isActiveOnly).toBe(true)
+    expect(shellPreferencesFrom(JSON.stringify({ isActiveOnly: 1 })).isActiveOnly).toBe(false)
   })
 
   it('remembers whether the legend is open, and drops the old Legend tab', () => {

@@ -54,13 +54,23 @@ describe('MapLegend', () => {
     expect(screen.queryAllByRole('heading')).toEqual([])
   })
 
-  it('names the robots, and the conflict badge only while there is one', () => {
-    renderLegend({ hasColonists: true })
+  it('names the robots, with no conflict badge while the Owners overlay is off', () => {
+    renderLegend({ hasColonists: true, hasConflicts: true })
     expect(groupTitles()).toEqual(['Colonists'])
     expect(rowNames()).toEqual(['ColonistOn the file it saved last'])
+  })
+
+  it('names the conflict badge in the Owners group only while there is one', () => {
+    const overlays = new Set<OverlayId>(['owners'])
+    renderLegend({ hasColonists: true, overlays })
+    expect(rowNames().slice(1)).toEqual(["OwnerA pin per changed file, in its colonist's colour"])
     cleanup()
-    renderLegend({ hasColonists: true, hasConflicts: true })
-    expect(rowNames()).toEqual(['ColonistOn the file it saved last', 'Possible conflict'])
+    renderLegend({ hasColonists: true, hasConflicts: true, overlays })
+    expect(groupTitles()).toEqual(['Colonists', 'Owners3'])
+    expect(rowNames().slice(1)).toEqual([
+      "OwnerA pin per changed file, in its colonist's colour",
+      'Possible conflict',
+    ])
   })
 
   it('adds the Git and Owners groups with their keys while they are on', () => {

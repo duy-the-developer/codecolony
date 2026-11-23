@@ -1,6 +1,7 @@
 // What the page remembers per browser: each side panel's width, whether it is
-// collapsed, and its active tab, which build queue sections are open, and
-// whether the map legend is open. Storage can be missing or full (private
+// collapsed, and its active tab, which build queue sections are open,
+// whether the map legend is open, and whether the map shows only the
+// colonists at work. Storage can be missing or full (private
 // windows, blocked site data), so reads fall back to defaults and writes are
 // best effort.
 
@@ -24,6 +25,7 @@ export interface ShellPreferences {
   right: PanelPreferences<RightTab>
   openQueueSections: Record<QueueSection, boolean>
   isLegendOpen: boolean
+  isActiveOnly: boolean
 }
 
 // A panel can be dragged as wide as the map and the other panel allow: the map
@@ -36,6 +38,7 @@ export const DEFAULT_SHELL_PREFERENCES: ShellPreferences = {
   right: { widthPx: 420, isCollapsed: false, tab: 'terminal' },
   openQueueSections: { active: true, queued: true, done: false },
   isLegendOpen: false,
+  isActiveOnly: false,
 }
 
 const STORAGE_KEY = 'codecolony.shell.v1'
@@ -88,6 +91,10 @@ export function shellPreferencesFrom(raw: string | null): ShellPreferences {
       typeof record.isLegendOpen === 'boolean'
         ? record.isLegendOpen
         : DEFAULT_SHELL_PREFERENCES.isLegendOpen,
+    isActiveOnly:
+      typeof record.isActiveOnly === 'boolean'
+        ? record.isActiveOnly
+        : DEFAULT_SHELL_PREFERENCES.isActiveOnly,
   }
 }
 

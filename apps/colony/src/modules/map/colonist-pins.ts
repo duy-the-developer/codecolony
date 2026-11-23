@@ -10,10 +10,9 @@ import type { Drawn } from './render.ts'
 // room for one), at every zoom, so the pins match the colonist's files one
 // for one. Pins on the same block sit side by side in roster order, right to
 // left. A block holding a file two or more colonists change also gets a
-// possible-conflict badge, left of its pins; with the overlay off the badge
-// stays, alone, on a stem of its own down to the block. A row that would cover another block's pins, or a robot, is
-// lifted above them, on a longer stem, so every pin still points at its own
-// block.
+// possible-conflict badge, left of its pins. A row that would cover another
+// block's pins, or a robot, is lifted above them, on a longer stem, so every
+// pin still points at its own block.
 
 type ColonistStatus = PlacedColonist['colonist']['status']
 
@@ -42,8 +41,6 @@ export interface ConflictBadge {
   paths: string[]
   x: number
   y: number
-  // Where its stem touches the block, when it stands with no pins.
-  tipY?: number
 }
 
 export interface PinLayout {
@@ -70,16 +67,14 @@ interface Group {
 }
 
 // colonists: in roster order. drawn: the frame's blocks, as render returns
-// them.
-// withPins: false keeps only the possible-conflict badges (the Owners
-// overlay is off). obstacles: robots on screen the rows must clear.
+// them. obstacles: robots on screen the rows must clear.
 export function layoutPins(
   colonists: readonly PlacedColonist[],
   scene: Scene,
   camera: Camera,
   view: Viewport,
   drawn: readonly Drawn[],
-  { withPins = true, obstacles = [] }: { withPins?: boolean; obstacles?: readonly Rect[] } = {},
+  { obstacles = [] }: { obstacles?: readonly Rect[] } = {},
 ): PinLayout {
   const byId = new Map(drawn.map((item) => [item.node.id, item]))
   const groups = new Map<string, Group>()
@@ -136,7 +131,6 @@ export function layoutPins(
         sharedPaths.add(change.path)
         for (const id of change.sharedWith) shared.add(id)
       }
-      if (!withPins) continue
       const text = placed.initials
       const w = Math.max(PIN_HEIGHT_PX, PIN_PAD_PX * 2 + text.length * PIN_CHAR_PX)
       const head = { x: right - w, y: top, w, h: PIN_HEIGHT_PX }
@@ -153,20 +147,15 @@ export function layoutPins(
         tipY,
       })
     }
-    if (pins.length === 0 && shared.size === 0) continue
+    if (pins.length === 0) continue
     const badge: ConflictBadge | undefined =
       shared.size > 0
         ? {
             nodeId: group.nodeId,
             colonistIds: [...shared],
             paths: [...sharedPaths].sort(),
-            // Alone, it stands over the block, even a narrow one.
-            x:
-              pins.length > 0
-                ? right - BADGE_RADIUS_PX
-                : Math.max(right - BADGE_RADIUS_PX, rect.x + rect.w / 2),
+            x: right - BADGE_RADIUS_PX,
             y: top + PIN_HEIGHT_PX / 2,
-            ...(pins.length > 0 ? {} : { tipY }),
           }
         : undefined
     const left = badge ? badge.x - BADGE_RADIUS_PX : right + GAP_PX

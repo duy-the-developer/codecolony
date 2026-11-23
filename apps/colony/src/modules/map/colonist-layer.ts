@@ -35,8 +35,8 @@ import type { Drawn } from './render.ts'
 // dims the others'.
 //
 // The Owners overlay puts a pin on every changed file in its colonist's
-// status colour with its initials (see colonist-pins.ts). A file two
-// colonists change carries a possible-conflict badge either way. Robots,
+// status colour with its initials (see colonist-pins.ts), and a
+// possible-conflict badge on a file two colonists change. Robots,
 // pins and badges are drawn on their own canvas over the map, so they can
 // bob and pulse without redrawing it.
 
@@ -244,10 +244,11 @@ export class ColonistLayer {
     ctx.globalAlpha = 1
     ctx.setLineDash([])
     const view = { width: ctx.canvas.clientWidth, height: ctx.canvas.clientHeight }
-    this.layout = layoutPins(this.colonists, scene, camera, view, drawn, {
-      withPins: this.showOwners,
-      obstacles: this.robots.map(robotBox),
-    })
+    this.layout = this.showOwners
+      ? layoutPins(this.colonists, scene, camera, view, drawn, {
+          obstacles: this.robots.map(robotBox),
+        })
+      : { pins: [], badges: [] }
     // The hovered pin or badge moved with the map: follow it, or let it go.
     const key = this.hovered && keyOfHit(this.hovered)
     this.hovered = key ? this.findHit(key) : undefined
@@ -547,8 +548,6 @@ function drawPin(
 function drawConflictBadge(ctx: CanvasRenderingContext2D, badge: ConflictBadge, alpha: number) {
   ctx.globalAlpha = alpha
   ctx.setLineDash([])
-  if (badge.tipY !== undefined)
-    drawStem(ctx, badge.x, badge.y + BADGE_RADIUS_PX, badge.tipY, CONFLICT_COLOR)
   ctx.fillStyle = CONFLICT_COLOR
   ctx.strokeStyle = COLONIST_CHIP
   ctx.lineWidth = 1.5
