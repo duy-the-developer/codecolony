@@ -68,13 +68,32 @@ describe('buildChannelGraph', () => {
     expect(countDetours(makeModule(loose, 7, 5, 0), loose)).toBe(0)
   })
 
-  it('keeps the label strip free of lanes', () => {
+  it('keeps the label strip free of lanes without room beside the label', () => {
     const graph = buildChannelGraph(makeModule(files, 7, 6))
     for (const channel of graph.channels) {
       if (channel.container !== 'm') continue
       const top = channel.axis === 'x' ? channel.low : channel.start
       expect(top).toBeGreaterThanOrEqual(1)
     }
+  })
+
+  it('opens a door down through the label strip right of its label', () => {
+    // The files a unit below the strip, so the ring has a top channel.
+    const lower = files.map(({ id, rect }) => block(id, rect.x, rect.y + 1, rect.w, rect.h))
+    const module = makeModule(lower, 7, 7)
+    const [box] = module.kids ?? []
+    if (!box) throw new Error('no module')
+    box.label = 3
+    // Room above the module, for the channel the door opens onto.
+    const root: RouteBox = { ...module, rect: { x: 0, y: -2, w: 7, h: 9 } }
+    const graph = buildChannelGraph(root)
+    const doors = graph.channels.filter(
+      (channel) => channel.container === 'm' && channel.axis === 'y' && channel.start === 0,
+    )
+    expect(doors).toHaveLength(1)
+    // Never over the label.
+    expect(doors[0]?.low).toBeGreaterThanOrEqual(3)
+    expect(doors[0]?.end).toBe(1)
   })
 
   it('still cuts touching boxes apart when no gap parts them', () => {

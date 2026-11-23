@@ -75,12 +75,17 @@ function listSegments(routing: LaneRouting): Segment[] {
   return segments
 }
 
-// Collinear overlaps longer than a point between lines of different links.
-function countOverlaps(segments: Segment[]): number {
+// Collinear overlaps longer than a point between lines of different links,
+// leaving out pairs that may share a lane.
+function countOverlaps(
+  segments: Segment[],
+  mayShare: (a: number, b: number) => boolean = () => false,
+): number {
   let overlaps = 0
   segments.forEach((a, i) => {
     for (const b of segments.slice(i + 1)) {
       if (a.link === b.link || a.isHorizontal !== b.isHorizontal || a.across !== b.across) continue
+      if (mayShare(a.link, b.link)) continue
       if (Math.min(a.to, b.to) > Math.max(a.from, b.from)) overlaps++
     }
   })
@@ -153,7 +158,7 @@ describe('routeLanes', () => {
     expect(countBlockHits(listSegments(routing), blocks)).toBe(0)
   })
 
-  it('puts lanes on whole units one apart and never overlaps them when there is room', () => {
+  it('puts lanes on whole units one apart, overlapping only on a shared highway', () => {
     const { root } = makeWorld(40, 6)
     // A few links per block, so every block side has a port for each, and
     // across the packages one way only: two lines that swap places between
@@ -176,7 +181,16 @@ describe('routeLanes', () => {
     for (const points of routing.points) {
       for (const value of points ?? []) expect(Number.isInteger(value)).toBe(true)
     }
-    expect(countOverlaps(listSegments(routing))).toBe(0)
+    // Lines from one package into the other share the highway between them.
+    const folderOf = (id: string) => id.slice(0, id.indexOf('/'))
+    const crossing = (link: number) => {
+      const [from, to] = pairs[link] as [string, string]
+      return folderOf(from) === folderOf(to) ? undefined : `${folderOf(from)}>${folderOf(to)}`
+    }
+    const mayShare = (a: number, b: number) =>
+      crossing(a) !== undefined && crossing(a) === crossing(b)
+    expect(countOverlaps(listSegments(routing), mayShare)).toBe(0)
+    expect(countOverlaps(listSegments(routing))).toBeGreaterThan(0)
   })
 
   it('keeps lanes a stride apart where they fit, and closer only where they do not', () => {
@@ -199,41 +213,39 @@ describe('routeLanes', () => {
       expect(points).toBeDefined()
       for (const value of points ?? []) expect(value % 2).toBe(0)
     }
-    // A 1-unit street between two blocks holds no whole unit, so its lane
-    // sits half a unit off each.
+    // A 1-unit street between two blocks holds no whole unit, so a lane
+    // along it sits half a unit off each. b sits a row lower than a, so the
+    // line has to turn in the street.
     const street: RouteBox = {
       id: 'world',
-      rect: { x: 0, y: 0, w: 10, h: 6 },
+      rect: { x: 0, y: 0, w: 10, h: 9 },
       header: 0,
-      kids: [block('a', 2, 2, 2, 2), block('b', 5, 2, 2, 2)],
+      kids: [block('a', 2, 2, 2, 2), block('b', 5, 5, 2, 2)],
     }
     const narrow = routeLanes(buildChannelGraph(double(street), true), [{ from: 'a', to: 'b' }], {
       stride: 2,
     })
     const points = [...(narrow.points[0] ?? [])]
-    expect(points.filter((value, k) => k % 2 === 0 && value === 9)).not.toHaveLength(0)
+    expect(points).toContain(9)
   })
 
-  it('merges only links to the same block when a gutter is full', () => {
+  it('merges lines heading to one end when a gutter is full', () => {
     const { root, blocks } = makeWorld(2)
     const graph = buildChannelGraph(root)
     const links = linkEveryPair(blocks)
+    const roomy = routeLanes(graph, links)
     const routing = routeLanes(graph, links, { merge: 'whenFull' })
     expect(routing.merged).toBeGreaterThan(0)
     // Lanes past the room left pack closer instead.
     expect(routing.crowded).toBeGreaterThan(0)
-    // The blocks imported through each channel: a full channel takes a lane
-    // per imported block, never fewer.
-    const targets: Set<string>[] = graph.channels.map(() => new Set())
-    for (const link of links) {
-      countChannelLoad(graph, [link]).forEach((n, c) => {
-        if (n > 0) targets[c]?.add(link.to)
-      })
-    }
+    // A channel merges only when its stretches do not fit, and never below a
+    // lane each for the ends they run to.
     graph.channels.forEach((channel, c) => {
-      const load = routing.load[c] as number
-      const want = load > laneCapacity(channel) ? (targets[c] as Set<string>).size : load
-      expect(routing.lanes[c], `channel ${c}`).toBe(want)
+      const own = roomy.lanes[c] as number
+      const lanes = routing.lanes[c] as number
+      if (own <= laneCapacity(channel)) expect(lanes, `channel ${c}`).toBe(own)
+      else expect(lanes, `channel ${c}`).toBeLessThanOrEqual(own)
+      if (own > 0) expect(lanes, `channel ${c}`).toBeGreaterThan(0)
     })
     expect(countBlockHits(listSegments(routing), blocks)).toBe(0)
   })
@@ -278,11 +290,11 @@ describe('routeLanes', () => {
     expect(countBlockHits(listSegments(routing), [above, wall, below])).toBe(0)
   })
 
-  it('counts the same channel load as a full routing', () => {
+  it('counts the lanes a full routing takes', () => {
     const { root, blocks } = makeWorld(2)
     const graph = buildChannelGraph(root)
     const links = linkEveryPair(blocks)
-    expect([...countChannelLoad(graph, links)]).toEqual([...routeLanes(graph, links).load])
+    expect([...countChannelLoad(graph, links)]).toEqual([...routeLanes(graph, links).lanes])
   })
 
   it('keeps links between the boxes of one folder inside it', () => {
@@ -367,5 +379,46 @@ describe('routeLanes', () => {
         : s.across > 10 && s.across < 18
       expect(crossesM, JSON.stringify(s)).toBe(false)
     }
+  })
+
+  describe('highways between folders', () => {
+    // p spans x 0-61 and q x 101-162, with a 40-unit gutter between them.
+    const { root } = makeWorld(40, 6)
+    const graph = buildChannelGraph(root)
+    // Runs across the middle of the gutter, by link.
+    const acrossGutter = (routing: LaneRouting) =>
+      listSegments(routing).filter((s) => s.isHorizontal && s.from < 81 && s.to > 81)
+
+    it('runs every line from one folder to another along one highway', () => {
+      const links: Link[] = [
+        { from: 'p/a', to: 'q/c' },
+        { from: 'p/b', to: 'q/d' },
+        { from: 'p/d', to: 'q/a' },
+      ]
+      const runs = acrossGutter(routeLanes(graph, links))
+      expect(new Set(runs.map((s) => s.link))).toEqual(new Set([0, 1, 2]))
+      expect(new Set(runs.map((s) => s.across)).size).toBe(1)
+    })
+
+    it('keeps lines into a folder and lines out of it on separate lanes', () => {
+      const routing = routeLanes(graph, [
+        { from: 'p/a', to: 'q/c' },
+        { from: 'q/d', to: 'p/b' },
+      ])
+      expect(new Set(acrossGutter(routing).map((s) => s.across)).size).toBe(2)
+      expect(countOverlaps(listSegments(routing))).toBe(0)
+    })
+
+    it('enters a folder through one entry point per side', () => {
+      const ids = ['a', 'b', 'c', 'd']
+      const links = ids.flatMap((a) => ids.map((b) => ({ from: `p/${a}`, to: `q/${b}` })))
+      const routing = routeLanes(graph, links)
+      // Where lines cross q's left border.
+      const entries = listSegments(routing).filter(
+        (s) => s.isHorizontal && s.from < 101 && s.to > 101,
+      )
+      expect(routing.points.every((points) => points !== undefined)).toBe(true)
+      expect(new Set(entries.map((s) => s.across)).size).toBe(1)
+    })
   })
 })

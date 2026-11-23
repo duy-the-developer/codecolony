@@ -72,8 +72,10 @@ export class LaneLayer {
     const nodes: RouteNode[] = []
     for (const node of scene.world.nodes) {
       if (node.kind === 'symbol') continue
-      const { id, kind, rect } = node
-      nodes.push(node.parent ? { id, parent: node.parent, kind, rect } : { id, kind, rect })
+      const { id, kind, rect, name } = node
+      nodes.push(
+        node.parent ? { id, parent: node.parent, kind, rect, name } : { id, kind, rect, name },
+      )
     }
     router.loadWorld(this.version, nodes, this.edges)
   }

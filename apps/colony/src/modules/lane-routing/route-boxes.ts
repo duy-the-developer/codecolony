@@ -8,8 +8,9 @@ import type { RouteBox } from './channel-graph.ts'
 // a module, or a container's own files, holds each file as a block of its
 // own, and lanes run in the streets between them.
 
-// The fields of a world node that routing reads.
-export type RouteNode = Pick<WorldNode, 'id' | 'parent' | 'kind' | 'rect'>
+// The fields of a world node that routing reads. The name sizes a folder's
+// label, which lines never cross.
+export type RouteNode = Pick<WorldNode, 'id' | 'parent' | 'kind' | 'rect'> & { name?: string }
 
 export interface RouteBoxes {
   root: RouteBox | undefined
@@ -65,6 +66,7 @@ export function buildRouteBoxes(
         id: node.id,
         rect: node.rect,
         header: HEADER_UNITS[node.kind],
+        ...labelOf(node),
         kids: fileBoxes(files),
       }
     }
@@ -88,7 +90,13 @@ export function buildRouteBoxes(
         boxes.push({ id, rect: boundsOf(files) })
       }
     }
-    return { id: node.id, rect: node.rect, header: HEADER_UNITS[node.kind], kids: boxes }
+    return {
+      id: node.id,
+      rect: node.rect,
+      header: HEADER_UNITS[node.kind],
+      ...labelOf(node),
+      kids: boxes,
+    }
   }
 
   const root = world ? build(world, undefined) : undefined
@@ -105,6 +113,17 @@ export function buildRouteBoxes(
     },
     hasFileBlocks: openFiles.size > 0,
   }
+}
+
+// The most room a folder's label takes in its strip, in units from its left
+// edge, as render.ts draws it: from an inset of up to half a unit, at a font
+// that grows with the strip until its pixel cap, after which it only shrinks
+// on the map. Wide letters (projects and packages are in capitals) are about
+// 0.7 em; half a unit spare after.
+function labelOf(node: RouteNode): { label?: number } {
+  if (node.name === undefined) return {}
+  const em = (node.kind === 'module' ? 0.85 : 0.6) * HEADER_UNITS[node.kind]
+  return { label: 0.5 + node.name.length * 0.7 * em + 0.5 }
 }
 
 function boundsOf(nodes: readonly RouteNode[]): Rect {
