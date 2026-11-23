@@ -212,10 +212,17 @@ export function createColonistTracker(options: ColonistTrackerOptions): Colonist
     canSeeSessions: boolean,
   ): Colonist[] {
     const paths = [...copies.keys()]
-    // A session belongs to the deepest copy around its folder.
-    const ownerOf = (cwd: string) =>
+    // A session in a firstmate task's recorded pane belongs to the task's
+    // copy, wherever the pane opened; any other belongs to the deepest copy
+    // around its folder.
+    const paneOwners = new Map<string, string>()
+    for (const task of tasks) {
+      if (task.paneId && task.worktree) paneOwners.set(task.paneId, realPath(task.worktree))
+    }
+    const ownerOf = (session: LiveSession) =>
+      (session.paneId ? paneOwners.get(session.paneId) : undefined) ??
       paths
-        .filter((path) => isInside(cwd, path))
+        .filter((path) => isInside(session.cwd, path))
         .sort((a, b) => b.length - a.length)
         .at(0)
     const colonists: Colonist[] = []
@@ -223,7 +230,7 @@ export function createColonistTracker(options: ColonistTrackerOptions): Colonist
       const diff = copy.diff
       if (!diff || diff.changes.length + diff.omitted === 0) continue
       const task = tasks.find((t) => t.worktree && realPath(t.worktree) === copy.path)
-      const here = sessions.filter((session) => ownerOf(session.cwd) === copy.path)
+      const here = sessions.filter((session) => ownerOf(session) === copy.path)
       const presence = resolvePresence(task, here, canSeeSessions)
       const colonist: Colonist = {
         id: copy.path,

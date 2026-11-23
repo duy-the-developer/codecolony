@@ -61,6 +61,20 @@ describe('readFirstmateTasks', () => {
     ])
   })
 
+  it('reads the Herdr pane a task runs in', async () => {
+    const home = makeFirstmateHome([
+      { id: 'a', meta: { backend: 'herdr', window: 'default:wET:p2' } },
+      { id: 'b', meta: { backend: 'herdr', window: 'default:wET:p2', herdr_pane_id: 'wA7:p3' } },
+      { id: 'c', meta: { backend: 'tmux', window: 'fm:task-c' } },
+    ])
+    const tasks = await readFirstmateTasks(home)
+    expect(tasks.map((task) => [task.id, task.paneId])).toEqual([
+      ['a', 'wET:p2'],
+      ['b', 'wA7:p3'],
+      ['c', undefined],
+    ])
+  })
+
   it('reads a missing home as no tasks', async () => {
     expect(await readFirstmateTasks('/no/such/home')).toEqual([])
   })

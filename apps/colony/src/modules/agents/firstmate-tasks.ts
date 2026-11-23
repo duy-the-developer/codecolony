@@ -10,16 +10,18 @@ import {
 
 // Reads a firstmate home, read only: each running task's record in
 // `state/<task>.meta` (key=value lines: the worktree it works in, its kind,
-// branch) and its status log in `state/<task>.status`, read the way the build
-// queue reads it, and whether the backlog (data/backlog.md) holds it for the
-// captain, plus the clones under `projects/`. A missing or unreadable home
-// reads as empty.
+// branch, the Herdr pane it runs in) and its status log in
+// `state/<task>.status`, read the way the build queue reads it, and whether the
+// backlog (data/backlog.md) holds it for the captain, plus the clones under
+// `projects/`. A missing or unreadable home reads as empty.
 
 export interface FirstmateTask {
   id: string
   worktree?: string
   kind?: string
   branch?: string
+  // The Herdr pane its worker runs in, such as `wET:p2`.
+  paneId?: string
   // Its status log, when it has written one.
   status?: WorkerStatus
   // Set while the backlog holds the task for the captain.
@@ -48,6 +50,8 @@ export async function readFirstmateTasks(home: string): Promise<FirstmateTask[]>
         if (fields.worktree) task.worktree = fields.worktree
         if (fields.kind) task.kind = fields.kind
         if (fields.branch) task.branch = fields.branch
+        const paneId = herdrPaneOf(fields)
+        if (paneId) task.paneId = paneId
         const log = await readText(join(state, `${id}.status`))
         if (log !== undefined) task.status = parseStatusLog(log)
         const hold = holds.get(id)
@@ -56,6 +60,16 @@ export async function readFirstmateTasks(home: string): Promise<FirstmateTask[]>
       }),
   )
   return tasks.filter((task) => task !== undefined)
+}
+
+// A Herdr task records its pane as `herdr_pane_id`, and as the target in
+// `window`, `<session>:<pane id>` such as `default:wET:p2`. Other backends use
+// `window` for their own targets.
+function herdrPaneOf(fields: Record<string, string>): string | undefined {
+  if (fields.herdr_pane_id) return fields.herdr_pane_id
+  if (fields.backend !== 'herdr' || !fields.window) return undefined
+  const colon = fields.window.indexOf(':')
+  return colon > 0 && colon < fields.window.length - 1 ? fields.window.slice(colon + 1) : undefined
 }
 
 // The clones firstmate works from: `projects/<name>`.
