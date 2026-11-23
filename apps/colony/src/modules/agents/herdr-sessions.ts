@@ -3,8 +3,9 @@ import type { LiveSession, SessionSource, SessionStatus } from './session-source
 // Sessions from Herdr's agent list: each agent pane's folder, status and pane
 // id. The folder is where the pane's agent works (`foreground_cwd`), which
 // differs from the one the pane opened in (`cwd`) when, say, a pane opened in
-// a clone runs an agent in one of its worktrees. Takes the dock's Herdr client, so the colony opens the socket only when
-// the dock may (never with --no-herdr).
+// a clone runs an agent in one of its worktrees. Takes the dock's Herdr
+// client, so the colony opens the socket only when the dock may (never with
+// --no-herdr).
 
 export interface HerdrRequester {
   request(method: string, params?: Record<string, unknown>): Promise<unknown>

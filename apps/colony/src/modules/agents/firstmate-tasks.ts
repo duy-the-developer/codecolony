@@ -10,10 +10,10 @@ import {
 
 // Reads a firstmate home, read only: each running task's record in
 // `state/<task>.meta` (key=value lines: the worktree it works in, its kind,
-// branch, the Herdr pane it runs in) and its status log in `state/<task>.status`, read the way the build
-// queue reads it, and whether the backlog (data/backlog.md) holds it for the
-// captain, plus the clones under `projects/`. A missing or unreadable home
-// reads as empty.
+// branch, the Herdr pane it runs in) and its status log in
+// `state/<task>.status`, read the way the build queue reads it, and whether the
+// backlog (data/backlog.md) holds it for the captain, plus the clones under
+// `projects/`. A missing or unreadable home reads as empty.
 
 export interface FirstmateTask {
   id: string
