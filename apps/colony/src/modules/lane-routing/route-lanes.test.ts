@@ -382,8 +382,7 @@ describe('routeLanes', () => {
     expect(door.to).toBeGreaterThan(5)
     expect(door.to).toBeLessThan(8)
     const turn = segments.find(
-      (s) =>
-        s.link === 0 && s.isHorizontal && s.across === door.to && s.from <= door.across,
+      (s) => s.link === 0 && s.isHorizontal && s.across === door.to && s.from <= door.across,
     )
     expect(turn?.to).toBeGreaterThanOrEqual(door.across)
     // w's port up into the channel stays off the door line's spot.
