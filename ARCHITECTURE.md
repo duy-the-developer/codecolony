@@ -100,7 +100,7 @@ The page never receives the server's `World` as is (`wire/world-encoder.ts`, `wi
 - A file's symbols come from `/api/symbols` when the file is about to open on the map, when its file is shown, or when a symbol is picked. Their rectangles are not sent: the page places them with the layout's own formula (`layout/symbol-band.ts`). Until they arrive, an edge that ends on one of them is held by its file. Search runs on the server (`/api/search`), since the page holds only the symbols it loaded.
 - After a `world` event the page asks `/api/world?session=<s>&since=<version>` and gets a patch, splices over the version before (`wire/sequence-diff.ts`), when the server still has that version; otherwise the whole world.
 - On the page, `scene/scene.ts` is the one place that reads world data, and `web/client/world-client.ts` makes the requests.
-- `/api/colonists` sends the colonists whole, with the token, after each `colonists` event; the page keeps one `/api/events` stream for both kinds of event (`web/client/server-events.ts`) and opens a new one if the browser gives up on it. A token from an earlier server run is refused, so the page then shows why the colonists are hidden instead of the last ones it saw.
+- `/api/colonists` sends the colonists whole, with the token, after each `colonists` event; the page keeps one `/api/events` stream for both kinds of event (`web/client/server-events.ts`) and opens a new one if the browser gives up on it. When the server rejects the page's token (401), the roster says so in a muted note and the map shows no colonists instead of the last ones it saw.
 
 ## Layout
 

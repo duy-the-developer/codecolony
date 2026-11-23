@@ -4,7 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Colonist, ColonistsResponse } from '../../modules/wire/api-types.ts'
 import { useColonists } from './use-colonists.ts'
 
-vi.mock('@codecolony/dock/web', () => ({ readToken: () => 'token' }))
+const page = vi.hoisted(() => ({ token: 'token' as string | undefined }))
+const logError = vi.hoisted(() => vi.fn())
+vi.mock('@codecolony/dock/web', () => ({ readToken: () => page.token }))
+vi.mock('../../modules/logging/log.ts', () => ({ logError }))
 
 // The browser's EventSource, driven by hand: the test sends events and drops
 // the stream the way a browser that gave up would.
@@ -54,6 +57,8 @@ const latest = () => FakeEventSource.opened.at(-1) as FakeEventSource
 
 describe('useColonists', () => {
   beforeEach(() => {
+    page.token = 'token'
+    logError.mockReset()
     FakeEventSource.opened = []
     vi.stubGlobal('EventSource', FakeEventSource)
     vi.stubGlobal(
@@ -109,20 +114,30 @@ describe('useColonists', () => {
     await waitFor(() => expect(result.current.colonists).toEqual([colonist('a', 'pr-ready')]))
   })
 
-  it('says so, and shows no stale colonists, when the server no longer takes the token', async () => {
+  it('says the token was rejected, and shows no stale colonists, on a 401', async () => {
     served = { status: 200, body: { version: 1, colonists: [colonist('a', 'waiting')] } }
     const { result } = renderHook(() => useColonists())
     act(() => latest().send('colonists'))
     await waitFor(() => expect(result.current.colonists).toHaveLength(1))
 
-    // The server restarted: a new run, a new token, the stream reconnected.
     served = { status: 401 }
     act(() => latest().send('colonists'))
     await waitFor(() =>
       expect(result.current).toEqual({
         colonists: [],
-        notice: 'The server restarted with a new token: open the URL it printed',
+        notice: 'Colonists unavailable: access token rejected. Reopen the app link.',
       }),
     )
+  })
+
+  it('only logs the failed load, with no notice, when the page has no token', async () => {
+    page.token = undefined
+    served = { status: 200, body: { version: 1, colonists: [colonist('a', 'waiting')] } }
+    const { result } = renderHook(() => useColonists())
+    act(() => latest().send('colonists'))
+    await waitFor(() =>
+      expect(logError).toHaveBeenCalledWith('Could not load the colonists', expect.anything()),
+    )
+    expect(result.current).toEqual({ colonists: [] })
   })
 })

@@ -84,7 +84,6 @@ interface CopyState {
 export function createColonistTracker(options: ColonistTrackerOptions): ColonistTrackerHandle {
   const sources = options.sessions ?? []
   const home = options.home ?? homedir()
-  const validationCopies = realPath(join(home, '.no-mistakes', 'worktrees'))
   let snapshot: ColonistsResponse = { version: 0, colonists: [] }
   const listeners = new Set<(snapshot: ColonistsResponse) => void>()
   // Every folder asked about, and the repository it turned out to be in.
@@ -123,6 +122,7 @@ export function createColonistTracker(options: ColonistTrackerOptions): Colonist
       const match = mapped.find((m) => identitiesMatch(m.identity, identity))
       if (match) clones.set(identity.toplevel, match.repo)
     }
+    const validationCopies = realPath(join(home, '.no-mistakes', 'worktrees'))
     const next = new Map<string, CopyState>()
     await forEachLimited([...clones], GIT_LANES, async ([clone, repo]) => {
       for (const worktree of await listWorktrees(clone)) {

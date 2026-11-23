@@ -8,8 +8,8 @@ const NONE: Colonist[] = []
 
 export interface ColonistsState {
   colonists: Colonist[]
-  // Why the page cannot see the colonists, such as a token from an earlier
-  // server run; the map then shows none rather than ones that went stale.
+  // Set when the server rejects the page's token; the map then shows no
+  // colonists rather than ones that went stale.
   notice?: string
 }
 

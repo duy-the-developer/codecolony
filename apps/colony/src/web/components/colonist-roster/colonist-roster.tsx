@@ -5,7 +5,7 @@ import { cn } from '../ui/class-names.ts'
 
 export interface ColonistRosterProps {
   colonists: readonly Colonist[]
-  // Why the colonists cannot be shown, in place of the robots.
+  // Why the colonists are unavailable, in place of the robots.
   notice?: string | undefined
   selectedId: string | undefined
   onPick(id: string): void
@@ -19,9 +19,9 @@ export function ColonistRoster({ colonists, notice, selectedId, onPick }: Coloni
     return (
       <p
         role="status"
-        className="pointer-events-auto w-64 max-w-full rounded-md border border-destructive/50 bg-card/90 px-3 py-1.5 text-muted-foreground text-xs shadow-sm"
+        className="pointer-events-auto w-64 max-w-full rounded-md border bg-card/90 px-3 py-1.5 text-muted-foreground text-xs shadow-sm"
       >
-        <span className="text-destructive">Colonists hidden</span> · {notice}
+        {notice}
       </p>
     )
   }

@@ -22,17 +22,17 @@ function colonist(id: string, label: string, status: Colonist['status']): Coloni
 describe('ColonistRoster', () => {
   afterEach(cleanup)
 
-  it('shows why the colonists are hidden, in place of the robots', () => {
+  it('shows why the colonists are unavailable, in place of the robots', () => {
     render(
       <ColonistRoster
         colonists={[]}
-        notice="The server restarted with a new token: open the URL it printed"
+        notice="Colonists unavailable: access token rejected. Reopen the app link."
         selectedId={undefined}
         onPick={vi.fn()}
       />,
     )
     expect(screen.getByRole('status').textContent).toBe(
-      'Colonists hidden · The server restarted with a new token: open the URL it printed',
+      'Colonists unavailable: access token rejected. Reopen the app link.',
     )
     expect(screen.queryByRole('navigation')).toBeNull()
   })
