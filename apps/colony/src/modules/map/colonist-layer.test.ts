@@ -256,6 +256,22 @@ describe('ColonistLayer', () => {
     )
   })
 
+  it('labels a robot only while it is hovered, not while it is picked', () => {
+    const layer = new ColonistLayer()
+    layer.setColonists([placed('/one', 'O', { lastSaved: 'a.ts' })])
+    layer.drawChanges(ctx, scene, camera, OPEN)
+    const texts = () => {
+      const calls: Call[] = []
+      layer.drawMarkers(recordingContext(calls), { width: 800, height: 600 }, 0, true)
+      return calls.filter(([name]) => name === 'fillText').map(([, text]) => text)
+    }
+    layer.selected = '/one'
+    expect(texts()).toEqual([])
+    const [x, y] = chipOver(20, 60, 30)
+    layer.hovered = layer.hitMarker(x, y)
+    expect(texts()).toContain('/one')
+  })
+
   it('finds the conflict badge left of the pins of two colonists on one file', () => {
     const layer = new ColonistLayer()
     layer.showOwners = true

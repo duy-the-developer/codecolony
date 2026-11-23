@@ -1,5 +1,6 @@
 import { realpathSync } from 'node:fs'
 import { homedir } from 'node:os'
+import { join } from 'node:path'
 import { logError } from '../logging/log.ts'
 import type { Colonist, ColonistsResponse } from '../wire/api-types.ts'
 import { copyLabel, resolvePresence, tildify } from './colonist-status.ts'
@@ -25,6 +26,10 @@ import { listWorktrees } from './worktree-list.ts'
 // A copy whose files differ from its main branch is a colonist. Session
 // sources and the firstmate home only add who is at work and how it goes.
 //
+// The no-mistakes pipeline validates a branch in its own detached copy under
+// `~/.no-mistakes/worktrees/`; it is the same worker's change seen twice, so
+// it is never a colonist and never counts toward possible conflicts.
+//
 // A light poll reads each copy's `git status` and diffs only the copies whose
 // status changed; clones and worktrees are found again on a slower beat, or
 // at once when asked (the map's repositories moved).
@@ -39,7 +44,7 @@ export interface ColonistTrackerOptions {
   listRepos(): readonly MappedRepo[]
   sessions?: readonly SessionSource[]
   firstmateHome?: string
-  // Shortens copy paths to `~/...`.
+  // Shortens copy paths to `~/...`, and holds the no-mistakes copies.
   home?: string
 }
 
@@ -79,6 +84,7 @@ interface CopyState {
 export function createColonistTracker(options: ColonistTrackerOptions): ColonistTrackerHandle {
   const sources = options.sessions ?? []
   const home = options.home ?? homedir()
+  const validationCopies = realPath(join(home, '.no-mistakes', 'worktrees'))
   let snapshot: ColonistsResponse = { version: 0, colonists: [] }
   const listeners = new Set<(snapshot: ColonistsResponse) => void>()
   // Every folder asked about, and the repository it turned out to be in.
@@ -121,7 +127,7 @@ export function createColonistTracker(options: ColonistTrackerOptions): Colonist
     await forEachLimited([...clones], GIT_LANES, async ([clone, repo]) => {
       for (const worktree of await listWorktrees(clone)) {
         const path = realPath(worktree.path)
-        if (next.has(path)) continue
+        if (next.has(path) || isInside(path, validationCopies)) continue
         const before = copies.get(path)
         const state: CopyState = { path, repoId: repo.id, clone, head: worktree.head }
         if (worktree.branch) state.branch = worktree.branch

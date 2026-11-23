@@ -5,14 +5,26 @@ import { cn } from '../ui/class-names.ts'
 
 export interface ColonistRosterProps {
   colonists: readonly Colonist[]
+  // Why the colonists cannot be shown, in place of the robots.
+  notice?: string | undefined
   selectedId: string | undefined
   onPick(id: string): void
 }
 
 // The colonists at a glance, over the map's top right corner: one robot per
 // colonist; the picked one shows its name and how many files it changes.
-// Absent with no colonists.
-export function ColonistRoster({ colonists, selectedId, onPick }: ColonistRosterProps) {
+// Absent with no colonists, unless there is a notice to show instead.
+export function ColonistRoster({ colonists, notice, selectedId, onPick }: ColonistRosterProps) {
+  if (notice) {
+    return (
+      <p
+        role="status"
+        className="pointer-events-auto w-64 max-w-full rounded-md border border-destructive/50 bg-card/90 px-3 py-1.5 text-muted-foreground text-xs shadow-sm"
+      >
+        <span className="text-destructive">Colonists hidden</span> · {notice}
+      </p>
+    )
+  }
   if (colonists.length === 0) return null
   return (
     <nav

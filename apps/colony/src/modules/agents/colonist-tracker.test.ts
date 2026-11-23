@@ -155,6 +155,64 @@ describe('createColonistTracker', () => {
     expect(tracker.snapshot.version).toBe(version + 1)
   })
 
+  it('finds a task started after the first look, and follows its status', async () => {
+    const { mine, home, slot } = makeColony()
+    const tracker = createColonistTracker({
+      listRepos: repos(mine),
+      firstmateHome: home,
+      home: '/nowhere',
+    })
+    await tracker.refresh({ discover: true })
+    expect(tracker.snapshot.colonists).toEqual([])
+
+    const late = slot(1)
+    writeFileSync(join(late, 'src', 'a.ts'), 'a2\n')
+    const task = { id: 'task-1', meta: { worktree: late, kind: 'ship', branch: 'fm/task-1' } }
+    writeTask(home, { ...task, status: ['working [at=1]: started'] })
+    await tracker.refresh()
+    expect(tracker.snapshot.colonists).toEqual([
+      expect.objectContaining({ task: 'task-1', status: 'working' }),
+    ])
+
+    writeTask(home, { ...task, status: ['working [at=1]: started', 'done [at=2]: PR ready'] })
+    await tracker.refresh()
+    expect(tracker.snapshot.colonists[0]).toMatchObject({ task: 'task-1', note: 'PR ready' })
+    tracker.close()
+  })
+
+  it('never counts a no-mistakes validation copy as a colonist', async () => {
+    const { mine, home, clone, slot } = makeColony()
+    const busy = slot(1)
+    writeFileSync(join(busy, 'src', 'a.ts'), 'a2\n')
+    writeTask(home, {
+      id: 'task-1',
+      meta: { worktree: busy, kind: 'ship', branch: 'fm/task-1' },
+      status: ['working [at=1]: validating'],
+    })
+    // The pipeline's detached copy of the same branch, with the same change,
+    // and a session working in it.
+    const userHome = makeTempDir('codecolony-home-')
+    const runs = join(userHome, '.no-mistakes', 'worktrees', '0eb8c4084431')
+    mkdirSync(runs, { recursive: true })
+    const validation = join(runs, '01M83HP2G726XWDRGBR5P1YZXP')
+    git(clone, 'worktree', 'add', '-q', '--detach', validation, 'fm/task-1')
+    writeFileSync(join(validation, 'src', 'a.ts'), 'a2\n')
+    const tracker = createColonistTracker({
+      listRepos: repos(mine),
+      sessions: [
+        {
+          name: 'fake',
+          listSessions: () => Promise.resolve([{ cwd: validation, agent: 'claude' }]),
+        },
+      ],
+      firstmateHome: home,
+      home: userHome,
+    })
+    await tracker.refresh({ discover: true })
+    expect(tracker.snapshot.colonists).toEqual([expect.objectContaining({ task: 'task-1' })])
+    tracker.close()
+  })
+
   it('ignores clones of other repositories', async () => {
     const { mine } = makeColony()
     const other = makeRepo({ 'x.ts': 'x\n' })
