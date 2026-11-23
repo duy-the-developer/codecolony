@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
+import { FILE_LANE_PITCH } from '../../lane-routing/file-graph.ts'
 import type { RouteNode } from '../../lane-routing/route-boxes.ts'
 import type { Rect } from '../../world/world-types.ts'
-import { FILE_LANE_PITCH, type LaneEdge, type LaneRoutes, LaneWorld } from './lane-world.ts'
+import { type LaneEdge, type LaneRoutes, LaneWorld } from './lane-world.ts'
 
 // world > repo r > module m of two 2-unit files with a 1-unit street between
 // them, at x 4 to 5.

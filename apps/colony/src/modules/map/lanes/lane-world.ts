@@ -1,5 +1,5 @@
-import { buildChannelGraph, type RouteBox } from '../../lane-routing/channel-graph.ts'
-import { buildRouteBoxes, type RouteNode } from '../../lane-routing/route-boxes.ts'
+import { buildFileGraph, FILE_LANE_PITCH } from '../../lane-routing/file-graph.ts'
+import type { RouteNode } from '../../lane-routing/route-boxes.ts'
 import { type Link, routeLanes } from '../../lane-routing/route-lanes.ts'
 
 // The Dependency overlay's routing for one world version, run in a worker
@@ -11,8 +11,8 @@ import { type Link, routeLanes } from '../../lane-routing/route-lanes.ts'
 // and imported file, in one piece, from a side of the one to a side of the
 // other. Every file is a block (route-boxes.ts with every folder and module
 // open), and the whole world is routed at once on a half-unit pitch, so a
-// 1-unit file street holds a lane. Where a channel has room, lines sit a
-// whole unit apart. A line stays inside the deepest open folder that holds
+// 1-unit file street holds a lane (file-graph.ts). Where a channel has room,
+// lines sit a whole unit apart. A line stays inside the deepest open folder that holds
 // both its files and crosses a folder's border straight on, through a door
 // (channel-graph.ts); lines share a lane only when they import the same file
 // and there is no room for both.
@@ -42,9 +42,6 @@ export interface FileLines {
   edges: Int32Array
 }
 
-// Lanes per grid unit.
-export const FILE_LANE_PITCH = 2
-
 export class LaneWorld {
   private readonly nodes: readonly RouteNode[]
   private readonly edges: readonly LaneEdge[]
@@ -59,11 +56,7 @@ export class LaneWorld {
   routeFiles(): FileLines {
     if (this.lines) return this.lines
     const pitch = FILE_LANE_PITCH
-    const boxes = buildRouteBoxes(
-      this.nodes,
-      () => true,
-      () => true,
-    )
+    const { boxes, graph } = buildFileGraph(this.nodes)
     const links: Link[] = []
     const carried: number[][] = []
     const index = new Map<string, number>()
@@ -81,8 +74,7 @@ export class LaneWorld {
       carried[link]?.push(e)
     })
     let routes = emptyRoutes(pitch)
-    if (boxes.root && links.length > 0) {
-      const graph = buildChannelGraph(scaleBox(boxes.root, pitch), true, RING_UNITS * pitch)
+    if (graph && links.length > 0) {
       const routing = routeLanes(graph, links, { merge: 'whenFull', stride: pitch })
       routes = packRoutes(routing.points, pitch)
     }
@@ -94,9 +86,6 @@ export class LaneWorld {
     return this.lines
   }
 }
-
-// Width of the ring of channels around the whole map, in units.
-const RING_UNITS = 8
 
 function emptyRoutes(pitch: number): LaneRoutes {
   return {
@@ -121,14 +110,4 @@ function packRoutes(routed: readonly (Float64Array | undefined)[], pitch: number
   })
   if (pitch !== 1) for (let k = 0; k < total; k++) points[k] = (points[k] as number) / pitch
   return { links: Int32Array.from(routed, (_, i) => i), points, offsets, pitch }
-}
-
-// A box tree with every length times k.
-function scaleBox(box: RouteBox, k: number): RouteBox {
-  if (k === 1) return box
-  const { x, y, w, h } = box.rect
-  const scaled: RouteBox = { id: box.id, rect: { x: x * k, y: y * k, w: w * k, h: h * k } }
-  if (box.header !== undefined) scaled.header = box.header * k
-  if (box.kids) scaled.kids = box.kids.map((kid) => scaleBox(kid, k))
-  return scaled
 }
