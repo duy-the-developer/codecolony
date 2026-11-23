@@ -1,4 +1,4 @@
-import { mkdirSync, utimesSync, writeFileSync } from 'node:fs'
+import { mkdirSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { git, makeRepo, makeTempDir } from '../indexing/testing/git-fixture.ts'
@@ -153,6 +153,66 @@ describe('createColonistTracker', () => {
     await tracker.refresh()
     expect(tracker.snapshot.colonists[0]?.lastSaved).toBe('src/b.ts')
     expect(tracker.snapshot.version).toBe(version + 1)
+  })
+
+  it('finds a task started after the first look, and follows its status', async () => {
+    const { mine, home, slot } = makeColony()
+    const tracker = createColonistTracker({
+      listRepos: repos(mine),
+      firstmateHome: home,
+      home: '/nowhere',
+    })
+    await tracker.refresh({ discover: true })
+    expect(tracker.snapshot.colonists).toEqual([])
+
+    const late = slot(1)
+    writeFileSync(join(late, 'src', 'a.ts'), 'a2\n')
+    const task = { id: 'task-1', meta: { worktree: late, kind: 'ship', branch: 'fm/task-1' } }
+    writeTask(home, { ...task, status: ['working [at=1]: started'] })
+    await tracker.refresh()
+    expect(tracker.snapshot.colonists).toEqual([
+      expect.objectContaining({ task: 'task-1', status: 'working' }),
+    ])
+
+    writeTask(home, { ...task, status: ['working [at=1]: started', 'done [at=2]: PR ready'] })
+    await tracker.refresh()
+    expect(tracker.snapshot.colonists[0]).toMatchObject({ task: 'task-1', note: 'PR ready' })
+    tracker.close()
+  })
+
+  it('never counts a no-mistakes validation copy as a colonist', async () => {
+    const { mine, home, clone, slot } = makeColony()
+    const busy = slot(1)
+    writeFileSync(join(busy, 'src', 'a.ts'), 'a2\n')
+    writeTask(home, {
+      id: 'task-1',
+      meta: { worktree: busy, kind: 'ship', branch: 'fm/task-1' },
+      status: ['working [at=1]: validating'],
+    })
+    // Home reached through a symlink, and no no-mistakes run yet.
+    const userHome = join(makeTempDir('codecolony-link-'), 'home')
+    symlinkSync(makeTempDir('codecolony-home-'), userHome)
+    const tracker = createColonistTracker({
+      listRepos: repos(mine),
+      sessions: [
+        {
+          name: 'fake',
+          listSessions: () => Promise.resolve([{ cwd: validation, agent: 'claude' }]),
+        },
+      ],
+      firstmateHome: home,
+      home: userHome,
+    })
+    // The pipeline's detached copy of the same branch, with the same change,
+    // and a session working in it.
+    const runs = join(userHome, '.no-mistakes', 'worktrees', '0eb8c4084431')
+    mkdirSync(runs, { recursive: true })
+    const validation = join(runs, '01M83HP2G726XWDRGBR5P1YZXP')
+    git(clone, 'worktree', 'add', '-q', '--detach', validation, 'fm/task-1')
+    writeFileSync(join(validation, 'src', 'a.ts'), 'a2\n')
+    await tracker.refresh({ discover: true })
+    expect(tracker.snapshot.colonists).toEqual([expect.objectContaining({ task: 'task-1' })])
+    tracker.close()
   })
 
   it('ignores clones of other repositories', async () => {

@@ -29,6 +29,8 @@ function poolOf(size: number, idleMs?: number): ParsePoolHandle {
 }
 
 describe('createParsePool', () => {
+  // Four workers parse the whole corpus; next to the rest of the suite that
+  // can take longer than the default 5 s.
   it('gives exactly the facts the main thread does', async () => {
     const corpus = listCorpus()
     expect(corpus.length).toBeGreaterThan(50)
@@ -39,7 +41,7 @@ describe('createParsePool', () => {
     ])
     expect(pooled.some((facts) => facts.symbols.length > 0 && facts.complexity > 0)).toBe(true)
     expect(pooled).toEqual(inline)
-  })
+  }, 30_000)
 
   it('keeps the caller buffer intact when it sends a slice of it', async () => {
     const shared = Buffer.from('export const a = 1\nexport function b() {}\n')

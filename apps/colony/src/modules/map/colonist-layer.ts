@@ -337,15 +337,9 @@ export class ColonistLayer {
       this.drawRobot(ctx, robot, alpha, isSelected, now, isStill)
     }
     ctx.globalAlpha = 1
-    const selectedRobot = robots.find((robot) => robot.colonistId === this.selected)
-    const label =
-      this.hovered ??
-      (selectedRobot && {
-        kind: 'robot',
-        colonistId: selectedRobot.colonistId,
-        robot: selectedRobot,
-      })
-    if (label) drawHoverLabel(ctx, label, view, this.labels, this.counts)
+    // Only while hovered: a selected robot keeps its ring, and its label would
+    // hide the map around where it works (the Inspector says the same).
+    if (this.hovered) drawHoverLabel(ctx, this.hovered, view, this.labels, this.counts)
   }
 
   private drawRobot(

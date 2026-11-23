@@ -78,7 +78,7 @@ export function App() {
   )
   const [dockElement, setDockElement] = useState<HTMLDivElement | null>(null)
   const { dock, workers } = useDock(dockElement)
-  const colonists = useColonists()
+  const { colonists, notice: colonistsNotice } = useColonists()
   const placed = useMemo(() => (scene ? placeColonists(scene, colonists) : []), [scene, colonists])
   const [selectedColonistId, setSelectedColonistId] = useState<string>()
   const mapRef = useRef<MapHandle | null>(null)
@@ -358,6 +358,7 @@ export function App() {
               <div className="ml-auto flex min-w-0 justify-end">
                 <ColonistRoster
                   colonists={colonists}
+                  notice={colonistsNotice}
                   selectedId={selectedColonistId}
                   onPick={pickColonist}
                 />

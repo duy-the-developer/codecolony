@@ -22,6 +22,21 @@ function colonist(id: string, label: string, status: Colonist['status']): Coloni
 describe('ColonistRoster', () => {
   afterEach(cleanup)
 
+  it('shows why the colonists are unavailable, in place of the robots', () => {
+    render(
+      <ColonistRoster
+        colonists={[]}
+        notice="Colonists unavailable: access token rejected. Reopen the app link."
+        selectedId={undefined}
+        onPick={vi.fn()}
+      />,
+    )
+    expect(screen.getByRole('status').textContent).toBe(
+      'Colonists unavailable: access token rejected. Reopen the app link.',
+    )
+    expect(screen.queryByRole('navigation')).toBeNull()
+  })
+
   it('shows nothing without colonists', () => {
     const { container } = render(
       <ColonistRoster colonists={[]} selectedId={undefined} onPick={vi.fn()} />,
