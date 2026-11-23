@@ -21,7 +21,7 @@ export interface MutableGapWidening extends GapWidening {
 }
 
 // The most lanes a folder's ring grows to hold on each side.
-export const RING_LANES = 1
+export const RING_LANES = 2
 
 function emptyWidening(): MutableGapWidening {
   return {

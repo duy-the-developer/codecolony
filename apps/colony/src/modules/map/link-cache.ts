@@ -1,6 +1,6 @@
 import type { Scene } from '../scene/scene.ts'
 import { PROVEN_PROVENANCES } from '../world/facts.ts'
-import type { Edge, EdgeKind, Rect, WorldNode } from '../world/world-types.ts'
+import type { Edge, EdgeKind, WorldNode } from '../world/world-types.ts'
 import { MIN_VISIBLE_PX, openness } from './lod.ts'
 
 // Links join the deepest drawn nodes that hold each edge's ends, so they merge
@@ -17,9 +17,6 @@ import { MIN_VISIBLE_PX, openness } from './lod.ts'
 //    survives only if the two children of its ends' common ancestor are both
 //    drawn; otherwise one end would land on an ancestor of the other. That check
 //    is two array reads, so off-screen links cost almost nothing.
-//
-// The Dependency overlay draws fixed lanes (lanes/lane-world.ts); a level only
-// says which nodes are drawn, so lanes can end on the closed ones.
 
 export const LINK_LEVELS_PER_OCTAVE = 4
 // Nodes this faint are drawn, but links pass them to their parent.
@@ -43,17 +40,6 @@ interface LevelLinks {
   readonly toTop: Int32Array
   // The link each edge was merged into, or -1.
   readonly linkOfEdge: Int32Array
-  readonly drawn: DrawnLevel
-}
-
-// The nodes drawn at a zoom level, as if the whole world were on screen, by
-// index (LinkCache.indexOf).
-export interface DrawnLevel {
-  readonly level: number
-  // Drawn with enough alpha to hold a link.
-  readonly visible: Uint8Array
-  // A container holding folders that shows its children.
-  readonly isOpen: Uint8Array
 }
 
 // The links to draw this frame. Backed by scratch space: valid until the next
@@ -80,8 +66,6 @@ export class LinkCache {
   private readonly depth: Int32Array
   private readonly side: Float64Array
   private readonly hasKids: Uint8Array
-  // Holds a folder or larger: whether it is open decides lane blocks.
-  private readonly hasFolders: Uint8Array
   // For a symbol, the file that holds it; otherwise -1.
   private readonly fileOf: Int32Array
   private readonly index = new Map<string, number>()
@@ -132,7 +116,6 @@ export class LinkCache {
     this.depth = new Int32Array(n)
     this.side = new Float64Array(n)
     this.hasKids = new Uint8Array(n)
-    this.hasFolders = new Uint8Array(n)
     this.fileOf = new Int32Array(n)
     this.onScreen = new Int32Array(n)
     this.holderAt = new Int32Array(n)
@@ -143,11 +126,6 @@ export class LinkCache {
       this.depth[i] = p < 0 ? 0 : (this.depth[p] as number) + 1
       this.side[i] = Math.min(node.rect.w, node.rect.h)
       this.hasKids[i] = scene.children.has(node.id) ? 1 : 0
-      this.hasFolders[i] = scene.children
-        .get(node.id)
-        ?.some((kid) => kid.kind !== 'file' && kid.kind !== 'symbol')
-        ? 1
-        : 0
       this.fileOf[i] =
         node.kind !== 'symbol' || p < 0
           ? -1
@@ -212,24 +190,6 @@ export class LinkCache {
     return { count, from, to, kind, proven, edges, hot, sameFile }
   }
 
-  // The nodes drawn at the level a scale falls in.
-  getDrawnLevel(scale: number): DrawnLevel {
-    return this.resolveLevel(scale).drawn
-  }
-
-  // A node's index, its parent's (-1 for the root) and its rectangle.
-  indexOf(id: string): number | undefined {
-    return this.index.get(id)
-  }
-
-  parentIndex(i: number): number {
-    return this.parent[i] ?? -1
-  }
-
-  rectAt(i: number): Rect {
-    return (this.nodes[i] as WorldNode).rect
-  }
-
   // The links of the level a scale falls in, aggregated on first use.
   private resolveLevel(scale: number): LevelLinks {
     if (this.scene.edges !== this.edges) this.indexEdges()
@@ -239,7 +199,7 @@ export class LinkCache {
       this.levels.delete(level)
     } else {
       // Rounding slack, so the level never misses a node visible at `scale`.
-      links = this.buildLevel(level, 2 ** ((level + 1) / LINK_LEVELS_PER_OCTAVE) * (1 + 1e-9))
+      links = this.buildLevel(2 ** ((level + 1) / LINK_LEVELS_PER_OCTAVE) * (1 + 1e-9))
       if (this.levels.size >= MAX_CACHED_LEVELS) {
         const oldest = this.levels.keys().next().value
         if (oldest !== undefined) this.levels.delete(oldest)
@@ -343,21 +303,13 @@ export class LinkCache {
     return visible
   }
 
-  private buildLevel(level: number, scale: number): LevelLinks {
+  private buildLevel(scale: number): LevelLinks {
     const visible = this.listVisible(scale)
     const { parent, depth, edgeFrom, edgeTo, edgeCode, linkEdges } = this
     const holder = (start: number): number => {
       let i = start
       while (i >= 0 && !visible[i]) i = parent[i] as number
       return i
-    }
-    // A container is open when a child shows. Only containers that hold
-    // folders count: a module of files, or a file showing its symbols, is one
-    // lane block either way.
-    const isOpen = new Uint8Array(visible.length)
-    for (let i = 0; i < visible.length; i++) {
-      const p = parent[i] as number
-      if (visible[i] && p >= 0 && this.hasFolders[p]) isOpen[p] = 1
     }
     const edgeCount = this.edges.length
     const linkOfEdge = new Int32Array(edgeCount).fill(-1)
@@ -399,7 +351,6 @@ export class LinkCache {
       fromTop: fromTop.slice(0, count),
       toTop: toTop.slice(0, count),
       linkOfEdge,
-      drawn: { level, visible: visible.slice(), isOpen },
     }
   }
 

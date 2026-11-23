@@ -3,7 +3,7 @@ import { answerLaneRequest, toTransfer } from './lane-router.ts'
 import { LaneWorld } from './lane-world.ts'
 
 describe('toTransfer', () => {
-  it('leaves the highways the world keeps whole when their reply is posted', () => {
+  it('leaves the lines the world keeps whole when their reply is posted', () => {
     const lanes = new LaneWorld(
       [
         { id: 'world', kind: 'world', rect: { x: 0, y: 0, w: 20, h: 10 } },
@@ -15,16 +15,16 @@ describe('toTransfer', () => {
       [['a/f.ts', 'b/g.ts']],
     )
     const world = { version: 1, lanes }
-    const ask = () => answerLaneRequest(world, { op: 'highways', id: 0, version: 1 })
-    const points = [...(ask().highways?.routes.points ?? [])]
+    const ask = () => answerLaneRequest(world, { op: 'files', id: 0, version: 1 })
+    const points = [...(ask().files?.routes.points ?? [])]
     expect(points.length).toBeGreaterThan(0)
     for (let i = 0; i < 2; i++) {
       const sent = toTransfer(ask())
       // What postMessage does with the transfer list.
       const received = structuredClone(sent.reply, { transfer: sent.transfer })
-      expect(received.highways?.linkOfEdge).toEqual(Int32Array.from([0]))
-      expect([...(received.highways?.routes.points ?? [])]).toEqual(points)
+      expect(received.files?.edges).toEqual(Int32Array.from([0]))
+      expect([...(received.files?.routes.points ?? [])]).toEqual(points)
     }
-    expect([...(ask().highways?.routes.points ?? [])]).toEqual(points)
+    expect([...(ask().files?.routes.points ?? [])]).toEqual(points)
   })
 })

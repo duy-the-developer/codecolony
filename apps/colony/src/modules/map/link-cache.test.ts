@@ -183,24 +183,6 @@ describe('LinkCache', () => {
     ])
   })
 
-  it('tells which nodes a zoom level draws, whatever the camera shows', () => {
-    const scene = new Scene(makeWorld(EDGES))
-    const cache = new LinkCache(scene)
-    const drawnIds = (scale: number) => {
-      const { visible } = cache.getDrawnLevel(scale)
-      return scene.world.nodes
-        .filter((n) => visible[cache.indexOf(n.id) as number])
-        .map((n) => n.id)
-    }
-    // The repository is 200 units, so it opens from 40 px: at 0.2 only r,
-    // closed; at 1 its modules and their files too.
-    expect(drawnIds(0.2)).toEqual(['r'])
-    expect(cache.getDrawnLevel(0.2).isOpen[cache.indexOf('r') as number]).toBe(0)
-    expect(drawnIds(1)).toEqual(['r', 'r/a', 'r/a/1.ts', 'r/a/2.ts', 'r/b', 'r/b/1.ts', 'r/b/2.ts'])
-    expect(cache.getDrawnLevel(1).isOpen[cache.indexOf('r') as number]).toBe(1)
-    expect(cache.getDrawnLevel(0.2)).toBe(cache.getDrawnLevel(0.2 * 1.01))
-  })
-
   it('flags links between symbols of one file', () => {
     const scene = new Scene(makeWorld(EDGES))
     const cache = new LinkCache(scene)

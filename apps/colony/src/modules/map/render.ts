@@ -10,7 +10,7 @@ import { HEADER_UNITS, type WorldNode } from '../world/world-types.ts'
 import type { Camera, Viewport } from './camera.ts'
 import type { ColonistLayer } from './colonist-layer.ts'
 import { DEPENDANT, DEPENDS_ON, type Focus } from './focus.ts'
-import type { LaneFrame, LaneLayer } from './lanes/lane-layer.ts'
+import type { LaneFade, LaneFrame, LaneLayer } from './lanes/lane-layer.ts'
 import type { LaneRoutes } from './lanes/lane-world.ts'
 import { MIN_LINK_ALPHA } from './link-cache.ts'
 import { fade, GRID_FADE, LABEL_FONT, MIN_VISIBLE_PX, openness } from './lod.ts'
@@ -356,9 +356,12 @@ const ARROW_PX: readonly [number, number] = [3, 8]
 const ARROW_MIN_PX = 2
 type LaneEmphasis = 'normal' | 'hot' | 'dim'
 const LANE_ALPHA: Record<LaneEmphasis, number> = { normal: 0.75, hot: 1, dim: 0.12 }
-// Lanes are bucketed by where their bounding box centres fall, in tiles this
-// many units wide, so off-screen buckets are skipped.
+// Lanes are bucketed by their fade group and where their bounding box centres
+// fall, in tiles this many units wide, so off-screen and faded buckets are
+// skipped.
 const LANE_TILE_UNITS = 64
+// Buckets fainter than this are not drawn.
+const MIN_LANE_FADE = 0.01
 
 // A set of lanes as paths in world units, in buckets with bounds.
 interface LanePaths {
@@ -371,6 +374,8 @@ interface LaneBucket {
   y0: number
   x1: number
   y1: number
+  // The fade group of its lanes (LaneFade), or -1.
+  group: number
   // The routed links it holds, as indices into the routes.
   lanes: number[]
 }
@@ -388,6 +393,7 @@ function getLanePaths(
   routes: LaneRoutes,
   group: LaneGroup,
   hot: Uint8Array | undefined,
+  fade: LaneFade | undefined,
 ): LanePaths {
   let held = lanePaths.get(routes)
   if (!held) {
@@ -397,7 +403,7 @@ function getLanePaths(
   const kept = held.get(group)
   if (kept && kept.hot === hot) return kept.paths
   const directionOf = (i: number) => hot?.[routes.links[i] as number] ?? 0
-  const paths = buildLanePaths(routes, (i) => {
+  const paths = buildLanePaths(routes, fade?.groups, (i) => {
     if (group === 'all') return true
     const direction = directionOf(i)
     if (group === 'hot') return direction !== 0
@@ -409,7 +415,11 @@ function getLanePaths(
 }
 
 // Builds the paths of the routed links that pick() keeps, once.
-function buildLanePaths(routes: LaneRoutes, pick: (i: number) => boolean): LanePaths {
+function buildLanePaths(
+  routes: LaneRoutes,
+  groups: Int32Array | undefined,
+  pick: (i: number) => boolean,
+): LanePaths {
   const buckets = new Map<string, LaneBucket>()
   for (let i = 0; i < routes.links.length; i++) {
     const start = routes.offsets[i] as number
@@ -427,10 +437,11 @@ function buildLanePaths(routes: LaneRoutes, pick: (i: number) => boolean): LaneP
       x1 = Math.max(x1, x)
       y1 = Math.max(y1, y)
     }
-    const tile = `${Math.floor((x0 + x1) / 2 / LANE_TILE_UNITS)},${Math.floor((y0 + y1) / 2 / LANE_TILE_UNITS)}`
+    const group = groups?.[routes.links[i] as number] ?? -1
+    const tile = `${group}:${Math.floor((x0 + x1) / 2 / LANE_TILE_UNITS)},${Math.floor((y0 + y1) / 2 / LANE_TILE_UNITS)}`
     let bucket = buckets.get(tile)
     if (!bucket) {
-      bucket = { path: new Path2D(), x0, y0, x1, y1, lanes: [] }
+      bucket = { path: new Path2D(), x0, y0, x1, y1, group, lanes: [] }
       buckets.set(tile, bucket)
     }
     bucket.x0 = Math.min(bucket.x0, x0)
@@ -446,13 +457,12 @@ function buildLanePaths(routes: LaneRoutes, pick: (i: number) => boolean): LaneP
   return { buckets: [...buckets.values()] }
 }
 
-// Each lane is a polyline from the importer's side to the imported block's
-// side, where an arrowhead points into the block. With a focus, every lane is
-// dimmed and the focus's lanes drawn bright on top, coloured by direction when
-// isDirected. Lanes inside holders of files are too many to read one by one,
-// so they are always dimmed. Paths are built
-// once per routing and drawn in world units, so a frame only strokes the
-// buckets on screen.
+// Each lane is a polyline from the importing file's side to the imported
+// file's side, where an arrowhead points into the file. With a focus, every
+// lane is dimmed and the focus's lanes drawn bright on top, coloured by
+// direction when isDirected. Each lane fades with its fainter file. Paths are
+// built once per routing and drawn in world units, so a frame only strokes
+// the buckets on screen.
 function drawLanes(
   ctx: CanvasRenderingContext2D,
   frame: LaneFrame,
@@ -461,59 +471,48 @@ function drawLanes(
   isDirected: boolean,
 ): void {
   const layers: [LaneRoutes, LanePaths, LaneEmphasis, string][] = []
+  const { all, hot, focus, focusHot, fade: lineFade } = frame
   // The focus's lanes of a routing: by direction, those it depends on on top.
   const addHot = (routes: LaneRoutes, hot: Uint8Array | undefined, group: LaneGroup) => {
     if (!isDirected) {
-      layers.push([routes, getLanePaths(routes, group, hot), 'hot', DEPENDENCY_COLOR])
+      layers.push([routes, getLanePaths(routes, group, hot, lineFade), 'hot', DEPENDENCY_COLOR])
       return
     }
     for (const [direction, color] of [
       ['dependant', DIRECTION_COLORS.dependant],
       ['dependsOn', DIRECTION_COLORS.dependsOn],
     ] as const) {
-      layers.push([routes, getLanePaths(routes, direction, hot), 'hot', color])
+      layers.push([routes, getLanePaths(routes, direction, hot, lineFade), 'hot', color])
     }
   }
-  const { all, hot, focus, focusHot } = frame
   if (all) {
     layers.push([
       all,
-      getLanePaths(all, 'all', undefined),
+      getLanePaths(all, 'all', undefined, lineFade),
       hot ? 'dim' : 'normal',
       DEPENDENCY_COLOR,
     ])
     if (hot) addHot(all, hot, 'hot')
   }
   if (focus) addHot(focus, focusHot, 'hot')
-  for (const files of frame.files) {
-    if (files.isAll) {
-      layers.push([
-        files.routes,
-        getLanePaths(files.routes, 'all', undefined),
-        'dim',
-        DEPENDENCY_COLOR,
-      ])
-    }
-    if (files.hot) addHot(files.routes, files.hot, 'hot')
-  }
   if (layers.length === 0) return
 
   const unit = camera.scale
   const [left, top] = camera.toWorld(0, 0)
   const [right, bottom] = camera.toWorld(view.width, view.height)
-  const isOnScreen = (b: LaneBucket) =>
-    b.x1 >= left && b.x0 <= right && b.y1 >= top && b.y0 <= bottom
+  const fadeOf = (b: LaneBucket) => (b.group < 0 ? 1 : (lineFade?.alpha[b.group] ?? 1))
+  const isShown = (b: LaneBucket) =>
+    b.x1 >= left && b.x0 <= right && b.y1 >= top && b.y0 <= bottom && fadeOf(b) > MIN_LANE_FADE
   const base = ctx.getTransform()
   ctx.setLineDash([])
   ctx.lineJoin = 'miter'
   for (const [routes, paths, emphasis, color] of layers) {
     ctx.strokeStyle = color
     ctx.fillStyle = color
-    const shown = paths.buckets.filter(isOnScreen)
+    const shown = paths.buckets.filter(isShown)
     const apart = unit / routes.pitch
     const width = Math.min(Math.max(apart * 0.25, LANE_WIDTH_PX[0]), LANE_WIDTH_PX[1])
     const arrow = Math.min(Math.max(apart * 0.8, ARROW_PX[0]), ARROW_PX[1])
-    ctx.globalAlpha = LANE_ALPHA[emphasis]
     ctx.setTransform(
       base.a * unit,
       0,
@@ -523,13 +522,16 @@ function drawLanes(
       base.f - camera.y * unit * base.d,
     )
     ctx.lineWidth = (emphasis === 'hot' ? width + 0.75 : width) / unit
-    for (const bucket of shown) ctx.stroke(bucket.path)
+    for (const bucket of shown) {
+      ctx.globalAlpha = LANE_ALPHA[emphasis] * fadeOf(bucket)
+      ctx.stroke(bucket.path)
+    }
     ctx.setTransform(base)
     if (apart < ARROW_MIN_PX) continue
-    ctx.beginPath()
     for (const bucket of shown) {
+      ctx.globalAlpha = LANE_ALPHA[emphasis] * fadeOf(bucket)
+      ctx.beginPath()
       for (const i of bucket.lanes) {
-        if (routes.arrows && !routes.arrows[i]) continue
         const end = routes.offsets[i + 1] as number
         const [px, py] = camera.toScreen(
           routes.points[end - 4] as number,
@@ -548,8 +550,8 @@ function drawLanes(
         ctx.lineTo(qx - along[0] - across[0], qy - along[1] - across[1])
         ctx.closePath()
       }
+      ctx.fill()
     }
-    ctx.fill()
   }
   ctx.globalAlpha = 1
 }
