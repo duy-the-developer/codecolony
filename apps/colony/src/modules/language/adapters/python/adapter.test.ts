@@ -61,6 +61,34 @@ describe('python resolveImport', () => {
     expect(resolveImport('email', 'app/main.py', files)).toBeUndefined()
   })
 
+  it('starts from folders holding a requirements.txt or Pipfile', () => {
+    const files = new Set([
+      'api/requirements.txt',
+      'api/app/__init__.py',
+      'api/app/models.py',
+      'api/app/routes.py',
+      'web/Pipfile',
+      'web/site/__init__.py',
+      'web/site/views.py',
+    ])
+    expect(resolveImport('app.models.User', 'api/app/routes.py', files)).toBe('api/app/models.py')
+    expect(resolveImport('site.views', 'web/site/__init__.py', files)).toBe('web/site/views.py')
+  })
+
+  it('starts from the folder above the top-most package of the importing file', () => {
+    const files = new Set([
+      'services/api/app/__init__.py',
+      'services/api/app/models.py',
+      'services/api/app/routes/__init__.py',
+      'services/api/app/routes/users.py',
+      'services/api/app/email.py',
+    ])
+    expect(resolveImport('app.models.User', 'services/api/app/routes/users.py', files)).toBe(
+      'services/api/app/models.py',
+    )
+    expect(resolveImport('email', 'services/api/app/routes/users.py', files)).toBeUndefined()
+  })
+
   it('lets a script outside a package import from its own folder', () => {
     const files = new Set(['scripts/run.py', 'scripts/helpers.py'])
     expect(resolveImport('helpers', 'scripts/run.py', files)).toBe('scripts/helpers.py')

@@ -42,7 +42,13 @@ const BRANCHES = new Set([
 ])
 
 // Files that make their folder a project root that absolute imports start from.
-const PROJECT_FILES = new Set(['pyproject.toml', 'setup.cfg', 'setup.py'])
+const PROJECT_FILES = new Set([
+  'pyproject.toml',
+  'setup.cfg',
+  'setup.py',
+  'requirements.txt',
+  'Pipfile',
+])
 
 // The nearest enclosing function or class of a definition.
 function ownerOf(node: Node): Node | undefined {
@@ -78,8 +84,9 @@ interface SourceRoots {
 
 const rootsByFiles = new WeakMap<ReadonlySet<string>, SourceRoots>()
 
-// The repository root, every folder holding a pyproject.toml, setup.cfg or
-// setup.py, and the src/ folder of each of those (src layout).
+// The repository root, every folder holding a pyproject.toml, setup.cfg,
+// setup.py, requirements.txt or Pipfile, and the src/ folder of each of those
+// (src layout).
 function getSourceRoots(files: ReadonlySet<string>): SourceRoots {
   const cached = rootsByFiles.get(files)
   if (cached) return cached
@@ -143,10 +150,13 @@ export function resolveImport(
   const { roots, packages } = getSourceRoots(files)
   const inside = (root: string) => root === '.' || here === root || here.startsWith(`${root}/`)
   const ordered = [...roots.filter(inside), ...roots.filter((root) => !inside(root))]
-  // A script outside any package also imports from its own folder, as Python
-  // and pytest put that folder on sys.path. Inside a package that would let a
-  // local email.py shadow the standard library, which Python 3 never does.
-  if (!packages.has(here) && !ordered.includes(here)) ordered.push(here)
+  // Last, the folder above the importing file's top-most package, or its own
+  // folder outside any package, as Python and pytest put that folder on
+  // sys.path. Never a folder inside a package, which would let a local
+  // email.py shadow the standard library, as Python 3 never does.
+  let top = here
+  while (top !== '.' && packages.has(top)) top = posix.dirname(top)
+  if (!ordered.includes(top)) ordered.push(top)
   for (const root of ordered) {
     const found = findModule(root, segments, files, false)
     if (found) return found
