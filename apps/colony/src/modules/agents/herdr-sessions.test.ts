@@ -25,4 +25,27 @@ describe('createHerdrSessions', () => {
       { cwd: '/work/c', status: 'paused', paneId: 'w1:p3' },
     ])
   })
+
+  it('places a pane in the folder its agent works in, not the one the pane opened in', async () => {
+    const herdr = {
+      request: () =>
+        Promise.resolve({
+          type: 'agent_list',
+          agents: [
+            {
+              pane_id: 'w92:p2',
+              agent: 'claude',
+              agent_status: 'working',
+              cwd: '/p/repo',
+              foreground_cwd: '/slots/8/repo',
+            },
+            { pane_id: 'w92:p3', agent_status: 'idle', cwd: '/p/repo', foreground_cwd: '' },
+          ],
+        }),
+    }
+    expect(await createHerdrSessions(herdr).listSessions()).toEqual([
+      { cwd: '/slots/8/repo', agent: 'claude', status: 'working', paneId: 'w92:p2' },
+      { cwd: '/p/repo', status: 'paused', paneId: 'w92:p3' },
+    ])
+  })
 })

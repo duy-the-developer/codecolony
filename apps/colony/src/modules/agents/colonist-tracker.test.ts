@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { git, makeRepo, makeTempDir } from '../indexing/testing/git-fixture.ts'
 import type { ColonistsResponse } from '../wire/api-types.ts'
 import { createColonistTracker } from './colonist-tracker.ts'
+import { createHerdrSessions } from './herdr-sessions.ts'
 import type { LiveSession } from './session-source.ts'
 import {
   captainHoldLine,
@@ -212,6 +213,81 @@ describe('createColonistTracker', () => {
     writeFileSync(join(validation, 'src', 'a.ts'), 'a2\n')
     await tracker.refresh({ discover: true })
     expect(tracker.snapshot.colonists).toEqual([expect.objectContaining({ task: 'task-1' })])
+    tracker.close()
+  })
+
+  it('gives a Herdr pane opened in the clone to the worktree its agent works in', async () => {
+    const { mine, home, clone, slot } = makeColony()
+    const busy = slot(1)
+    writeFileSync(join(busy, 'src', 'a.ts'), 'a2\n')
+    writeFileSync(join(clone, 'src', 'b.ts'), 'b2\n')
+    writeTask(home, {
+      id: 'task-1',
+      meta: { worktree: busy, kind: 'ship', branch: 'fm/task-1' },
+      status: ['working [at=1]: started'],
+    })
+    const herdr = {
+      request: () =>
+        Promise.resolve({
+          agents: [
+            {
+              pane_id: 'w92:p2',
+              agent: 'claude',
+              agent_status: 'working',
+              cwd: clone,
+              foreground_cwd: busy,
+            },
+          ],
+        }),
+    }
+    const tracker = createColonistTracker({
+      listRepos: repos(mine),
+      sessions: [createHerdrSessions(herdr)],
+      firstmateHome: home,
+      home: '/nowhere',
+    })
+    await tracker.refresh({ discover: true })
+    const byTask = (task: string | undefined) =>
+      tracker.snapshot.colonists.find((colonist) => colonist.task === task)
+    expect(byTask('task-1')).toMatchObject({ session: 'firstmate', paneId: 'w92:p2' })
+    expect(byTask(undefined)).toMatchObject({ session: 'none' })
+    tracker.close()
+  })
+
+  it('gives a firstmate task the session in its recorded pane, whatever folder it is in', async () => {
+    const { mine, home, clone, slot } = makeColony()
+    const busy = slot(1)
+    const other = slot(2)
+    writeFileSync(join(busy, 'src', 'a.ts'), 'a2\n')
+    writeFileSync(join(other, 'src', 'a.ts'), 'a3\n')
+    writeFileSync(join(clone, 'src', 'b.ts'), 'b2\n')
+    writeTask(home, {
+      id: 'task-1',
+      meta: { worktree: busy, kind: 'ship', backend: 'herdr', window: 'default:wET:p2' },
+      status: ['working [at=1]: started'],
+    })
+    writeTask(home, {
+      id: 'task-2',
+      meta: { worktree: other, kind: 'ship', herdr_pane_id: 'wET:p3' },
+      status: ['working [at=1]: started'],
+    })
+    const sessions: LiveSession[] = [
+      { cwd: clone, agent: 'claude', paneId: 'wET:p2' },
+      // The pane match wins over the folder it is in.
+      { cwd: busy, agent: 'codex', paneId: 'wET:p3' },
+    ]
+    const tracker = createColonistTracker({
+      listRepos: repos(mine),
+      sessions: [{ name: 'fake', listSessions: () => Promise.resolve(sessions) }],
+      firstmateHome: home,
+      home: '/nowhere',
+    })
+    await tracker.refresh({ discover: true })
+    const byTask = (task: string | undefined) =>
+      tracker.snapshot.colonists.find((colonist) => colonist.task === task)
+    expect(byTask('task-1')).toMatchObject({ session: 'firstmate', paneId: 'wET:p2' })
+    expect(byTask('task-2')).toMatchObject({ session: 'firstmate', paneId: 'wET:p3' })
+    expect(byTask(undefined)).toMatchObject({ session: 'none' })
     tracker.close()
   })
 
