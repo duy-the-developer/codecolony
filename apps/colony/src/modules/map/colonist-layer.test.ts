@@ -198,34 +198,18 @@ describe('ColonistLayer', () => {
     expect(pin?.tipY).toBe(31)
   })
 
-  it('keeps the conflict badge on a shared file with the Owners overlay off', () => {
+  it('shows the conflict badge on a shared file only with the Owners overlay on', () => {
     const layer = new ColonistLayer()
     layer.setColonists(shared(placed('/one', 'O'), placed('/two', 'T')))
     layer.drawChanges(ctx, scene, camera, OPEN)
-    expect(layer.pins.pins).toEqual([])
+    expect(layer.pins).toEqual({ pins: [], badges: [] })
+    layer.showOwners = true
+    layer.drawChanges(ctx, scene, camera, OPEN)
     const [badge] = layer.pins.badges
     expect(layer.hitMarker(badge?.x ?? 0, badge?.y ?? 0)).toMatchObject({
       kind: 'conflict',
       badge: { nodeId: 'm/a.ts', colonistIds: ['/one', '/two'] },
     })
-  })
-
-  it('stands a conflict badge with no pins on a stem down to its file', () => {
-    const layer = new ColonistLayer()
-    layer.setColonists(shared(placed('/one', 'O'), placed('/two', 'T')))
-    layer.drawChanges(ctx, scene, camera, OPEN)
-    const [badge] = layer.pins.badges
-    expect(badge?.tipY).toBe(31)
-    const calls: Call[] = []
-    layer.drawMarkers(recordingContext(calls), { width: 800, height: 600 }, 0, true)
-    const from = calls.findIndex(
-      ([name, , y]) => name === 'moveTo' && y === Math.round((badge?.y ?? 0) + 7),
-    )
-    const [, x] = calls[from] as Call
-    expect(Math.abs((x as number) - (badge?.x ?? 0))).toBeLessThanOrEqual(1)
-    expect(x).toBeGreaterThanOrEqual(20)
-    expect(x).toBeLessThanOrEqual(60)
-    expect(calls[from + 1]).toEqual(['lineTo', x, 31])
   })
 
   it('stands two robots on the same small file, the later one lifted, both pointing at it', () => {

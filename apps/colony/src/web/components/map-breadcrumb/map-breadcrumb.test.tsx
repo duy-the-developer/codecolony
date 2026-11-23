@@ -18,11 +18,16 @@ const SCENE = new Scene({
   nodes: [
     { id: 'world', kind: 'world', name: 'world', lines: 1, complexity: 1, rect: RECT },
     node('codecolony', 'world', 'project'),
-    node('packages', 'codecolony', 'module'),
+    node('codecolony-repo', 'codecolony', 'repo'),
+    node('packages', 'codecolony-repo', 'module'),
     node('dock', 'packages', 'module'),
     node('src', 'dock', 'module'),
     node('herdr.ts', 'src', 'file'),
     node('workspaceName', 'herdr.ts', 'symbol'),
+    node('work', 'world', 'project'),
+    node('api', 'work', 'repo'),
+    node('billing', 'work', 'repo'),
+    node('server', 'billing', 'module'),
   ],
   edges: [],
 } satisfies World)
@@ -57,6 +62,16 @@ describe('MapBreadcrumb', () => {
     expect(ancestors?.contains(selected)).toBe(false)
     expect(ancestors?.contains(screen.getByTitle('packages › dock › src'))).toBe(true)
     expect(selected.parentElement).toBe(screen.getByRole('navigation', { name: 'Selection path' }))
+  })
+
+  it('names the repository when its project holds several', () => {
+    render(<MapBreadcrumb scene={SCENE} selected={SCENE.byId.get('server')} onPick={() => {}} />)
+    expect(names()).toEqual(['work', 'billing', 'server'])
+  })
+
+  it('shows a selected repository after its project', () => {
+    render(<MapBreadcrumb scene={SCENE} selected={SCENE.byId.get('api')} onPick={() => {}} />)
+    expect(names()).toEqual(['work', 'api'])
   })
 
   it('picks an ancestor when clicked', () => {

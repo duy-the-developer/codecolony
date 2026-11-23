@@ -4,17 +4,32 @@ import { ColonistIcon } from '../colonist-icon/colonist-icon.tsx'
 import { cn } from '../ui/class-names.ts'
 
 export interface ColonistRosterProps {
+  // The colonists shown, on the roster and the map.
   colonists: readonly Colonist[]
+  // How many colonists Active only hides.
+  hiddenCount?: number
   // Why the colonists are unavailable, in place of the robots.
   notice?: string | undefined
   selectedId: string | undefined
+  isActiveOnly?: boolean
   onPick(id: string): void
+  onToggleActiveOnly?(): void
 }
 
 // The colonists at a glance, over the map's top right corner: one robot per
 // colonist; the picked one shows its name and how many files it changes.
-// Absent with no colonists, unless there is a notice to show instead.
-export function ColonistRoster({ colonists, notice, selectedId, onPick }: ColonistRosterProps) {
+// Active only hides every colonist not at work, on the roster and the map,
+// and the count says how many are hidden. Absent with no colonists, shown or
+// hidden, unless there is a notice to show instead.
+export function ColonistRoster({
+  colonists,
+  hiddenCount = 0,
+  notice,
+  selectedId,
+  isActiveOnly = false,
+  onPick,
+  onToggleActiveOnly,
+}: ColonistRosterProps) {
   if (notice) {
     return (
       <p
@@ -25,7 +40,7 @@ export function ColonistRoster({ colonists, notice, selectedId, onPick }: Coloni
       </p>
     )
   }
-  if (colonists.length === 0) return null
+  if (colonists.length === 0 && hiddenCount === 0) return null
   return (
     <nav
       aria-label="Colonists"
@@ -33,7 +48,22 @@ export function ColonistRoster({ colonists, notice, selectedId, onPick }: Coloni
     >
       <span className="mr-1 shrink-0 text-muted-foreground text-xs">
         Colonists <span className="text-foreground">{colonists.length}</span>
+        {hiddenCount > 0 && ` · ${hiddenCount} hidden`}
       </span>
+      {onToggleActiveOnly && (
+        <button
+          type="button"
+          aria-pressed={isActiveOnly}
+          title={isActiveOnly ? 'Show every colonist' : 'Show only the colonists at work'}
+          onClick={onToggleActiveOnly}
+          className={cn(
+            'shrink-0 cursor-pointer rounded-full border px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-accent',
+            isActiveOnly && 'border-primary/60 bg-primary/15 text-primary',
+          )}
+        >
+          Active only
+        </button>
+      )}
       {colonists.map((colonist) => {
         const isSelected = colonist.id === selectedId
         const files = colonist.changes.length + colonist.omitted

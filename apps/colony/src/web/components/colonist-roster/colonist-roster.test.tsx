@@ -62,4 +62,37 @@ describe('ColonistRoster', () => {
     fireEvent.click(buttons[0] as HTMLElement)
     expect(onPick).toHaveBeenCalledWith('/a')
   })
+
+  it('toggles Active only and counts the colonists it hides', () => {
+    const onToggleActiveOnly = vi.fn()
+    render(
+      <ColonistRoster
+        colonists={[colonist('/a', 'build-a', 'working')]}
+        hiddenCount={2}
+        selectedId={undefined}
+        isActiveOnly
+        onPick={vi.fn()}
+        onToggleActiveOnly={onToggleActiveOnly}
+      />,
+    )
+    expect(screen.getByRole('navigation').textContent).toMatch(/^Colonists 1 · 2 hidden/)
+    const toggle = screen.getByRole('button', { name: 'Active only' })
+    expect(toggle.getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(toggle)
+    expect(onToggleActiveOnly).toHaveBeenCalledOnce()
+  })
+
+  it('stays on the map while Active only hides every colonist', () => {
+    render(
+      <ColonistRoster
+        colonists={[]}
+        hiddenCount={3}
+        selectedId={undefined}
+        isActiveOnly
+        onPick={vi.fn()}
+        onToggleActiveOnly={vi.fn()}
+      />,
+    )
+    expect(screen.getByRole('navigation').textContent).toBe('Colonists 0 · 3 hiddenActive only')
+  })
 })

@@ -343,6 +343,25 @@ describe('Colony', () => {
     expect(repos).toEqual(['project:org/alpha', 'project:org/beta'])
   })
 
+  it('names each repository in a plain folder inside an outer repository that ignores it', async () => {
+    const outer = makeRepo({ '.gitignore': 'work-projects/\n', 'README.md': '# outer\n' })
+    const org = join(outer, 'work-projects')
+    makeRepo({ 'src/a.ts': 'export const a = 1\n' }, join(org, 'api'))
+    makeRepo({ 'src/b.ts': 'export const b = 1\n' }, join(org, 'billing'))
+    makeRepo({ 'src/c.ts': 'export const c = 1\n' }, join(org, 'web'))
+    const colony = colonyFor([{ name: 'work', root: org, kind: 'repos' }])
+    await colony.refresh()
+    const repos = colony.world.nodes.filter((n) => n.kind === 'repo')
+    expect(repos.map((n) => [n.id, n.name, n.parent])).toEqual([
+      ['project:work/api', 'api', 'project:work'],
+      ['project:work/billing', 'billing', 'project:work'],
+      ['project:work/web', 'web', 'project:work'],
+    ])
+    const files = colony.world.nodes.filter((n) => n.kind === 'file').map((n) => n.id)
+    expect(files).toContain('project:work/billing/src/b.ts')
+    expect(files.some((id) => id.includes('README'))).toBe(false)
+  })
+
   it('links an HTTP client in one repository to the route in another', async () => {
     const org = makeTempDir()
     makeRepo(
