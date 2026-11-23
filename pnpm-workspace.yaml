@@ -6,4 +6,5 @@ allowBuilds:
   node-pty: true
   # Grammars are loaded from their bundled .wasm files; the native bindings are not needed.
   tree-sitter-javascript: false
+  tree-sitter-python: false
   tree-sitter-typescript: false

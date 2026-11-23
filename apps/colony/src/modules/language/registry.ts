@@ -1,4 +1,5 @@
 import { extname } from 'node:path'
+import { pythonAdapter } from './adapters/python/adapter.ts'
 import { typescriptAdapter } from './adapters/typescript/adapter.ts'
 import { typescriptHttpDetector } from './adapters/typescript/http-detector.ts'
 import type { LanguageAdapter, TransportDetector } from './language-adapter.ts'
@@ -6,7 +7,7 @@ import type { LanguageAdapter, TransportDetector } from './language-adapter.ts'
 // The registry: every language adapter and transport detector Code Colony
 // ships. Adding a language is one entry here plus its folder.
 
-export const LANGUAGE_ADAPTERS: readonly LanguageAdapter[] = [typescriptAdapter]
+export const LANGUAGE_ADAPTERS: readonly LanguageAdapter[] = [typescriptAdapter, pythonAdapter]
 
 export const TRANSPORT_DETECTORS: readonly TransportDetector[] = [typescriptHttpDetector]
 

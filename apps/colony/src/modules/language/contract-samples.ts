@@ -1,4 +1,5 @@
 import type { SymbolKind, TransportKind } from '../world/facts.ts'
+import { pythonSample } from './adapters/python/sample.ts'
 import { typescriptSample } from './adapters/typescript/sample.ts'
 
 // The adapter contract: every language adapter ships a sample repository and
@@ -35,4 +36,5 @@ export interface AdapterSample {
 // One sample per adapter id.
 export const CONTRACT_SAMPLES: Record<string, AdapterSample> = {
   typescript: typescriptSample,
+  python: pythonSample,
 }

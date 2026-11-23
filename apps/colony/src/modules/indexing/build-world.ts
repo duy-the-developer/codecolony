@@ -242,10 +242,19 @@ function addCodeEdges(repo: RepoIndex, id: string, paths: Set<string>, edges: Ed
     const adapter = findAdapter(file.path)
     // Local name -> file it was imported from.
     const bound = new Map<string, string>()
+    // One import edge per target file; it is type-only when every import of
+    // that file is.
+    const imported = new Map<string, Edge>()
     for (const fact of file.facts.imports) {
       const target = adapter?.resolveImport(fact.specifier, file.path, paths)
       if (!target) continue
-      edges.push({
+      for (const name of fact.names) bound.set(name, target)
+      const known = imported.get(target)
+      if (known) {
+        if (!fact.typeOnly) known.typeOnly = false
+        continue
+      }
+      const edge: Edge = {
         from: fileId,
         to: `${id}/${target}`,
         kind: 'import',
@@ -253,8 +262,9 @@ function addCodeEdges(repo: RepoIndex, id: string, paths: Set<string>, edges: Ed
         label: fact.specifier,
         at: { file: fileId, line: fact.line },
         typeOnly: fact.typeOnly,
-      })
-      for (const name of fact.names) bound.set(name, target)
+      }
+      imported.set(target, edge)
+      edges.push(edge)
     }
     const seen = new Set<string>()
     const local = topLevel.get(file.path) ?? new Set()

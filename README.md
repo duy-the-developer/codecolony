@@ -107,7 +107,7 @@ The map updates live: commit to a mapped repository and it redraws within a few 
 
 ## Languages
 
-TypeScript and JavaScript are supported today, through tree-sitter and `typescript-language-server`. Languages plug in as adapters: a tree-sitter grammar with three queries, plus any language server that speaks LSP over stdio. See [ARCHITECTURE.md](ARCHITECTURE.md) for how to add one.
+TypeScript and JavaScript are supported today, through tree-sitter and `typescript-language-server`. Python is supported through tree-sitter: symbols, imports resolved to files (the Dependency overlay) and test files, with no language server or HTTP routes yet. Languages plug in as adapters: a tree-sitter grammar with three queries, plus any language server that speaks LSP over stdio. See [ARCHITECTURE.md](ARCHITECTURE.md) for how to add one.
 
 ## Layout
 

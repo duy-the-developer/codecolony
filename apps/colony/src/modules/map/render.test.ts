@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { Scene } from '../scene/scene.ts'
 import type { NodeKind, World, WorldNode } from '../world/world-types.ts'
-import { type Drawn, hoverTarget } from './render.ts'
+import { type Drawn, hoverTarget, isTest } from './render.ts'
 
 function node(id: string, kind: NodeKind, parent?: string): WorldNode {
   const base = { id, kind, name: id, lines: 1, complexity: 0, rect: { x: 0, y: 0, w: 1, h: 1 } }
@@ -52,5 +52,28 @@ describe('hoverTarget', () => {
 
   it('puts nothing in focus for the world', () => {
     expect(hoverTarget(scene, drawn('w', 1))).toBeUndefined()
+  })
+})
+
+describe('isTest', () => {
+  const at = (path: string) => ({ ...node(path, 'file'), path })
+
+  it('marks test folders and test files of every language', () => {
+    for (const path of [
+      'src/__tests__/a.ts',
+      'src/a.test.ts',
+      'src/a.spec.tsx',
+      'tests/helpers.py',
+      'app/test_users.py',
+      'app/users_test.py',
+      'conftest.py',
+      'app/conftest.py',
+    ])
+      expect(isTest(at(path)), path).toBe(true)
+  })
+
+  it('leaves source files alone', () => {
+    for (const path of ['src/app.ts', 'app/contest.py', 'app/testing.py', 'app/latest.py'])
+      expect(isTest(at(path)), path).toBe(false)
   })
 })

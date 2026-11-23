@@ -193,7 +193,10 @@ function readDefinitions(
 // Several query patterns may match one statement (one for the source, one per
 // bound name); they are merged by statement.
 function readImports(tree: Tree, language: Language, adapter: LanguageAdapter): ImportFact[] {
-  const byStatement = new Map<number, { statement: Node; specifier?: string; names: string[] }>()
+  const byStatement = new Map<
+    number,
+    { statement: Node; specifier?: string; member?: string; names: string[] }
+  >()
   for (const match of compile(language, adapter.queries.imports).matches(tree.rootNode)) {
     const statement = match.captures.find((c) => c.name === 'import')?.node
     if (!statement) continue
@@ -204,15 +207,19 @@ function readImports(tree: Tree, language: Language, adapter: LanguageAdapter): 
     }
     for (const { name, node } of match.captures) {
       if (name === 'import.source') entry.specifier = node.text.replace(/^['"`]|['"`]$/g, '')
+      else if (name === 'import.member') entry.member = node.text
       else if (name === 'import.name' && !entry.names.includes(node.text))
         entry.names.push(node.text)
     }
   }
   const imports: ImportFact[] = []
-  for (const { statement, specifier, names } of byStatement.values()) {
+  for (const { statement, specifier, member, names } of byStatement.values()) {
     if (specifier === undefined) continue
     imports.push({
-      specifier,
+      specifier:
+        member !== undefined && adapter.importSpecifier
+          ? adapter.importSpecifier(specifier, member)
+          : specifier,
       names,
       line: statement.startPosition.row + 1,
       typeOnly: adapter.isTypeOnlyImport?.(statement) ?? false,
